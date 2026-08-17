@@ -1,5 +1,5 @@
 import { ArrowUp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PlayerCell } from "@/components/player-cell";
 import { SlotPicker } from "@/components/slot-picker";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ export function LineupBoard({
   week,
   projections,
   busy,
+  showBench = true,
   onOpenPlayer,
   onStart,
   onSit,
@@ -32,6 +33,12 @@ export function LineupBoard({
   week?: number;
   projections?: Record<string, Projection>;
   busy: boolean;
+  /**
+   * Home wants the lineup and nothing else — the slot picker can already pull
+   * anyone off the bench, so listing it there is a second copy of the roster on
+   * a page meant to be read at a glance. My Team is where the whole roster lives.
+   */
+  showBench?: boolean;
   onOpenPlayer?: (p: RosterPlayer) => void;
   onStart: (
     playerId: string,
@@ -87,6 +94,31 @@ export function LineupBoard({
     return () => window.removeEventListener("keydown", onKey);
   }, [armed]);
 
+  /**
+   * Bring the slots he can take into view.
+   *
+   * You arm a player from the bench, which sits below the lineup, so the rows
+   * that just lit up are often off the top of the screen. `block: "nearest"`
+   * moves the least amount that works and does nothing when the row is already
+   * showing, so this never yanks the page for no reason; the scroll-margin on
+   * the row is what keeps it clear of the sticky header and the confirm bar.
+   */
+  const slotRows = useRef(new Map<string, HTMLLIElement>());
+  // Keyed on the label rather than the player so the effect has no unstable
+  // dependency, and so arming a second receiver does not re-scroll to a row
+  // that is already exactly where you left it.
+  const firstEligible = armed
+    ? (slots.find(({ label }) => slotAccepts(armed.position, label))?.label ?? null)
+    : null;
+
+  useEffect(() => {
+    if (!firstEligible) return;
+    const row = slotRows.current.get(firstEligible);
+    if (!row) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    row.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "nearest" });
+  }, [firstEligible]);
+
   const outgoing = targetSlot ? bySlot.get(targetSlot) : undefined;
 
   const confirm = () => {
@@ -120,7 +152,14 @@ export function LineupBoard({
           return (
             <li
               key={label}
+              ref={(node) => {
+                if (node) slotRows.current.set(label, node);
+                else slotRows.current.delete(label);
+              }}
               className={cn(
+                // Keeps an auto-scrolled row out from under the sticky header and
+                // clear of the confirm bar, which sits higher on a phone.
+                "scroll-mt-20 scroll-mb-40 md:scroll-mb-24",
                 "flex items-center gap-3 border-b border-line px-5 py-2.5 last:border-0",
                 broken && !armed && "bg-[color-mix(in_oklab,var(--alarm)_9%,transparent)]",
                 // While a player is armed the board answers one question only, so
@@ -182,6 +221,8 @@ export function LineupBoard({
         })}
       </ul>
 
+      {showBench ? (
+        <>
       <header className="border-t border-line px-5 pt-4 pb-2">
         <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Bench</h3>
       </header>
@@ -237,6 +278,8 @@ export function LineupBoard({
           );
         })}
       </ul>
+        </>
+      ) : null}
 
       {/* Pinned rather than placed. The slot you are aiming at can be a screen
           away from the bench row you started from, so the thing that commits the

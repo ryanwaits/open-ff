@@ -274,6 +274,7 @@ function MyTeamPage() {
               byes={byes.data}
               week={week}
               projections={projections.data}
+              showBench={false}
               onOpenPlayer={(p) =>
                 setSheet({
                   player: p,
