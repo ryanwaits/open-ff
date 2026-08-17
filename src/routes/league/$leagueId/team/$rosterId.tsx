@@ -1,0 +1,273 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { toast } from "sonner";
+import { PlayerCell } from "@/components/player-cell";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { getLeagueBundle, getTeam } from "@/lib/data/fns";
+import type { RosterPlayer } from "@/lib/data/types";
+import { sitPlayer, startPlayer } from "@/lib/league/fns";
+import { labeledStartSlots, slotAccepts } from "@/lib/league/roster";
+import { cn, fmtRecord, formatPts, initials } from "@/lib/utils";
+
+export const Route = createFileRoute("/league/$leagueId/team/$rosterId")({
+  component: TeamPage,
+});
+
+type Pending =
+  | { kind: "start"; player: RosterPlayer }
+  | { kind: "sit"; player: RosterPlayer };
+
+function TeamPage() {
+  const { leagueId, rosterId } = Route.useParams();
+  const qc = useQueryClient();
+  const [pending, setPending] = useState<Pending | null>(null);
+  const league = useQuery({
+    queryKey: ["league", leagueId],
+    queryFn: () => getLeagueBundle({ data: { leagueId } }),
+    refetchInterval: (q) => (q.state.data?.scoringLive ? 15_000 : false),
+  });
+  const week = league.data?.currentWeek ?? 1;
+  const team = useQuery({
+    queryKey: ["team", leagueId, rosterId, week],
+    queryFn: () => getTeam({ data: { leagueId, rosterId: Number(rosterId), week } }),
+    enabled: Boolean(league.data),
+    refetchInterval: () => (league.data?.scoringLive ? 15_000 : false),
+  });
+
+  const mine =
+    league.data?.hosted && league.data.myRosterId === Number(rosterId) && !league.data.locked;
+
+  function invalidate() {
+    setPending(null);
+    void qc.invalidateQueries({ queryKey: ["team", leagueId, rosterId] });
+    void qc.invalidateQueries({ queryKey: ["league", leagueId] });
+    void qc.invalidateQueries({ queryKey: ["matchups", leagueId] });
+  }
+
+  const start = useMutation({
+    mutationFn: (input: { playerId: string; replaceId?: string | null; slot?: string | null }) =>
+      startPlayer({ data: { leagueId, ...input } }),
+    onSuccess: invalidate,
+    onError: (e) => toast(e instanceof Error ? e.message : "Could not start"),
+  });
+  const sit = useMutation({
+    mutationFn: (playerId: string) => sitPlayer({ data: { leagueId, playerId } }),
+    onSuccess: invalidate,
+    onError: (e) => toast(e instanceof Error ? e.message : "Could not sit"),
+  });
+
+  if (team.isLoading || league.isLoading) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <Skeleton key={i} className="h-12" />
+        ))}
+      </div>
+    );
+  }
+  if (!team.data) {
+    return <p className="text-sm text-muted">Roster not found.</p>;
+  }
+
+  const starters = team.data.players.filter((p) => p.slot === "starter");
+  const bench = team.data.players.filter((p) => p.slot === "bench");
+  const ir = team.data.players.filter((p) => p.slot === "ir");
+  const taxi = team.data.players.filter((p) => p.slot === "taxi");
+  const slots = labeledStartSlots(league.data?.league.roster_positions ?? []);
+  const bySlot = new Map(starters.map((p) => [p.starterSlot ?? "", p]));
+  const busy = start.isPending || sit.isPending;
+
+  function eligibleStart(slotLabel: string, occupant: RosterPlayer | undefined) {
+    if (!pending || pending.kind !== "start") return false;
+    if (occupant?.player_id === pending.player.player_id) return false;
+    return slotAccepts(pending.player.position, slotLabel);
+  }
+
+  function eligibleSit(p: RosterPlayer) {
+    if (!pending || pending.kind !== "sit") return false;
+    return slotAccepts(p.position, pending.player.starterSlot);
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-4">
+        <span className="grid size-14 place-items-center overflow-hidden rounded-full bg-raised text-lg">
+          {team.data.avatar ? (
+            <img src={team.data.avatar} alt="" className="size-full object-cover" />
+          ) : (
+            initials(team.data.teamName)
+          )}
+        </span>
+        <div>
+          <h2 className="font-display text-3xl tracking-tight">{team.data.teamName}</h2>
+          <p className="text-sm text-muted">
+            {team.data.manager} ·{" "}
+            {fmtRecord(team.data.record.wins, team.data.record.losses, team.data.record.ties)} ·{" "}
+            {formatPts(team.data.record.pf, 1)} PF
+          </p>
+          {mine && !pending ? (
+            <p className="mt-1 text-xs text-faint">Sit or start, then tap who they replace.</p>
+          ) : null}
+        </div>
+      </div>
+
+      {pending ? (
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-raised px-3 py-2.5">
+          <p className="text-sm">
+            {pending.kind === "start" ? (
+              <>
+                Starting <span className="text-fg">{pending.player.full_name}</span>
+                <span className="text-muted"> — tap a starter slot</span>
+              </>
+            ) : (
+              <>
+                Sitting <span className="text-fg">{pending.player.full_name}</span>
+                <span className="text-muted"> — tap who takes {pending.player.starterSlot}</span>
+              </>
+            )}
+          </p>
+          <div className="flex gap-1">
+            {pending.kind === "sit" ? (
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => sit.mutate(pending.player.player_id)}>
+                Sit only
+              </Button>
+            ) : null}
+            <Button size="sm" variant="ghost" onClick={() => setPending(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      <section className="mt-8">
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+          Week {week} starters
+        </h3>
+        <ul className="mt-2 divide-y divide-line rounded-xl bg-surface shadow-[var(--shadow-border)]">
+          {slots.map(({ label }) => {
+            const p = bySlot.get(label);
+            const hit = eligibleStart(label, p);
+            const selected = pending?.kind === "sit" && pending.player.player_id === p?.player_id;
+            return (
+              <li
+                key={label}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5",
+                  hit && "bg-accent/10",
+                  selected && "bg-raised",
+                )}
+              >
+                <span className="w-8 font-mono text-[10px] uppercase tracking-wide text-faint">{label}</span>
+                <div className="min-w-0 flex-1">
+                  {p ? (
+                    <PlayerCell player={p} compact game={p.game} />
+                  ) : (
+                    <span className="text-sm text-faint">Empty</span>
+                  )}
+                </div>
+                {p?.injury_status ? <Badge tone="loss">{p.injury_status}</Badge> : null}
+                <span className="w-12 text-right font-mono text-sm tabular-nums">
+                  {p ? formatPts(p.weekPts, 1) : ""}
+                </span>
+                {mine && hit ? (
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() =>
+                      start.mutate({
+                        playerId: pending!.player.player_id,
+                        replaceId: p?.player_id ?? null,
+                        slot: p ? null : label,
+                      })
+                    }
+                  >
+                    {p ? "Here" : "Start here"}
+                  </Button>
+                ) : null}
+                {mine && !pending && p ? (
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => setPending({ kind: "sit", player: p })}>
+                    Sit
+                  </Button>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <PlayerGroup
+        label="Bench"
+        rows={bench}
+        mine={Boolean(mine)}
+        pending={pending}
+        busy={busy}
+        eligible={eligibleSit}
+        onStart={(p) => setPending({ kind: "start", player: p })}
+        onSwap={(p) =>
+          start.mutate({ playerId: p.player_id, replaceId: pending!.player.player_id })
+        }
+      />
+      <PlayerGroup label="IR" rows={ir} mine={false} pending={null} busy={false} eligible={() => false} />
+      <PlayerGroup label="Taxi" rows={taxi} mine={false} pending={null} busy={false} eligible={() => false} />
+    </div>
+  );
+}
+
+function PlayerGroup({
+  label,
+  rows,
+  mine,
+  pending,
+  busy,
+  eligible,
+  onStart,
+  onSwap,
+}: {
+  label: string;
+  rows: RosterPlayer[];
+  mine: boolean;
+  pending: Pending | null;
+  busy: boolean;
+  eligible: (p: RosterPlayer) => boolean;
+  onStart?: (p: RosterPlayer) => void;
+  onSwap?: (p: RosterPlayer) => void;
+}) {
+  if (!rows.length) return null;
+  return (
+    <section className="mt-8">
+      <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">{label}</h3>
+      <ul className="mt-2 divide-y divide-line rounded-xl bg-surface shadow-[var(--shadow-border)]">
+        {rows.map((p) => {
+          const hit = eligible(p);
+          const selected = pending?.kind === "start" && pending.player.player_id === p.player_id;
+          return (
+            <li
+              key={p.player_id}
+              className={cn("flex items-center gap-3 px-3 py-2.5", hit && "bg-accent/10", selected && "bg-raised")}
+            >
+              <span className="w-8" />
+              <div className="min-w-0 flex-1">
+                <PlayerCell player={p} compact game={p.game} />
+              </div>
+              {p.injury_status ? <Badge tone="loss">{p.injury_status}</Badge> : null}
+              <span className="w-12 text-right font-mono text-sm tabular-nums">{formatPts(p.weekPts, 1)}</span>
+              {mine && hit && onSwap ? (
+                <Button size="sm" disabled={busy} onClick={() => onSwap(p)}>
+                  Here
+                </Button>
+              ) : null}
+              {mine && !pending && onStart ? (
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => onStart(p)}>
+                  Start
+                </Button>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}

@@ -1,0 +1,168 @@
+import { useMutation } from "@tanstack/react-query";
+import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Shell } from "@/components/shell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { createLeague } from "@/lib/league/fns";
+import { useLeagueStore } from "@/lib/store";
+import { cn } from "@/lib/utils";
+
+export const Route = createFileRoute("/new")({ component: NewLeague });
+
+function NewLeague() {
+  const { user, isPending } = useCurrentUserState();
+  const navigate = useNavigate();
+  const remember = useLeagueStore((s) => s.remember);
+  const [name, setName] = useState("");
+  const [teamName, setTeamName] = useState("");
+  const [teamCount, setTeamCount] = useState(10);
+  const [scoring, setScoring] = useState<"ppr" | "half" | "std">("ppr");
+  const [fillHouse, setFillHouse] = useState(true);
+
+  const create = useMutation({
+    mutationFn: () =>
+      createLeague({
+        data: { name, teamName, teamCount, scoring, fillHouse },
+      }),
+    onSuccess: (res) => {
+      remember({ leagueId: res.leagueId, name, season: res.season });
+      toast(`Invite code ${res.inviteCode}`);
+      void navigate({ to: "/league/$leagueId/draft", params: { leagueId: res.leagueId } });
+    },
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : "Could not create league.";
+      if (msg === "Unauthorized") {
+        void navigate({ to: "/login", search: { redirect: "/new" } });
+        return;
+      }
+      toast(msg);
+    },
+  });
+
+  if (isPending) {
+    return (
+      <Shell>
+        <div className="h-40 animate-pulse rounded-xl bg-surface" />
+      </Shell>
+    );
+  }
+  if (!user) return <Navigate to="/login" search={{ redirect: "/new" }} />;
+
+  return (
+    <Shell>
+      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">
+        Open a desk
+      </p>
+      <h1 className="mt-2 font-display text-4xl tracking-tight">New league</h1>
+      <p className="mt-2 max-w-xl text-sm text-muted">
+        Friends sign in here — not on Sleeper. You get an invite code. Empty
+        seats can be house clubs so you can draft tonight.
+      </p>
+
+      <form
+        className="mt-8 max-w-lg space-y-5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          create.mutate();
+        }}
+      >
+        <label className="block">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+            League name
+          </span>
+          <Input
+            className="mt-1.5"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="The Backyard"
+            required
+          />
+        </label>
+        <label className="block">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+            Your team
+          </span>
+          <Input
+            className="mt-1.5"
+            value={teamName}
+            onChange={(e) => setTeamName(e.target.value)}
+            placeholder="Night Desk"
+            required
+          />
+        </label>
+        <div>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+            Teams
+          </p>
+          <div className="mt-2 flex gap-1">
+            {[8, 10, 12, 14].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setTeamCount(n)}
+                className={cn(
+                  "h-10 min-w-14 rounded-sm px-3 font-mono text-sm",
+                  teamCount === n ? "bg-accent text-accent-fg" : "bg-raised text-muted",
+                )}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+            Scoring
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {(
+              [
+                ["ppr", "PPR"],
+                ["half", "Half"],
+                ["std", "Standard"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setScoring(id)}
+                className={cn(
+                  "h-10 rounded-sm px-3 font-mono text-sm",
+                  scoring === id ? "bg-accent text-accent-fg" : "bg-raised text-muted",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="flex items-start gap-3 rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+          <input
+            type="checkbox"
+            checked={fillHouse}
+            onChange={(e) => setFillHouse(e.target.checked)}
+            className="mt-1 size-4 accent-current"
+          />
+          <span>
+            <span className="block text-sm">Fill empty seats with house clubs</span>
+            <span className="mt-1 block text-xs text-muted">
+              House teams autodraft. Friends can still claim a seat with your
+              invite code.
+            </span>
+          </span>
+        </label>
+        <div className="flex items-center gap-3">
+          <Button type="submit" disabled={create.isPending}>
+            {create.isPending ? "Opening…" : "Open the league"}
+          </Button>
+          <Link to="/import" className="text-sm text-muted hover:text-fg">
+            Import from Sleeper instead
+          </Link>
+        </div>
+      </form>
+    </Shell>
+  );
+}
