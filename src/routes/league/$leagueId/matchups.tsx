@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { MatchupEdge } from "@/components/matchup-edge";
 import { PlayerCell } from "@/components/player-cell";
 import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
 import { PlayerWatch, watchFromLine, type WatchTarget } from "@/components/player-watch";
@@ -47,7 +48,7 @@ function SideCol({
 }) {
   const teamDelta = prev ? side.points - prev.points : 0;
   return (
-    <div>
+    <div className="min-w-0">
       <Link
         to="/league/$leagueId/team/$rosterId"
         params={{ leagueId, rosterId: String(side.rosterId) }}
@@ -223,6 +224,14 @@ function MatchupsPage() {
     return applyReplayPairs(seededPairs, week, phase - 1, finals);
   }, [seededPairs, phase, week, finals]);
 
+  // Your game is the page; the rest of the slate is context underneath it.
+  const mineRosterId = league.data?.myRosterId ?? null;
+  const myIndex = shown.findIndex(
+    (p) => p.home.rosterId === mineRosterId || p.away?.rosterId === mineRosterId,
+  );
+  const myPair = myIndex >= 0 ? shown[myIndex] : null;
+  const rest = shown.filter((_, i) => i !== myIndex);
+
   const weekLive = (matchups.data ?? []).some(pairingIsLive);
   const canReplay = !weekLive;
 
@@ -294,53 +303,110 @@ function MatchupsPage() {
           ))}
         </div>
       ) : (
-        <div className="space-y-4">
-          {shown.map((pair, idx) => (
-            <article
-              key={pair.matchupId}
-              className={cn(
-                "rounded-xl bg-surface p-4 shadow-[var(--shadow-border)] sm:p-5",
-                search.focus === pair.matchupId && "ring-1 ring-accent/40",
-              )}
-            >
-              {pair.label ? (
-                <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-live">
-                  {pair.label}
-                </p>
-              ) : null}
-              <Link
-                to="/league/$leagueId/matchup/$week/$matchupId"
-                params={{
-                  leagueId,
-                  week: String(week),
-                  matchupId: String(pair.matchupId),
-                }}
-                className="mb-4 block text-sm text-muted hover:text-fg"
-              >
-                Open box score
-              </Link>
-              <div className="grid gap-6 sm:grid-cols-2">
-                <SideCol
-                  side={pair.home}
-                  prev={prevShown?.[idx]?.home ?? null}
-                  leagueId={leagueId}
-                  stats={finals}
-                  onPlayer={openPlayer}
-                />
-                {pair.away ? (
+        <div className="space-y-5">
+          {myPair ? (
+            <>
+              <article className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)] sm:p-5">
+                {myPair.label ? (
+                  <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-live">
+                    {myPair.label}
+                  </p>
+                ) : null}
+                <div className="mb-4 flex items-baseline justify-between gap-3">
+                  <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Your matchup</h2>
+                  <Link
+                    to="/league/$leagueId/matchup/$week/$matchupId"
+                    params={{ leagueId, week: String(week), matchupId: String(myPair.matchupId) }}
+                    className="font-mono text-[11px] uppercase tracking-wide text-accent-strong"
+                  >
+                    Full box score
+                  </Link>
+                </div>
+                <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                   <SideCol
-                    side={pair.away}
-                    prev={prevShown?.[idx]?.away ?? null}
+                    side={myPair.home}
+                    prev={prevShown?.[myIndex]?.home ?? null}
                     leagueId={leagueId}
                     stats={finals}
                     onPlayer={openPlayer}
                   />
-                ) : (
-                  <p className="text-sm text-muted">Bye week</p>
-                )}
-              </div>
-            </article>
-          ))}
+                  {myPair.away ? (
+                    <SideCol
+                      side={myPair.away}
+                      prev={prevShown?.[myIndex]?.away ?? null}
+                      leagueId={leagueId}
+                      stats={finals}
+                      onPlayer={openPlayer}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted">Bye week</p>
+                  )}
+                </div>
+              </article>
+              <MatchupEdge
+                pair={myPair}
+                leagueId={leagueId}
+                season={league.data?.league.season ?? ""}
+                mine={mineRosterId}
+              />
+            </>
+          ) : null}
+
+          {rest.length ? (
+            <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+              <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+                <h2 className="font-display text-lg font-bold tracking-[-0.03em]">
+                  {myPair ? "Rest of the slate" : "Week " + week}
+                </h2>
+                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+                  {rest.length} {rest.length === 1 ? "game" : "games"}
+                </span>
+              </header>
+              <ul>
+                {rest.map((pair) => {
+                  const homeLeads = !pair.away || pair.home.points >= pair.away.points;
+                  const decided = pair.home.points > 0 || (pair.away?.points ?? 0) > 0;
+                  return (
+                    <li key={pair.matchupId}>
+                      <Link
+                        to="/league/$leagueId/matchup/$week/$matchupId"
+                        params={{
+                          leagueId,
+                          week: String(week),
+                          matchupId: String(pair.matchupId),
+                        }}
+                        className={cn(
+                          "flex items-center gap-3 border-b border-line px-5 py-3 last:border-0 hover:bg-raised",
+                          search.focus === pair.matchupId && "bg-raised",
+                        )}
+                      >
+                        <span className="min-w-0 flex-1 truncate text-sm">
+                          <span className={homeLeads && decided ? "font-semibold" : "text-muted"}>
+                            {pair.home.teamName}
+                          </span>
+                        </span>
+                        <span className="shrink-0 font-mono text-sm tabular-nums">
+                          <span className={homeLeads && decided ? "font-semibold" : "text-muted"}>
+                            {formatPts(pair.home.points, 1)}
+                          </span>
+                          <span className="mx-1.5 text-faint">–</span>
+                          <span className={!homeLeads && decided ? "font-semibold" : "text-muted"}>
+                            {formatPts(pair.away?.points ?? 0, 1)}
+                          </span>
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-right text-sm">
+                          <span className={!homeLeads && decided ? "font-semibold" : "text-muted"}>
+                            {pair.away?.teamName ?? "Bye"}
+                          </span>
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ) : null}
+
           {shown.length === 0 ? (
             <p className="text-sm text-muted">No matchups this week.</p>
           ) : null}
