@@ -1,6 +1,7 @@
+import { Avatar } from "@/components/avatar";
 import { playerHeadshot, teamLogo } from "@/lib/data/teams";
 import type { GameChip, SlimPlayer } from "@/lib/data/types";
-import { cn, initials } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 export function PlayerCell({
   player,
@@ -35,31 +36,18 @@ export function PlayerCell({
         align === "right" && "flex-row-reverse text-right",
       )}
     >
-      <span
-        className={cn(
-          "relative shrink-0 overflow-hidden rounded-sm bg-raised",
-          compact ? "size-8" : "size-9",
-        )}
+      <Avatar
+        src={src}
+        name={name}
+        className={compact ? "size-8" : "size-9"}
+        textClassName="text-[10px]"
       >
-        {src ? (
-          <img
-            src={src}
-            alt=""
-            className="size-full object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        ) : null}
-        <span className="absolute inset-0 grid place-items-center font-mono text-[10px] text-muted">
-          {initials(name)}
-        </span>
         {game?.state === "in" ? (
-          <span className="absolute right-0.5 bottom-0.5 size-1.5 rounded-full bg-live" />
+          <span className="absolute right-0.5 bottom-0.5 size-1.5 rounded-pill bg-live ring-2 ring-bg" />
         ) : null}
-      </span>
+      </Avatar>
       <span className="min-w-0">
-        <span className="block truncate text-sm text-fg">{name}</span>
+        <span className="block truncate text-sm font-medium text-fg">{name}</span>
         <span className="block truncate font-mono text-[11px] uppercase tracking-wide text-faint">
           {meta}
           {gameLabel(game)}
