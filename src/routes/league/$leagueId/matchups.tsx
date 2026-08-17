@@ -4,6 +4,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { MatchupEdge } from "@/components/matchup-edge";
 import { MatchupSpine } from "@/components/matchup-spine";
+import { LinePanel } from "@/components/book-panel";
+import { WagerTicket, type TicketTarget } from "@/components/wager-ticket";
+import { getBook } from "@/lib/league/fns";
 import { PlayerCell } from "@/components/player-cell";
 import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
 import { PlayerWatch, watchFromLine, type WatchTarget } from "@/components/player-watch";
@@ -118,6 +121,7 @@ function MatchupsPage() {
   const [running, setRunning] = useState(false);
   const [watch, setWatch] = useState<WatchTarget | null>(null);
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
+  const [ticket, setTicket] = useState<TicketTarget | null>(null);
 
   /** Live game means play-by-play; anything else means the profile. */
   function openPlayer(t: WatchTarget | null) {
@@ -157,6 +161,11 @@ function MatchupsPage() {
       );
       return live || league.data?.scoringLive ? LIVE_POLL_MS : false;
     },
+  });
+  const wagerBook = useQuery({
+    queryKey: ["book", leagueId, week],
+    queryFn: () => getBook({ data: { leagueId, week } }),
+    enabled: Boolean(league.data?.hosted),
   });
   const weekStats = useQuery({
     queryKey: ["week-stats", league.data?.league.season, week],
@@ -482,6 +491,16 @@ function MatchupsPage() {
                   <p className="text-sm text-muted sm:hidden">Bye week</p>
                 ) : null}
               </article>
+              {wagerBook.data?.enabled
+                ? (() => {
+                    const line = wagerBook.data.lines.find(
+                      (l) => l.matchupId === pair.matchupId,
+                    );
+                    return line ? (
+                      <LinePanel className="mt-6" line={line} onPick={setTicket} />
+                    ) : null;
+                  })()
+                : null}
               <MatchupEdge
                 pair={pair}
                 leagueId={leagueId}
@@ -497,6 +516,19 @@ function MatchupsPage() {
         </div>
       )}
       <PlayerWatch target={watch} onClose={() => setWatch(null)} />
+      {wagerBook.data ? (
+        <WagerTicket
+          open={ticket != null}
+          onOpenChange={(next) => {
+            if (!next) setTicket(null);
+          }}
+          leagueId={leagueId}
+          target={ticket}
+          book={wagerBook.data}
+          claimsPending={0}
+        />
+      ) : null}
+
       <PlayerSheet target={sheet} leagueId={leagueId} onClose={() => setSheet(null)} />
     </div>
   );

@@ -5,6 +5,8 @@ import { Avatar } from "@/components/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getActivity, getLeagueBundle, getMatchups, getRecap } from "@/lib/data/fns";
+import { getBook } from "@/lib/league/fns";
+import { PurseMeter } from "@/components/book-panel";
 import type { LeagueBundle } from "@/lib/data/types";
 import { getTrades } from "@/lib/league/fns";
 import { cn, fmtRecord, formatPts } from "@/lib/utils";
@@ -50,6 +52,12 @@ function LeaguePage() {
   const trades = useQuery({
     queryKey: ["trades", leagueId],
     queryFn: () => getTrades({ data: { leagueId } }),
+    enabled: Boolean(league.data?.hosted),
+  });
+
+  const book = useQuery({
+    queryKey: ["book", leagueId],
+    queryFn: () => getBook({ data: { leagueId } }),
     enabled: Boolean(league.data?.hosted),
   });
 
@@ -312,6 +320,77 @@ function LeaguePage() {
           </section>
         ) : null}
 
+        {book.data?.enabled ? (
+          <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+            <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+              <h2 className="font-display text-lg font-bold tracking-[-0.03em]">The book</h2>
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+                {book.data.locked ? "closed" : `week ${book.data.week}`}
+              </span>
+            </header>
+            <PurseMeter book={book.data} />
+            <div className="px-5 py-3">
+              <p className="font-mono text-lg font-bold tabular-nums">${book.data.pool.balance}</p>
+              <p className="text-xs text-faint">
+                In the pool, against ${book.data.pool.committed} committed. Funded by losing
+                stakes.
+              </p>
+            </div>
+            {book.data.positions.length ? (
+              <ul className="border-t border-line">
+                {book.data.positions.slice(0, 6).map((p) => (
+                  <li
+                    key={p.id}
+                    className="flex items-center gap-3 border-b border-line px-5 py-2.5 last:border-0"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {p.sideName} {p.kind === "spread" ? fmtLine(p.line) : "to win"}
+                      </span>
+                      <span className="block truncate font-mono text-[10px] text-faint">
+                        {p.mine ? "yours" : p.ownerName} · week {p.week}
+                      </span>
+                    </span>
+                    <span className="font-mono text-sm font-semibold tabular-nums">${p.stake}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="border-t border-line px-5 py-3 text-sm text-muted">
+                {book.data.locked ? "Nothing was on this week." : "Nothing on the board yet."}
+              </p>
+            )}
+            {book.data.settled.length ? (
+              <ul className="border-t border-line">
+                {book.data.settled.slice(0, 4).map((p) => (
+                  <li
+                    key={p.id}
+                    className="flex items-center gap-3 border-b border-line px-5 py-2.5 last:border-0"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm">
+                        {p.sideName} {p.kind === "spread" ? fmtLine(p.line) : "to win"}
+                      </span>
+                      <span className="block truncate font-mono text-[10px] text-faint">
+                        {p.mine ? "yours" : p.ownerName} · week {p.week} · {p.status}
+                      </span>
+                    </span>
+                    <span
+                      className={cn(
+                        "font-mono text-sm font-semibold tabular-nums",
+                        p.status === "won" && "text-accent-strong",
+                        p.status === "lost" && "text-loss",
+                      )}
+                    >
+                      {p.status === "won" ? `+$${p.payout ?? 0}` : p.status === "lost" ? `−$${p.stake}` : "—"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+        ) : null}
+
         <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
           <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
             <h2 className="font-display text-lg font-bold tracking-[-0.03em]">House rules</h2>
@@ -347,6 +426,12 @@ function LeaguePage() {
       </div>
     </div>
   );
+}
+
+/** A stored spread reads from the backed side's point of view. */
+function fmtLine(n: number): string {
+  if (Math.abs(n) < 0.005) return "PK";
+  return `${n > 0 ? "+" : "−"}${Math.abs(n).toFixed(1)}`;
 }
 
 function Rule({ k, v }: { k: string; v: string }) {

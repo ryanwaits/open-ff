@@ -273,6 +273,10 @@ export const saveSettings = createServerFn({ method: "POST" })
       regularWeeks: z.number().optional(),
       playoffByes: z.number().optional(),
       slots: z.array(z.string()).optional(),
+      bettingOn: z.boolean().optional(),
+      poolSeed: z.number().optional(),
+      wagerCap: z.number().optional(),
+      exposureCap: z.number().optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -351,9 +355,10 @@ export const proposeTrade = createServerFn({ method: "POST" })
         z.object({
           fromRoster: z.number(),
           toRoster: z.number(),
-          kind: z.enum(["player", "pick"]),
+          kind: z.enum(["player", "pick", "faab"]),
           playerId: z.string().nullable().optional(),
           pickNo: z.number().nullable().optional(),
+          amount: z.number().nullable().optional(),
         }),
       ),
     }),
@@ -415,5 +420,41 @@ export const rebuildSchedule = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const eng = await import("./engine.server");
     await eng.rebuildSchedule(context.userId, data.leagueId);
+    return { ok: true };
+  });
+
+/* ------------------------------------------------------------------ book -- */
+
+export const getBook = createServerFn({ method: "GET" })
+  .middleware([optionalAuthMiddleware])
+  .validator(z.object({ leagueId: z.string(), week: z.number().optional() }))
+  .handler(async ({ context, data }) => {
+    const book = await import("./book.server");
+    return book.loadBook(data.leagueId, context.userId, data.week);
+  });
+
+export const placeWager = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(
+    z.object({
+      leagueId: z.string(),
+      matchupId: z.number(),
+      kind: z.enum(["spread", "moneyline"]),
+      sideRoster: z.number(),
+      line: z.number(),
+      stake: z.number(),
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    const w = await import("./wagers.server");
+    return w.placeWager({ ...data, userId: context.userId });
+  });
+
+export const pullWager = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ leagueId: z.string(), wagerId: z.string() }))
+  .handler(async ({ context, data }) => {
+    const w = await import("./wagers.server");
+    await w.pullWager(context.userId, data.leagueId, data.wagerId);
     return { ok: true };
   });

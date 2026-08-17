@@ -1612,6 +1612,10 @@ export async function loadSettings(leagueId: string, userId: string | null): Pro
   playoffByes: number;
   lastWaiverWeek: number;
   slots: string[];
+  bettingOn: boolean;
+  poolSeed: number;
+  wagerCap: number;
+  exposureCap: number;
   teams: {
     rosterId: number;
     teamName: string;
@@ -1645,6 +1649,10 @@ export async function loadSettings(leagueId: string, userId: string | null): Pro
 		playoffByes: row.playoff_byes ?? defaultPlayoffByes(row.playoff_teams),
 		lastWaiverWeek: row.last_waiver_week ?? 0,
 		slots: parseSlots(row.roster_slots),
+		bettingOn: Boolean(row.betting_on),
+		poolSeed: row.pool_seed ?? 200,
+		wagerCap: row.wager_cap ?? 25,
+		exposureCap: row.exposure_cap ?? 60,
 		teams: rosters.map((r) => ({
 			rosterId: r.roster_id,
 			teamName: r.team_name,
@@ -1688,6 +1696,29 @@ export async function saveSettings(userId: string, leagueId: string, input: {
 	const regular = Math.min(pStart - 1, Math.max(8, input.regularWeeks ?? row.regular_weeks ?? 14));
 	const byes = clampPlayoffByes(playoff, input.playoffByes ?? row.playoff_byes ?? defaultPlayoffByes(playoff));
 	const slots = input.slots ? normalizeSlots(input.slots) : parseSlots(row.roster_slots);
+	// The book's own settings. Genesis numbers are the league's to choose: the
+	// ratio of pool seed to total manager FAAB is what decides whether a payout
+	// ever has to scale down.
+	try {
+		const { ensureWagerSchema, seedPool } = await import("./wagers.server");
+		await ensureWagerSchema();
+		if (input.bettingOn != null) {
+			await sql`update ff_leagues set betting_on = ${input.bettingOn ? 1 : 0} where id = ${leagueId}`;
+		}
+		if (input.poolSeed != null) {
+			const seed = Math.max(0, Math.min(5000, Math.round(input.poolSeed)));
+			await sql`update ff_leagues set pool_seed = ${seed} where id = ${leagueId}`;
+			await seedPool(leagueId, seed);
+		}
+		if (input.wagerCap != null) {
+			await sql`update ff_leagues set wager_cap = ${Math.max(1, Math.round(input.wagerCap))} where id = ${leagueId}`;
+		}
+		if (input.exposureCap != null) {
+			await sql`update ff_leagues set exposure_cap = ${Math.max(1, Math.round(input.exposureCap))} where id = ${leagueId}`;
+		}
+	} catch {
+		/* a league without the book tables simply has no betting */
+	}
 	await sql`
     update ff_leagues
     set name = ${name}, scoring = ${preset}, scoring_json = ${JSON.stringify(book)},

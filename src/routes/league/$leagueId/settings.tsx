@@ -50,6 +50,10 @@ function SettingsPage() {
   const [regular, setRegular] = useState(14);
   const [byes, setByes] = useState(0);
   const [counts, setCounts] = useState<SlotCounts>(countsFromSlots(ROSTER_PRESETS[0]!.slots));
+  const [bettingOn, setBettingOn] = useState(false);
+  const [poolSeed, setPoolSeed] = useState(200);
+  const [wagerCap, setWagerCap] = useState(25);
+  const [exposureCap, setExposureCap] = useState(60);
 
   useEffect(() => {
     if (!q.data) return;
@@ -64,6 +68,10 @@ function SettingsPage() {
     setRegular(q.data.regularWeeks ?? 14);
     setByes(q.data.playoffByes ?? defaultPlayoffByes(q.data.playoffTeams));
     if (q.data.slots?.length) setCounts(countsFromSlots(q.data.slots));
+    setBettingOn(q.data.bettingOn);
+    setPoolSeed(q.data.poolSeed);
+    setWagerCap(q.data.wagerCap);
+    setExposureCap(q.data.exposureCap);
   }, [q.data]);
 
   const save = useMutation({
@@ -82,6 +90,10 @@ function SettingsPage() {
           regularWeeks: regular,
           playoffByes: byes,
           slots: slotsFromCounts(counts),
+          bettingOn,
+          poolSeed,
+          wagerCap,
+          exposureCap,
         },
       }),
     onSuccess: async () => {
@@ -90,6 +102,7 @@ function SettingsPage() {
       await qc.invalidateQueries({ queryKey: ["settings", leagueId] });
       await qc.invalidateQueries({ queryKey: ["matchups", leagueId] });
       await qc.invalidateQueries({ queryKey: ["team"] });
+      await qc.invalidateQueries({ queryKey: ["book", leagueId] });
     },
     onError: (err) => toast(err instanceof Error ? err.message : "Could not save."),
   });
@@ -422,6 +435,85 @@ function SettingsPage() {
         {q.data.isCommish && !q.data.locked ? (
           <CommishClock leagueId={leagueId} />
         ) : null}
+      </section>
+
+      <section>
+        <h2 className="font-display text-2xl">The book</h2>
+        <p className="mt-1 text-sm text-muted">
+          Managers stake FAAB on matchups against a house pool. Losing stakes go into the pool and
+          winners are paid out of it, so the league&rsquo;s total FAAB never changes — the seed
+          below plus every manager&rsquo;s budget is all the money that will ever exist. Nobody can
+          bet against their own team.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-1">
+          {(
+            [
+              [true, "On"],
+              [false, "Off"],
+            ] as const
+          ).map(([id, lab]) => (
+            <button
+              key={String(id)}
+              type="button"
+              disabled={locked}
+              onClick={() => setBettingOn(id)}
+              className={cn(
+                "h-10 rounded-sm px-4 font-mono text-sm",
+                bettingOn === id ? "bg-accent text-accent-fg" : "bg-raised text-muted",
+              )}
+            >
+              {lab}
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-6">
+          <label>
+            <span className="block font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+              Pool seed $
+            </span>
+            <Input
+              className="mt-1.5 w-24"
+              type="number"
+              min={0}
+              max={5000}
+              value={poolSeed}
+              onChange={(e) => setPoolSeed(Number(e.target.value))}
+              disabled={locked}
+            />
+          </label>
+          <label>
+            <span className="block font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+              Max per wager $
+            </span>
+            <Input
+              className="mt-1.5 w-24"
+              type="number"
+              min={1}
+              max={1000}
+              value={wagerCap}
+              onChange={(e) => setWagerCap(Number(e.target.value))}
+              disabled={locked}
+            />
+          </label>
+          <label>
+            <span className="block font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+              Max at risk $
+            </span>
+            <Input
+              className="mt-1.5 w-24"
+              type="number"
+              min={1}
+              max={2000}
+              value={exposureCap}
+              onChange={(e) => setExposureCap(Number(e.target.value))}
+              disabled={locked}
+            />
+          </label>
+        </div>
+        <p className="mt-3 text-xs text-faint">
+          A small pool against large budgets means winners get scaled payouts when a week goes
+          against the house. The ratio is the dial.
+        </p>
       </section>
 
       <section>

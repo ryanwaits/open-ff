@@ -76,6 +76,7 @@ export async function ensureOpsSchema(): Promise<void> {
     `create table if not exists ff_trade_assets (
       id text primary key, trade_id text not null, from_roster int not null, to_roster int not null,
       kind text not null, player_id text, pick_no int)`,
+    `alter table ff_trade_assets add column if not exists amount int`,
     `create table if not exists ff_dispatches (
       id text primary key, league_id text not null, week int not null,
       kind text not null default 'recap', headline text not null, dek text not null,
@@ -441,9 +442,11 @@ export async function listClaims(leagueId: string, rosterId: number | null) {
 export type TradeAssetIn = {
   fromRoster: number;
   toRoster: number;
-  kind: "player" | "pick";
+  kind: "player" | "pick" | "faab";
   playerId?: string | null;
   pickNo?: number | null;
+  /** Dollars, for a `faab` asset. */
+  amount?: number | null;
 };
 
 export async function proposeTrade(
@@ -470,7 +473,17 @@ export async function proposeTrade(
   for (const a of assets) {
     sides.add(a.fromRoster);
     sides.add(a.toRoster);
-    if (a.kind === "player") {
+    if (a.kind === "faab") {
+      const amount = Math.floor(a.amount ?? 0);
+      if (amount <= 0) throw new Error("FAAB in a trade has to be a positive amount.");
+      // Staked FAAB is not yours until the wager settles, so `spendable` is the
+      // right ceiling here rather than the headline balance.
+      const { spendable } = await import("./wagers.server");
+      const free = await spendable(leagueId, a.fromRoster);
+      if (amount > free) {
+        throw new Error(`That team only has $${free} to trade.`);
+      }
+    } else if (a.kind === "player") {
       if (!a.playerId) throw new Error("Missing player.");
       const own = await sql`
         select player_id from ff_spots
@@ -519,10 +532,10 @@ export async function proposeTrade(
   }
   for (const a of assets) {
     await sql`
-      insert into ff_trade_assets (id, trade_id, from_roster, to_roster, kind, player_id, pick_no)
+      insert into ff_trade_assets (id, trade_id, from_roster, to_roster, kind, player_id, pick_no, amount)
       values (
         ${nid("ta_")}, ${id}, ${a.fromRoster}, ${a.toRoster}, ${a.kind},
-        ${a.playerId ?? null}, ${a.pickNo ?? null}
+        ${a.playerId ?? null}, ${a.pickNo ?? null}, ${a.amount ?? null}
       )
     `;
   }
@@ -619,6 +632,7 @@ async function executeTrade(leagueId: string, tradeId: string): Promise<void> {
     kind: string;
     player_id: string | null;
     pick_no: number | null;
+    amount: number | null;
   }>`select * from ff_trade_assets where trade_id = ${tradeId}`;
   const league = await leagueOf(leagueId);
   for (const a of assets) {
@@ -635,6 +649,17 @@ async function executeTrade(leagueId: string, tradeId: string): Promise<void> {
       await sql`
         insert into ff_moves (id, league_id, week, roster_id, type, add_player_id, drop_player_id)
         values (${nid("mv_", 12)}, ${leagueId}, ${league.current_week}, ${a.to_roster}, ${"trade"}, ${a.player_id}, ${null})
+      `;
+    } else if (a.kind === "faab" && a.amount) {
+      // Manager to manager. The league's total is untouched — this is the one
+      // route by which a manager who has spent everything can get liquid again.
+      await sql`
+        update ff_rosters set faab_remaining = greatest(0, coalesce(faab_remaining, 0) - ${a.amount})
+        where league_id = ${leagueId} and roster_id = ${a.from_roster}
+      `;
+      await sql`
+        update ff_rosters set faab_remaining = coalesce(faab_remaining, 0) + ${a.amount}
+        where league_id = ${leagueId} and roster_id = ${a.to_roster}
       `;
     } else if (a.kind === "pick" && a.pick_no) {
       await sql`
@@ -691,6 +716,7 @@ export async function listTrades(leagueId: string) {
       kind: string;
       player_id: string | null;
       pick_no: number | null;
+      amount: number | null;
     }>`select * from ff_trade_assets where trade_id = ${t.id}`;
     out.push({
       id: t.id,
