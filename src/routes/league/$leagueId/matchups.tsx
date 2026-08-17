@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -113,7 +113,6 @@ function SideCol({
 function MatchupsPage() {
   const { leagueId } = Route.useParams();
   const search = Route.useSearch();
-  const navigate = Route.useNavigate();
   const [phase, setPhase] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
   const [watch, setWatch] = useState<WatchTarget | null>(null);
@@ -207,13 +206,6 @@ function MatchupsPage() {
     return () => window.clearTimeout(t);
   }, [running, phase]);
 
-  const playoffStart = league.data?.ops?.playoffStartWeek ?? league.data?.league.settings.playoff_week_start ?? 15;
-  const maxWeek = Math.max(
-    playoffStart + 2,
-    league.data?.ops?.regularWeeks ?? 14,
-    league.data?.currentWeek ?? 1,
-  );
-
   const shown = useMemo(() => {
     if (!seededPairs.length) return [];
     if (phase == null) return matchups.data ?? [];
@@ -240,6 +232,34 @@ function MatchupsPage() {
   function move(delta: number) {
     if (!shown.length) return;
     setPicked((selected + delta + shown.length) % shown.length);
+  }
+
+  // The strip scrolls rather than paginating, so a fourteen-team league is a
+  // swipe instead of fourteen clicks. Arrows only appear when there is
+  // somewhere to go.
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const syncEdges = useCallback(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    setEdges({
+      left: el.scrollLeft > 4,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
+    });
+  }, []);
+  useEffect(() => {
+    syncEdges();
+    const el = stripRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(syncEdges);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [syncEdges, shown.length]);
+
+  function scrollStrip(dir: 1 | -1) {
+    const el = stripRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * Math.max(el.clientWidth * 0.8, 200), behavior: "smooth" });
   }
 
   const weekLive = (matchups.data ?? []).some(pairingIsLive);
@@ -289,23 +309,6 @@ function MatchupsPage() {
         </div>
       ) : null}
 
-      <div className="flex gap-1 overflow-x-auto pb-4">
-        {Array.from({ length: maxWeek }, (_, i) => i + 1).map((w) => (
-          <button
-            key={w}
-            type="button"
-            onClick={() => navigate({ search: { week: w } })}
-            className={cn(
-              "flex size-10 shrink-0 flex-col items-center justify-center rounded-sm font-mono text-sm",
-              w === week ? "bg-accent text-accent-fg" : "bg-raised text-muted",
-            )}
-          >
-            {w >= playoffStart ? <span className="text-[9px] leading-none">P</span> : null}
-            {w}
-          </button>
-        ))}
-      </div>
-
       {matchups.isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -315,7 +318,30 @@ function MatchupsPage() {
       ) : (
         <div className="space-y-5">
           {shown.length > 1 ? (
+            <div className="relative">
+              {edges.left ? (
+                <button
+                  type="button"
+                  aria-label="Scroll matchups left"
+                  onClick={() => scrollStrip(-1)}
+                  className="absolute top-1/2 left-0 z-10 grid size-8 -translate-x-1 -translate-y-1/2 place-items-center rounded-pill border border-line bg-surface text-faint shadow-[var(--shadow-lift)] hover:text-fg"
+                >
+                  <ChevronLeft className="size-4" strokeWidth={2} />
+                </button>
+              ) : null}
+              {edges.right ? (
+                <button
+                  type="button"
+                  aria-label="Scroll matchups right"
+                  onClick={() => scrollStrip(1)}
+                  className="absolute top-1/2 right-0 z-10 grid size-8 translate-x-1 -translate-y-1/2 place-items-center rounded-pill border border-line bg-surface text-faint shadow-[var(--shadow-lift)] hover:text-fg"
+                >
+                  <ChevronRight className="size-4" strokeWidth={2} />
+                </button>
+              ) : null}
             <div
+              ref={stripRef}
+              onScroll={syncEdges}
               role="tablist"
               aria-label="Matchups this week"
               onKeyDown={(e) => {
@@ -382,6 +408,7 @@ function MatchupsPage() {
                 );
               })}
             </div>
+            </div>
           ) : null}
 
           {pair ? (
@@ -393,34 +420,11 @@ function MatchupsPage() {
                   </p>
                 ) : null}
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-1">
-                    {shown.length > 1 ? (
-                      <button
-                        type="button"
-                        aria-label="Previous matchup"
-                        onClick={() => move(-1)}
-                        className="grid size-8 place-items-center rounded-pill border border-line text-faint hover:bg-raised hover:text-fg"
-                      >
-                        <ChevronLeft className="size-4" strokeWidth={2} />
-                      </button>
-                    ) : null}
-                    <h2 className="px-1 font-display text-lg font-bold tracking-[-0.03em]">
-                      {pair.home.rosterId === mineRosterId ||
-                      pair.away?.rosterId === mineRosterId
-                        ? "Your matchup"
-                        : `${pair.home.teamName} vs ${pair.away?.teamName ?? "Bye"}`}
-                    </h2>
-                    {shown.length > 1 ? (
-                      <button
-                        type="button"
-                        aria-label="Next matchup"
-                        onClick={() => move(1)}
-                        className="grid size-8 place-items-center rounded-pill border border-line text-faint hover:bg-raised hover:text-fg"
-                      >
-                        <ChevronRight className="size-4" strokeWidth={2} />
-                      </button>
-                    ) : null}
-                  </div>
+                  <h2 className="font-display text-lg font-bold tracking-[-0.03em]">
+                    {pair.home.rosterId === mineRosterId || pair.away?.rosterId === mineRosterId
+                      ? "Your matchup"
+                      : `${pair.home.teamName} vs ${pair.away?.teamName ?? "Bye"}`}
+                  </h2>
                   <Link
                     to="/league/$leagueId/matchup/$week/$matchupId"
                     params={{ leagueId, week: String(week), matchupId: String(pair.matchupId) }}
