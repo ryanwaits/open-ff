@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getLeagueBundle } from "@/lib/data/fns";
 import type { DispatchArticle } from "@/lib/league/dispatch";
 import { getDesk } from "@/lib/league/fns";
-import { cn } from "@/lib/utils";
+
 
 export const Route = createFileRoute("/league/$leagueId/recap")({
   validateSearch: (s: Record<string, unknown>) => ({
@@ -50,21 +50,6 @@ function DeskPage() {
           Official copy for this league. Written from the draft board and the week {week}{" "}
           slate — not a national wire.
         </p>
-        <div className="mt-4 flex gap-1 overflow-x-auto">
-          {Array.from({ length: 18 }, (_, i) => i + 1).map((w) => (
-            <button
-              key={w}
-              type="button"
-              onClick={() => navigate({ search: { week: w, story: undefined } })}
-              className={cn(
-                "flex size-10 shrink-0 items-center justify-center rounded-sm font-mono text-sm",
-                w === week ? "bg-accent text-accent-fg" : "bg-raised text-muted",
-              )}
-            >
-              {w}
-            </button>
-          ))}
-        </div>
       </header>
 
       {desk.isLoading ? (

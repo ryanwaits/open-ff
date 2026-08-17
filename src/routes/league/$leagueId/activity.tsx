@@ -4,7 +4,6 @@ import { ArrowLeftRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getActivity, getLeagueBundle } from "@/lib/data/fns";
-import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$leagueId/activity")({
   validateSearch: (s: Record<string, unknown>) => ({
@@ -16,7 +15,6 @@ export const Route = createFileRoute("/league/$leagueId/activity")({
 function ActivityPage() {
   const { leagueId } = Route.useParams();
   const search = Route.useSearch();
-  const navigate = Route.useNavigate();
   const league = useQuery({
     queryKey: ["league", leagueId],
     queryFn: () => getLeagueBundle({ data: { leagueId } }),
@@ -30,22 +28,6 @@ function ActivityPage() {
 
   return (
     <div>
-      <div className="flex gap-1 overflow-x-auto pb-4">
-        {Array.from({ length: 18 }, (_, i) => i + 1).map((w) => (
-          <button
-            key={w}
-            type="button"
-            onClick={() => navigate({ search: { week: w } })}
-            className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-sm font-mono text-sm",
-              w === week ? "bg-accent text-accent-fg" : "bg-raised text-muted",
-            )}
-          >
-            {w}
-          </button>
-        ))}
-      </div>
-
       {activity.isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (

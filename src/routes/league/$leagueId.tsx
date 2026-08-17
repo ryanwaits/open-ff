@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { BarChart3, House, Search, Settings, Shield, Swords } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Shell } from "@/components/shell";
+import { WeekPicker } from "@/components/week-picker";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getLeagueBundle } from "@/lib/data/fns";
@@ -53,6 +54,8 @@ const TABS = [
 function LeagueLayout() {
   const { leagueId } = Route.useParams();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const search = useRouterState({ select: (s) => s.location.search as { week?: number } });
+  const navigate = useNavigate();
   const remember = useLeagueStore((s) => s.remember);
   const q = useQuery({
     queryKey: ["league", leagueId],
@@ -91,6 +94,18 @@ function LeagueLayout() {
     };
   });
 
+  /**
+   * The week belongs to the league header, not to each page. Three routes used
+   * to draw their own seventeen-button strip; now they share one control that
+   * writes the same search param.
+   */
+  const WEEKLY = ["/matchups", "/activity", "/recap"];
+  const usesWeek = WEEKLY.some((seg) => pathname.startsWith(`/league/${leagueId}${seg}`));
+  const playoffStart =
+    q.data?.ops?.playoffStartWeek ?? q.data?.league.settings.playoff_week_start ?? 15;
+  const maxWeek = Math.max(playoffStart + 2, q.data?.ops?.regularWeeks ?? 14, q.data?.currentWeek ?? 1);
+  const shownWeek = search.week ?? q.data?.currentWeek ?? 1;
+
   const setupHref = `/league/${leagueId}/settings`;
   const gear = (
     <Link
@@ -124,7 +139,17 @@ function LeagueLayout() {
             <h1 className="font-display text-4xl font-extrabold tracking-[-0.03em]">
               {q.data.league.name}
             </h1>
-
+            {usesWeek ? (
+              <WeekPicker
+                week={shownWeek}
+                maxWeek={maxWeek}
+                playoffStart={playoffStart}
+                currentWeek={q.data.currentWeek}
+                onPick={(w) =>
+                  void navigate({ to: pathname, search: (prev) => ({ ...prev, week: w }) })
+                }
+              />
+            ) : null}
           </div>
           {q.data.isCommish && q.data.inviteCode ? (
             <p className="mt-2 font-mono text-xs text-faint">
