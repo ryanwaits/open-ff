@@ -1,0 +1,477 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMemo } from "react";
+import { toast } from "sonner";
+import { Avatar } from "@/components/avatar";
+import { LineupBoard } from "@/components/lineup-board";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  getActivity,
+  getByeWeeks,
+  getLeagueBundle,
+  getProjections,
+  getTeam,
+} from "@/lib/data/fns";
+import type { RosterPlayer } from "@/lib/data/types";
+import { cancelClaim, getClaims, getTrades, sitPlayer, startPlayer, voteTrade } from "@/lib/league/fns";
+import { cn, fmtRecord, formatPts } from "@/lib/utils";
+
+export const Route = createFileRoute("/league/$leagueId/roster")({
+  component: MyTeamPage,
+});
+
+/**
+ * The workbench.
+ *
+ * Home answers "what needs me right now". This answers "what is my roster made
+ * of, and what am I going to do about it": the whole roster including the
+ * shelves nothing else shows, the claims queue, trades in both directions, and
+ * the bye stack that no other screen can tell you about.
+ */
+function MyTeamPage() {
+  const { leagueId } = Route.useParams();
+  const qc = useQueryClient();
+
+  const league = useQuery({
+    queryKey: ["league", leagueId],
+    queryFn: () => getLeagueBundle({ data: { leagueId } }),
+  });
+  const week = league.data?.currentWeek ?? 1;
+  const rosterId = league.data?.myRosterId ?? null;
+  const season = league.data?.league.season ?? "";
+
+  const team = useQuery({
+    queryKey: ["team", leagueId, rosterId, week],
+    queryFn: () => getTeam({ data: { leagueId, rosterId: Number(rosterId), week } }),
+    enabled: rosterId != null && Boolean(league.data),
+  });
+  const byes = useQuery({
+    queryKey: ["byes", season],
+    queryFn: () => getByeWeeks({ data: { season } }),
+    enabled: Boolean(season),
+    staleTime: 12 * 60 * 60 * 1000,
+  });
+  const players = team.data?.players;
+  const projections = useQuery({
+    queryKey: ["projections", leagueId, week, players?.length ?? 0],
+    queryFn: () =>
+      getProjections({
+        data: {
+          leagueId,
+          season,
+          week,
+          players: (players ?? []).map((p) => ({
+            player_id: p.player_id,
+            team: p.team,
+            injury_status: p.injury_status,
+            status: p.status,
+          })),
+        },
+      }),
+    enabled: Boolean(season) && Boolean(players?.length),
+    staleTime: 60_000,
+  });
+  const claims = useQuery({
+    queryKey: ["claims", leagueId],
+    queryFn: () => getClaims({ data: { leagueId } }),
+    enabled: Boolean(league.data?.hosted),
+  });
+  const trades = useQuery({
+    queryKey: ["trades", leagueId],
+    queryFn: () => getTrades({ data: { leagueId } }),
+    enabled: Boolean(league.data?.hosted),
+  });
+  const activity = useQuery({
+    queryKey: ["activity", leagueId, week],
+    queryFn: () => getActivity({ data: { leagueId, week } }),
+    enabled: Boolean(league.data),
+  });
+
+  function invalidate() {
+    void qc.invalidateQueries({ queryKey: ["team", leagueId] });
+    void qc.invalidateQueries({ queryKey: ["league", leagueId] });
+    void qc.invalidateQueries({ queryKey: ["claims", leagueId] });
+    void qc.invalidateQueries({ queryKey: ["trades", leagueId] });
+  }
+  const start = useMutation({
+    mutationFn: (input: {
+      playerId: string;
+      replaceId?: string | null;
+      slot?: string | null;
+      name?: string;
+      into?: string;
+    }) => startPlayer({ data: { leagueId, ...input } }),
+    onSuccess: (_r, v) => {
+      invalidate();
+      if (v.name) toast.success(`${v.name} starts${v.into ? ` at ${v.into}` : ""}`);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not start"),
+  });
+  const sit = useMutation({
+    mutationFn: (input: { playerId: string; name?: string }) =>
+      sitPlayer({ data: { leagueId, playerId: input.playerId } }),
+    onSuccess: (_r, v) => {
+      invalidate();
+      if (v.name) toast(`${v.name} moved to the bench`);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not sit"),
+  });
+  const drop = useMutation({
+    mutationFn: (claimId: string) => cancelClaim({ data: { leagueId, claimId } }),
+    onSuccess: () => {
+      invalidate();
+      toast("Claim withdrawn");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not cancel"),
+  });
+  const vote = useMutation({
+    mutationFn: (input: { tradeId: string; accept: boolean }) =>
+      voteTrade({ data: { leagueId, ...input } }),
+    onSuccess: (_r, v) => {
+      invalidate();
+      toast(v.accept ? "Trade accepted" : "Trade rejected");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not respond"),
+  });
+
+  const byeStack = useMemo(() => {
+    const map = byes.data;
+    if (!map || !players) return [];
+    const buckets = new Map<number, RosterPlayer[]>();
+    for (const p of players) {
+      if (p.slot === "taxi") continue;
+      const w = p.team ? map[p.team.toUpperCase()] : undefined;
+      if (!w || w < week) continue;
+      buckets.set(w, [...(buckets.get(w) ?? []), p]);
+    }
+    return [...buckets.entries()]
+      .filter(([, list]) => list.length >= 2)
+      .sort((a, b) => b[1].length - a[1].length || a[0] - b[0])
+      .slice(0, 4);
+  }, [byes.data, players, week]);
+
+  if (league.isLoading) {
+    return (
+      <div className="space-y-5">
+        <Skeleton className="h-32 rounded-xl" />
+        <Skeleton className="h-96 rounded-xl" />
+      </div>
+    );
+  }
+  if (!league.data) return null;
+  if (rosterId == null || !team.data) {
+    return (
+      <div className="rounded-xl bg-surface px-5 py-6 shadow-[var(--shadow-border)]">
+        <p className="font-display text-xl font-bold tracking-[-0.03em]">
+          You don&rsquo;t have a seat here
+        </p>
+        <p className="mt-2 text-sm text-muted">Browse the league instead.</p>
+        <Link
+          to="/league/$leagueId/standings"
+          params={{ leagueId }}
+          className="mt-4 inline-flex h-11 items-center rounded-pill bg-raised px-5 text-sm font-semibold hover:bg-line"
+        >
+          Open the league
+        </Link>
+      </div>
+    );
+  }
+
+  const t = team.data;
+  const ops = league.data.ops;
+  const seed = league.data.standings.findIndex((s) => s.rosterId === rosterId) + 1;
+  const myClaims = (claims.data?.items ?? []).filter((c) => c.mine);
+  const myTrades = (trades.data ?? []).filter(
+    (t2) => t2.status === "proposed" && t2.sides.some((s) => s.rosterId === rosterId),
+  );
+  const myMoves = (activity.data ?? []).filter((a) => a.rosterIds.includes(rosterId));
+  const ir = t.players.filter((p) => p.slot === "ir");
+  const taxi = t.players.filter((p) => p.slot === "taxi");
+
+  return (
+    <div className="flex flex-col gap-5">
+      <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+        <div className="flex flex-wrap items-center gap-4 p-5">
+          <Avatar src={t.avatar} name={t.teamName} className="size-16" textClassName="text-lg" tint />
+          <div className="min-w-0 flex-1 basis-48">
+            <h1 className="font-display text-3xl font-extrabold tracking-[-0.035em]">
+              {t.teamName}
+            </h1>
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+              {t.manager} · seat {rosterId} · {seed}
+              {seed === 1 ? "st" : seed === 2 ? "nd" : seed === 3 ? "rd" : "th"} of{" "}
+              {league.data.standings.length}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild size="sm">
+              <Link to="/league/$leagueId/trades" params={{ leagueId }}>
+                Propose a trade
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/league/$leagueId/wire" params={{ leagueId }}>
+                Add a player
+              </Link>
+            </Button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 border-t border-line sm:grid-cols-4">
+          <Stat value={fmtRecord(t.record.wins, t.record.losses, t.record.ties)} label="record" />
+          <Stat value={formatPts(t.record.pf, 0)} label="points for" />
+          <Stat value={formatPts(t.record.pa, 0)} label="points against" />
+          <Stat value={String(t.players.length)} label="on roster" />
+        </div>
+        <div className="flex flex-wrap gap-2 px-5 py-4">
+          {league.data.faabRemaining != null ? (
+            <Chip k="FAAB" v={`$${league.data.faabRemaining}`} />
+          ) : null}
+          {ops ? <Chip k="Trade deadline" v={`Week ${ops.tradeDeadlineWeek}`} /> : null}
+          {ops ? (
+            <Chip
+              k="Waivers"
+              v={ops.waiversOpen ? "open" : `week ${ops.lastWaiverWeek}`}
+            />
+          ) : null}
+        </div>
+      </section>
+
+      <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr] lg:items-start">
+        <div className="flex min-w-0 flex-col gap-5">
+          <LineupBoard
+            team={t}
+            rosterPositions={league.data.league.roster_positions ?? []}
+            editable={Boolean(league.data.hosted && !league.data.locked)}
+            byes={byes.data}
+            week={week}
+            projections={projections.data}
+            busy={start.isPending || sit.isPending}
+            onStart={(playerId, replaceId, slot, name, into) =>
+              start.mutate({ playerId, replaceId, slot, name, into })
+            }
+            onSit={(playerId, name) => sit.mutate({ playerId, name })}
+          />
+
+          {ir.length || taxi.length ? (
+            <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+              <header className="px-5 pt-5 pb-2">
+                <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Shelves</h2>
+              </header>
+              <ul>
+                {[...ir, ...taxi].map((p) => (
+                  <li
+                    key={p.player_id}
+                    className="flex items-center gap-3 border-b border-line px-5 py-2.5 last:border-0"
+                  >
+                    <span className="w-10 shrink-0 font-mono text-[10px] uppercase text-faint">
+                      {p.slot}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                      {p.full_name}
+                    </span>
+                    <span className="font-mono text-[10px] uppercase text-faint">
+                      {[p.position, p.team].filter(Boolean).join(" · ")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-5">
+          <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+            <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+              <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Bye trouble</h2>
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+                Derived
+              </span>
+            </header>
+            {byeStack.length === 0 ? (
+              <p className="px-5 pb-5 text-sm text-muted">
+                {byes.data ? "No week costs you more than one player." : "Working out the byes…"}
+              </p>
+            ) : (
+              <ul>
+                {byeStack.map(([w, list]) => (
+                  <li
+                    key={w}
+                    className="flex items-start gap-3 border-b border-line px-5 py-3 last:border-0"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold">Week {w}</span>
+                      <span className="block truncate font-mono text-[10px] uppercase tracking-wide text-faint">
+                        {list.map((p) => p.full_name.split(" ").slice(-1)[0]).join(" · ")}
+                      </span>
+                    </span>
+                    <Badge tone={list.length >= 3 ? "loss" : "muted"}>{list.length} out</Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {league.data.hosted ? (
+            <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+              <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+                <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Waivers</h2>
+                <Link
+                  to="/league/$leagueId/wire"
+                  params={{ leagueId }}
+                  className="font-mono text-[10px] uppercase tracking-wide text-accent-strong"
+                >
+                  Add a claim
+                </Link>
+              </header>
+              {myClaims.length === 0 ? (
+                <p className="px-5 pb-5 text-sm text-muted">No claims in.</p>
+              ) : (
+                <ul>
+                  {myClaims.map((c) => (
+                    <li
+                      key={c.id}
+                      className="flex items-center gap-3 border-b border-line px-5 py-3 last:border-0"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{c.add.name}</span>
+                        <span className="block truncate font-mono text-[10px] uppercase tracking-wide text-faint">
+                          {[c.add.pos, c.drop ? `drop ${c.drop.name}` : "no drop"]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      </span>
+                      <span className="font-mono text-sm font-semibold">${c.bid}</span>
+                      <button
+                        type="button"
+                        aria-label={`Withdraw claim for ${c.add.name}`}
+                        disabled={drop.isPending}
+                        onClick={() => drop.mutate(c.id)}
+                        className="grid size-8 shrink-0 place-items-center rounded-pill text-faint hover:bg-raised hover:text-loss"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ) : null}
+
+          {league.data.hosted ? (
+            <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+              <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+                <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Trades</h2>
+                <Link
+                  to="/league/$leagueId/trades"
+                  params={{ leagueId }}
+                  className="font-mono text-[10px] uppercase tracking-wide text-accent-strong"
+                >
+                  Trade desk
+                </Link>
+              </header>
+              {myTrades.length === 0 ? (
+                <p className="px-5 pb-5 text-sm text-muted">Nothing on the table.</p>
+              ) : (
+                <ul>
+                  {myTrades.map((tr) => {
+                    const waiting = tr.sides.some((s) => s.rosterId === rosterId && !s.accepted);
+                    return (
+                      <li key={tr.id} className="border-b border-line px-5 py-3 last:border-0">
+                        <p className="text-sm font-semibold">
+                          {tr.sides.map((s) => s.teamName).join(" ↔ ")}
+                        </p>
+                        <ul className="mt-1 space-y-0.5">
+                          {tr.assets.map((asset, i) => (
+                            <li key={i} className="text-[13px] text-muted">
+                              {asset.fromName} → {asset.toName}:{" "}
+                              {asset.kind === "player" ? asset.playerName : asset.pickLabel}
+                            </li>
+                          ))}
+                        </ul>
+                        {waiting ? (
+                          <div className="mt-3 flex gap-2">
+                            <Button
+                              size="sm"
+                              disabled={vote.isPending}
+                              onClick={() => vote.mutate({ tradeId: tr.id, accept: true })}
+                            >
+                              Accept
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={vote.isPending}
+                              onClick={() => vote.mutate({ tradeId: tr.id, accept: false })}
+                            >
+                              Decline
+                            </Button>
+                          </div>
+                        ) : (
+                          <p className="mt-2 font-mono text-[10px] uppercase tracking-wide text-faint">
+                            Waiting on them
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          ) : null}
+
+          <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+            <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+              <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Your moves</h2>
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+                Week {week}
+              </span>
+            </header>
+            {myMoves.length === 0 ? (
+              <p className="px-5 pb-5 text-sm text-muted">Nothing this week.</p>
+            ) : (
+              <ul>
+                {myMoves.slice(0, 6).map((m) => (
+                  <li
+                    key={m.id}
+                    className="flex items-start gap-3 border-b border-line px-5 py-2.5 last:border-0"
+                  >
+                    <Badge tone="muted">{m.type}</Badge>
+                    <span className="min-w-0 flex-1 text-[13px] text-muted">
+                      {[
+                        m.adds.length ? `in ${m.adds.map((x) => x.name).join(", ")}` : null,
+                        m.drops.length ? `out ${m.drops.map((x) => x.name).join(", ")}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <div className={cn("border-r border-b border-line px-5 py-3 last:border-r-0 sm:border-b-0")}>
+      <span className="block font-mono text-xl font-semibold tabular-nums">{value}</span>
+      <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function Chip({ k, v }: { k: string; v: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-pill border border-line px-3 py-1.5 font-mono text-[10.5px] text-muted">
+      {k} <b className="font-semibold text-fg">{v}</b>
+    </span>
+  );
+}

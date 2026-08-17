@@ -26,6 +26,7 @@ import { Route as LeagueLeagueIdActivityRouteImport } from './routes/league/$lea
 import { Route as LeagueLeagueIdDraftRouteImport } from './routes/league/$leagueId/draft'
 import { Route as LeagueLeagueIdMatchupsRouteImport } from './routes/league/$leagueId/matchups'
 import { Route as LeagueLeagueIdRecapRouteImport } from './routes/league/$leagueId/recap'
+import { Route as LeagueLeagueIdRosterRouteImport } from './routes/league/$leagueId/roster'
 import { Route as LeagueLeagueIdSettingsRouteImport } from './routes/league/$leagueId/settings'
 import { Route as LeagueLeagueIdStandingsRouteImport } from './routes/league/$leagueId/standings'
 import { Route as LeagueLeagueIdTradesRouteImport } from './routes/league/$leagueId/trades'
@@ -119,6 +120,11 @@ const LeagueLeagueIdRecapRoute = LeagueLeagueIdRecapRouteImport.update({
   path: '/recap',
   getParentRoute: () => LeagueLeagueIdRoute,
 } as any)
+const LeagueLeagueIdRosterRoute = LeagueLeagueIdRosterRouteImport.update({
+  id: '/roster',
+  path: '/roster',
+  getParentRoute: () => LeagueLeagueIdRoute,
+} as any)
 const LeagueLeagueIdSettingsRoute = LeagueLeagueIdSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -175,6 +181,7 @@ export interface FileRoutesByFullPath {
   '/league/$leagueId/draft': typeof LeagueLeagueIdDraftRoute
   '/league/$leagueId/matchups': typeof LeagueLeagueIdMatchupsRoute
   '/league/$leagueId/recap': typeof LeagueLeagueIdRecapRoute
+  '/league/$leagueId/roster': typeof LeagueLeagueIdRosterRoute
   '/league/$leagueId/settings': typeof LeagueLeagueIdSettingsRoute
   '/league/$leagueId/standings': typeof LeagueLeagueIdStandingsRoute
   '/league/$leagueId/trades': typeof LeagueLeagueIdTradesRoute
@@ -200,6 +207,7 @@ export interface FileRoutesByTo {
   '/league/$leagueId/draft': typeof LeagueLeagueIdDraftRoute
   '/league/$leagueId/matchups': typeof LeagueLeagueIdMatchupsRoute
   '/league/$leagueId/recap': typeof LeagueLeagueIdRecapRoute
+  '/league/$leagueId/roster': typeof LeagueLeagueIdRosterRoute
   '/league/$leagueId/settings': typeof LeagueLeagueIdSettingsRoute
   '/league/$leagueId/standings': typeof LeagueLeagueIdStandingsRoute
   '/league/$leagueId/trades': typeof LeagueLeagueIdTradesRoute
@@ -227,6 +235,7 @@ export interface FileRoutesById {
   '/league/$leagueId/draft': typeof LeagueLeagueIdDraftRoute
   '/league/$leagueId/matchups': typeof LeagueLeagueIdMatchupsRoute
   '/league/$leagueId/recap': typeof LeagueLeagueIdRecapRoute
+  '/league/$leagueId/roster': typeof LeagueLeagueIdRosterRoute
   '/league/$leagueId/settings': typeof LeagueLeagueIdSettingsRoute
   '/league/$leagueId/standings': typeof LeagueLeagueIdStandingsRoute
   '/league/$leagueId/trades': typeof LeagueLeagueIdTradesRoute
@@ -255,6 +264,7 @@ export interface FileRouteTypes {
     | '/league/$leagueId/draft'
     | '/league/$leagueId/matchups'
     | '/league/$leagueId/recap'
+    | '/league/$leagueId/roster'
     | '/league/$leagueId/settings'
     | '/league/$leagueId/standings'
     | '/league/$leagueId/trades'
@@ -280,6 +290,7 @@ export interface FileRouteTypes {
     | '/league/$leagueId/draft'
     | '/league/$leagueId/matchups'
     | '/league/$leagueId/recap'
+    | '/league/$leagueId/roster'
     | '/league/$leagueId/settings'
     | '/league/$leagueId/standings'
     | '/league/$leagueId/trades'
@@ -306,6 +317,7 @@ export interface FileRouteTypes {
     | '/league/$leagueId/draft'
     | '/league/$leagueId/matchups'
     | '/league/$leagueId/recap'
+    | '/league/$leagueId/roster'
     | '/league/$leagueId/settings'
     | '/league/$leagueId/standings'
     | '/league/$leagueId/trades'
@@ -452,6 +464,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LeagueLeagueIdRecapRouteImport
       parentRoute: typeof LeagueLeagueIdRoute
     }
+    '/league/$leagueId/roster': {
+      id: '/league/$leagueId/roster'
+      path: '/roster'
+      fullPath: '/league/$leagueId/roster'
+      preLoaderRoute: typeof LeagueLeagueIdRosterRouteImport
+      parentRoute: typeof LeagueLeagueIdRoute
+    }
     '/league/$leagueId/settings': {
       id: '/league/$leagueId/settings'
       path: '/settings'
@@ -509,6 +528,7 @@ interface LeagueLeagueIdRouteChildren {
   LeagueLeagueIdDraftRoute: typeof LeagueLeagueIdDraftRoute
   LeagueLeagueIdMatchupsRoute: typeof LeagueLeagueIdMatchupsRoute
   LeagueLeagueIdRecapRoute: typeof LeagueLeagueIdRecapRoute
+  LeagueLeagueIdRosterRoute: typeof LeagueLeagueIdRosterRoute
   LeagueLeagueIdSettingsRoute: typeof LeagueLeagueIdSettingsRoute
   LeagueLeagueIdStandingsRoute: typeof LeagueLeagueIdStandingsRoute
   LeagueLeagueIdTradesRoute: typeof LeagueLeagueIdTradesRoute
@@ -524,6 +544,7 @@ const LeagueLeagueIdRouteChildren: LeagueLeagueIdRouteChildren = {
   LeagueLeagueIdDraftRoute: LeagueLeagueIdDraftRoute,
   LeagueLeagueIdMatchupsRoute: LeagueLeagueIdMatchupsRoute,
   LeagueLeagueIdRecapRoute: LeagueLeagueIdRecapRoute,
+  LeagueLeagueIdRosterRoute: LeagueLeagueIdRosterRoute,
   LeagueLeagueIdSettingsRoute: LeagueLeagueIdSettingsRoute,
   LeagueLeagueIdStandingsRoute: LeagueLeagueIdStandingsRoute,
   LeagueLeagueIdTradesRoute: LeagueLeagueIdTradesRoute,
