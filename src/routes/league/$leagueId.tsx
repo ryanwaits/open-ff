@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { BarChart3, Search, Settings, Shield, Swords } from "lucide-react";
+import { BarChart3, House, Search, Settings, Shield, Swords } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Shell } from "@/components/shell";
@@ -22,10 +22,18 @@ export const Route = createFileRoute("/league/$leagueId")({
  * too quiet on the night it matters.
  */
 const TABS = [
-  { to: "/league/$leagueId" as const, label: "My Team", end: true, when: "always", owns: [] as string[], Icon: Shield },
+  { to: "/league/$leagueId" as const, label: "Home", end: true, when: "always", owns: [] as string[], Icon: House },
+  {
+    to: "/league/$leagueId/roster" as const,
+    label: "My Team",
+    end: false,
+    when: "always",
+    owns: [] as string[],
+    Icon: Shield,
+  },
   {
     to: "/league/$leagueId/matchups" as const,
-    label: "Matchup",
+    label: "Matchups",
     end: false,
     when: "always",
     owns: ["/matchup/"],
@@ -40,14 +48,6 @@ const TABS = [
     Icon: BarChart3,
   },
   { to: "/league/$leagueId/wire" as const, label: "Players", end: false, when: "hosted", owns: [] as string[], Icon: Search },
-];
-
-/** Sections inside League. Standings is the default. */
-const LEAGUE_SECTIONS = [
-  { to: "/league/$leagueId/standings" as const, label: "Standings", when: "always" },
-  { to: "/league/$leagueId/trades" as const, label: "Trades", when: "hosted" },
-  { to: "/league/$leagueId/recap" as const, label: "Desk", when: "always" },
-  { to: "/league/$leagueId/activity" as const, label: "Moves", when: "commish" },
 ];
 
 function LeagueLayout() {
@@ -69,10 +69,6 @@ function LeagueLayout() {
       });
     }
   }, [q.data, remember]);
-
-  const inLeagueSection = LEAGUE_SECTIONS.some((sec) =>
-    pathname.startsWith(sec.to.replace("$leagueId", leagueId)),
-  );
 
   const show = (when: string) => {
     if (when === "always") return true;
@@ -142,30 +138,6 @@ function LeagueLayout() {
       {q.data?.hosted && !q.data.myRosterId && !q.data.locked ? (
         <ClaimBanner leagueId={leagueId} inviteCode={q.data.inviteCode} />
       ) : null}
-
-      {inLeagueSection ? (
-        <nav className="-mx-4 mb-6 flex gap-1 overflow-x-auto px-4">
-          {LEAGUE_SECTIONS.filter((sec) => show(sec.when)).map((sec) => {
-            const href = sec.to.replace("$leagueId", leagueId);
-            const on = pathname.startsWith(href);
-            return (
-              <Link
-                key={sec.to}
-                to={sec.to}
-                params={{ leagueId }}
-                className={cn(
-                  "shrink-0 rounded-pill px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-150",
-                  on ? "bg-raised text-fg" : "text-faint hover:text-fg",
-                )}
-              >
-                {sec.label}
-              </Link>
-            );
-          })}
-        </nav>
-      ) : (
-        <div className="mb-6" />
-      )}
 
       <Outlet />
     </Shell>
