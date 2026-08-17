@@ -104,8 +104,32 @@ export async function outlooksFor(input: {
     }),
   );
 
+  // A player who cannot play contributes nothing, however good his history is.
+  // Without this the spread counts an IR'd star at his season average, which is
+  // wrong in exactly the case that matters most. `projectPlayers()` has always
+  // gated this way; the outlook path never did.
+  const sleeper = await import("./sleeper.server");
+  const { statusOverlay } = await import("./player-refresh.server");
+  const overlay = await statusOverlay(input.playerIds);
+
   const out: Record<string, { mean: number; sd: number }> = {};
   for (const id of input.playerIds) {
+    const fresh = overlay[id];
+    const bundled = sleeper.getPlayer(id);
+    const designation = (
+      fresh?.injuryStatus ??
+      fresh?.status ??
+      bundled?.injury_status ??
+      bundled?.status ??
+      ""
+    )
+      .toLowerCase()
+      .trim();
+    if (designation && CANNOT_PLAY.has(designation)) {
+      out[id] = { mean: 0, sd: 0 };
+      continue;
+    }
+
     const points: number[] = [];
     for (const week of weeks) {
       const line = week[id];

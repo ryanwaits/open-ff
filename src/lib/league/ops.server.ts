@@ -914,13 +914,24 @@ export async function tickLeague(leagueId: string): Promise<{ advanced: number; 
   return { advanced, waivers };
 }
 
-export async function tickAllLeagues(): Promise<{ leagues: number; advanced: number; waivers: number }> {
+export async function tickAllLeagues(): Promise<{
+  leagues: number;
+  advanced: number;
+  waivers: number;
+  statusChanges: number;
+}> {
   await ensureOpsSchema();
   const sql = await getSql();
   const rows = await sql<{ id: string }>`
     select id from ff_leagues
     where locked = 0 and status not in (${"pre_draft"}, ${"drafting"})
   `;
+
+  // Once a day this actually pulls; the rest of the hourly runs no-op. Done
+  // before the leagues so a week that rolls over this tick is already working
+  // from current designations.
+  const statusChanges = await refreshStatusAndRecord(rows.map((r) => r.id));
+
   let advanced = 0;
   let waivers = 0;
   for (const row of rows) {
@@ -928,7 +939,51 @@ export async function tickAllLeagues(): Promise<{ leagues: number; advanced: num
     advanced += res.advanced;
     waivers += res.waivers;
   }
-  return { leagues: rows.length, advanced, waivers };
+  return { leagues: rows.length, advanced, waivers, statusChanges };
+}
+
+/**
+ * Refresh player designations and write an event for anyone rostered whose
+ * status moved.
+ *
+ * Only rostered players produce events. Sleeper carries a few thousand players
+ * and most of them are nobody's problem; an injury is only a story when it is
+ * somebody's starter.
+ */
+async function refreshStatusAndRecord(leagueIds: string[]): Promise<number> {
+  if (leagueIds.length === 0) return 0;
+  try {
+    const { refreshPlayerStatus } = await import("@/lib/data/player-refresh.server");
+    const res = await refreshPlayerStatus();
+    if (res.skipped || res.changed.length === 0) return 0;
+
+    const sql = await getSql();
+    const byPlayer = new Map(res.changed.map((c) => [c.playerId, c]));
+    const owned = await sql<{ league_id: string; roster_id: number; player_id: string }>`
+      select league_id, roster_id, player_id from ff_spots
+      where player_id = any(${[...byPlayer.keys()]})
+    `;
+
+    for (const row of owned) {
+      if (!leagueIds.includes(row.league_id)) continue;
+      const change = byPlayer.get(row.player_id);
+      if (!change) continue;
+      const league = await leagueOf(row.league_id).catch(() => null);
+      if (!league) continue;
+      await recordEvent({
+        leagueId: row.league_id,
+        week: league.current_week,
+        kind: "injury_changed",
+        actorRoster: row.roster_id,
+        playerId: row.player_id,
+        payload: { from: change.from, to: change.to },
+      });
+    }
+    return owned.length;
+  } catch {
+    // A refresh failure must never stop the clock.
+    return 0;
+  }
 }
 
 const clockRef = globalThis as typeof globalThis & { __ledgerClock__?: ReturnType<typeof setInterval> };
