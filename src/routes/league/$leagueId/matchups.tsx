@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { PlayerCell } from "@/components/player-cell";
+import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
+import { PlayerWatch, watchFromLine, type WatchTarget } from "@/components/player-watch";
 import { ReplayBar } from "@/components/replay-bar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getLeagueBundle, getMatchups, getWeekStats } from "@/lib/data/fns";
@@ -35,11 +37,13 @@ function SideCol({
   prev,
   leagueId,
   stats,
+  onPlayer,
 }: {
   side: MatchupSide;
   prev: MatchupSide | null;
   leagueId: string;
   stats: Record<string, Record<string, number>>;
+  onPlayer: (t: WatchTarget | null) => void;
 }) {
   const teamDelta = prev ? side.points - prev.points : 0;
   return (
@@ -72,7 +76,16 @@ function SideCol({
               )}
             >
               <span className="w-8 shrink-0 font-mono text-[10px] text-faint">{line.slot}</span>
-              <div className="min-w-0 flex-1">
+              <button
+                type="button"
+                disabled={!line.player}
+                onClick={() =>
+                  onPlayer(
+                    watchFromLine(line, side.teamName, formatStatLine(line.player?.position, bag), bag),
+                  )
+                }
+                className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:cursor-default"
+              >
                 <PlayerCell
                   player={line.player}
                   empty="—"
@@ -80,7 +93,7 @@ function SideCol({
                   game={line.game}
                   line={formatStatLine(line.player?.position, bag)}
                 />
-              </div>
+              </button>
               <span className="w-16 text-right font-mono text-xs tabular-nums">
                 {formatPts(line.points, 1)}
                 {bump > 0.04 ? (
@@ -101,6 +114,25 @@ function MatchupsPage() {
   const navigate = Route.useNavigate();
   const [phase, setPhase] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
+  const [watch, setWatch] = useState<WatchTarget | null>(null);
+  const [sheet, setSheet] = useState<SheetTarget | null>(null);
+
+  /** Live game means play-by-play; anything else means the profile. */
+  function openPlayer(t: WatchTarget | null) {
+    if (!t) return;
+    if (t.gameState === "in") {
+      setWatch(t);
+      return;
+    }
+    setSheet({
+      player: t.player,
+      game:
+        t.gameId || t.gameDetail
+          ? { state: t.gameState ?? "pre", detail: t.gameDetail ?? "", opp: null, gameId: t.gameId }
+          : null,
+      context: { label: t.club, rows: [["Slot", t.slot]] },
+    });
+  }
 
   const league = useQuery({
     queryKey: ["league", leagueId],
@@ -293,6 +325,7 @@ function MatchupsPage() {
                   prev={prevShown?.[idx]?.home ?? null}
                   leagueId={leagueId}
                   stats={finals}
+                  onPlayer={openPlayer}
                 />
                 {pair.away ? (
                   <SideCol
@@ -300,6 +333,7 @@ function MatchupsPage() {
                     prev={prevShown?.[idx]?.away ?? null}
                     leagueId={leagueId}
                     stats={finals}
+                    onPlayer={openPlayer}
                   />
                 ) : (
                   <p className="text-sm text-muted">Bye week</p>
@@ -312,6 +346,8 @@ function MatchupsPage() {
           ) : null}
         </div>
       )}
+      <PlayerWatch target={watch} onClose={() => setWatch(null)} />
+      <PlayerSheet target={sheet} leagueId={leagueId} onClose={() => setSheet(null)} />
     </div>
   );
 }

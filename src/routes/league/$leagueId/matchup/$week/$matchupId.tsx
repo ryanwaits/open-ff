@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Avatar } from "@/components/avatar";
 import { PlayerCell } from "@/components/player-cell";
+import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
 import { PlayerWatch, watchFromLine, type WatchTarget } from "@/components/player-watch";
 import { ReplayBar } from "@/components/replay-bar";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +32,7 @@ import {
   replayStatMap,
   seedPairForReplay,
 } from "@/lib/replay";
-import { cn, fmtRecord, formatPts, initials } from "@/lib/utils";
+import { cn, fmtRecord, formatPts } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$leagueId/matchup/$week/$matchupId")({
   component: MatchupPage,
@@ -43,6 +45,27 @@ function MatchupPage() {
   const [phase, setPhase] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
   const [watch, setWatch] = useState<WatchTarget | null>(null);
+  const [sheet, setSheet] = useState<SheetTarget | null>(null);
+
+  /**
+   * A live game and a finished one ask different questions. In progress, you
+   * want the play-by-play; otherwise you want the season and whether to start
+   * him. Same tap, different surface.
+   */
+  function openPlayer(t: WatchTarget | null) {
+    if (!t) return;
+    if (t.gameState === "in") {
+      setWatch(t);
+      return;
+    }
+    setSheet({
+      player: t.player,
+      game: t.gameId || t.gameDetail
+        ? { state: t.gameState ?? "pre", detail: t.gameDetail ?? "", opp: null, gameId: t.gameId }
+        : null,
+      context: { label: t.club, rows: [["Slot", t.slot], ["This week", formatPts(t.points, 1)]] },
+    });
+  }
 
   const league = useQuery({
     queryKey: ["league", leagueId],
@@ -308,7 +331,7 @@ function MatchupPage() {
               stats={stats}
               homeClub={pair.home.teamName}
               awayClub={pair.away?.teamName ?? ""}
-              onWatch={setWatch}
+              onWatch={openPlayer}
             />
           ))}
         </ul>
@@ -333,7 +356,7 @@ function MatchupPage() {
               stats={stats}
               homeClub={pair.home.teamName}
               awayClub={pair.away?.teamName ?? ""}
-              onWatch={setWatch}
+              onWatch={openPlayer}
             />
           )}
         </section>
@@ -360,6 +383,7 @@ function MatchupPage() {
                         slot: "BN",
                         points: p.weekPts,
                         line: formatStatLine(p.position, stats[p.player_id]),
+                        gameState: p.game?.state ?? null,
                         gameId: p.game?.gameId ?? null,
                         gameDetail: p.game?.detail ?? null,
                         club: pair.home.teamName,
@@ -424,6 +448,7 @@ function MatchupPage() {
       ) : null}
 
       <PlayerWatch target={watch} onClose={() => setWatch(null)} />
+      <PlayerSheet target={sheet} leagueId={leagueId} onClose={() => setSheet(null)} />
     </div>
   );
 }
@@ -575,13 +600,13 @@ function TeamHead({
         align === "right" && "flex-row-reverse text-right",
       )}
     >
-      <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full bg-raised text-sm sm:size-12">
-        {side.avatar ? (
-          <img src={side.avatar} alt="" className="size-full object-cover" />
-        ) : (
-          initials(side.teamName)
-        )}
-      </span>
+      <Avatar
+        src={side.avatar}
+        name={side.teamName}
+        className="size-11 sm:size-12"
+        textClassName="text-sm"
+        tint
+      />
       <span className="min-w-0">
         <span className={cn("block truncate text-sm sm:text-base", leading ? "text-fg" : "text-muted")}>
           {side.teamName}
@@ -757,6 +782,7 @@ function BenchGrid({
                     slot: "BN",
                     points: h.weekPts,
                     line: formatStatLine(h.position, stats[h.player_id]),
+                    gameState: h.game?.state ?? null,
                     gameId: h.game?.gameId ?? null,
                     gameDetail: h.game?.detail ?? null,
                     club: homeClub,
@@ -789,6 +815,7 @@ function BenchGrid({
                     slot: "BN",
                     points: a.weekPts,
                     line: formatStatLine(a.position, stats[a.player_id]),
+                    gameState: a.game?.state ?? null,
                     gameId: a.game?.gameId ?? null,
                     gameDetail: a.game?.detail ?? null,
                     club: awayClub,

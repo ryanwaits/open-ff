@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PlayerCell } from "@/components/player-cell";
@@ -189,9 +189,13 @@ function WirePage() {
             ))
           : wire.data?.map((p) => (
               <li key={p.player_id} className="flex items-center gap-3 px-3 py-2.5">
-                <div className="min-w-0 flex-1">
+                <Link
+                  to="/league/$leagueId/player/$playerId"
+                  params={{ leagueId, playerId: p.player_id }}
+                  className="min-w-0 flex-1 rounded-md"
+                >
                   <PlayerCell player={p} compact />
-                </div>
+                </Link>
                 <span className="font-mono text-sm tabular-nums">
                   {formatPts(p.pts, 1)}
                 </span>

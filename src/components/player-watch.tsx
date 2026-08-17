@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Avatar } from "@/components/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getGameSummary } from "@/lib/data/fns";
@@ -14,7 +15,7 @@ import {
 import { playerHeadshot, teamLogo } from "@/lib/data/teams";
 import type { GamePlay, GameSummary, SlimPlayer, StarterLine } from "@/lib/data/types";
 import { REPLAY_PHASES, replayPts, replayStats } from "@/lib/replay";
-import { cn, formatPts, initials } from "@/lib/utils";
+import { cn, formatPts } from "@/lib/utils";
 
 export type WatchTarget = {
   player: SlimPlayer;
@@ -23,6 +24,8 @@ export type WatchTarget = {
   line: string | null;
   gameId: string | null;
   gameDetail: string | null;
+  /** Lets the caller decide between the live drawer and the profile sheet. */
+  gameState: "pre" | "in" | "post" | null;
   club: string;
   stats?: Record<string, number> | null;
 };
@@ -41,6 +44,7 @@ export function watchFromLine(
     line: statLine,
     gameId: line.game?.gameId ?? null,
     gameDetail: line.game?.detail ?? null,
+    gameState: line.game?.state ?? null,
     club,
     stats: bag ?? line.stats ?? null,
   };
@@ -161,21 +165,8 @@ function WatchBody({ target, onClose }: { target: WatchTarget; onClose: () => vo
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="shrink-0 border-b border-line px-4 pb-3 pt-2 sm:pt-4">
         <div className="flex items-start gap-3">
-          <span className="relative size-11 shrink-0 overflow-hidden rounded-sm bg-raised">
-            {src ? (
-              <img
-                src={src}
-                alt=""
-                className="size-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-            ) : null}
-            <span className="absolute inset-0 grid place-items-center font-mono text-[10px] text-muted">
-              {initials(name)}
-            </span>
-          </span>
+          <Avatar src={src} name={name} className="size-11" textClassName="text-xs">
+          </Avatar>
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-base">{name}</h2>
             <p className="font-mono text-[11px] uppercase tracking-wide text-faint">
