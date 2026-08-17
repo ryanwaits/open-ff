@@ -1,152 +1,390 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Avatar } from "@/components/avatar";
-import { MatchupCard } from "@/components/matchup-card";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getLeagueBundle, getMatchups } from "@/lib/data/fns";
+import { getActivity, getLeagueBundle, getMatchups, getRecap } from "@/lib/data/fns";
+import { getTrades } from "@/lib/league/fns";
 import { cn, fmtRecord, formatPts } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$leagueId/standings")({
-  component: StandingsPage,
+  component: LeaguePage,
 });
 
-function StandingsPage() {
+/**
+ * One dashboard, no second tab strip.
+ *
+ * Standings anchors it because that is what people come for; everything the
+ * sub-tabs used to hide is a section you can see without a click. It is a
+ * browse surface rather than a task surface, so length is fine and a click is
+ * not.
+ */
+function LeaguePage() {
   const { leagueId } = Route.useParams();
+
   const league = useQuery({
     queryKey: ["league", leagueId],
     queryFn: () => getLeagueBundle({ data: { leagueId } }),
     refetchInterval: (q) => (q.state.data?.scoringLive ? 15_000 : false),
   });
   const week = league.data?.currentWeek ?? 1;
+
   const matchups = useQuery({
     queryKey: ["matchups", leagueId, week],
     queryFn: () => getMatchups({ data: { leagueId, week } }),
     enabled: Boolean(league.data),
     refetchInterval: () => (league.data?.scoringLive ? 15_000 : false),
   });
+  const activity = useQuery({
+    queryKey: ["activity", leagueId, week],
+    queryFn: () => getActivity({ data: { leagueId, week } }),
+    enabled: Boolean(league.data),
+  });
+  const recap = useQuery({
+    queryKey: ["recap", leagueId, week],
+    queryFn: () => getRecap({ data: { leagueId, week } }),
+    enabled: Boolean(league.data),
+  });
+  const trades = useQuery({
+    queryKey: ["trades", leagueId],
+    queryFn: () => getTrades({ data: { leagueId } }),
+    enabled: Boolean(league.data?.hosted),
+  });
 
   if (league.isLoading) {
     return (
-      <div className="space-y-2">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-12" />
-        ))}
+      <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
+        <Skeleton className="h-96 rounded-xl" />
+        <Skeleton className="h-64 rounded-xl" />
       </div>
     );
   }
   if (!league.data) return null;
 
+  const mine = league.data.myRosterId;
   const playoff = league.data.league.settings.playoff_teams ?? 0;
+  const ops = league.data.ops;
+  const open = (trades.data ?? []).filter((t) => t.status === "proposed");
 
   return (
-    <div>
-      {/* min-w-0 on both tracks: grid items default to min-width:auto, so the
-          520px-wide standings table would otherwise size the track and push the
-          whole page sideways instead of scrolling inside its own container. */}
-      <div className="grid gap-10 lg:grid-cols-[1.15fr_0.85fr]">
-      <section className="min-w-0">
-        <h2 className="font-display text-2xl font-bold tracking-[-0.03em]">Standings</h2>
-        <div className="mt-4 overflow-x-auto rounded-xl bg-surface shadow-[var(--shadow-border)]">
-          <table className="w-full min-w-[520px] text-sm">
-            <thead className="font-mono text-[11px] uppercase tracking-wide text-faint">
-              <tr className="border-b border-line">
-                <th className="px-4 py-3.5 text-left font-medium">#</th>
-                <th className="px-2 py-3.5 text-left font-medium">Team</th>
-                <th className="px-3 py-3.5 text-right font-medium">W–L</th>
-                <th className="px-3 py-3.5 text-right font-medium">PF</th>
-                <th className="px-4 py-3.5 text-right font-medium">PA</th>
-              </tr>
-            </thead>
-            <tbody>
-              {league.data.standings.map((row, i) => {
-                const inPlayoffs = playoff > 0 && i < playoff;
-                return (
-                  <tr key={row.rosterId} className="border-b border-line last:border-0">
-                    <td className="px-4 py-3 font-mono text-xs">
-                      {/* The playoff line is the only thing worth marking in a
-                          standings table, so it gets the one accent. */}
-                      <span
-                        className={cn(
-                          "grid size-6 place-items-center rounded-pill",
-                          inPlayoffs ? "bg-accent text-accent-fg font-semibold" : "text-faint",
-                        )}
-                      >
-                        {i + 1}
-                      </span>
-                    </td>
-                    <td className="px-2 py-3">
-                      <Link
-                        to="/league/$leagueId/team/$rosterId"
-                        params={{ leagueId, rosterId: String(row.rosterId) }}
-                        className="flex items-center gap-2.5"
-                      >
-                        <Avatar src={row.avatar} name={row.teamName} className="size-8" tint />
-                        <span className="min-w-0">
-                          <span className="block truncate font-medium">{row.teamName}</span>
-                          <span className="block truncate font-mono text-[11px] text-faint">
-                            {row.manager}
-                          </span>
+    <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr] lg:items-start">
+      <div className="flex min-w-0 flex-col gap-5">
+        <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+          <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+            <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Standings</h2>
+            {playoff > 0 ? (
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+                Top {playoff} make it
+              </span>
+            ) : null}
+          </header>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[460px] text-sm">
+              <thead className="font-mono text-[10px] uppercase tracking-wide text-faint">
+                <tr className="border-b border-line">
+                  <th className="px-4 py-3 text-left font-medium" />
+                  <th className="px-2 py-3 text-left font-medium">Team</th>
+                  <th className="px-3 py-3 text-right font-medium">W–L</th>
+                  <th className="px-3 py-3 text-right font-medium">PF</th>
+                  <th className="px-4 py-3 text-right font-medium">PA</th>
+                </tr>
+              </thead>
+              <tbody>
+                {league.data.standings.map((row, i) => {
+                  const rank = i + 1;
+                  const inPlayoffs = playoff > 0 && rank <= playoff;
+                  return (
+                    <tr
+                      key={row.rosterId}
+                      className={cn(
+                        "border-b border-line last:border-0",
+                        // The cut is structure, so it gets a rule rather than a colour.
+                        playoff > 0 && rank === playoff && "border-b-2 border-b-line-strong",
+                        row.rosterId === mine && "bg-raised",
+                      )}
+                    >
+                      <td className="px-4 py-3">
+                        <span
+                          className={cn(
+                            "grid size-6 place-items-center rounded-pill font-mono text-[10px]",
+                            inPlayoffs ? "bg-accent font-semibold text-accent-fg" : "text-faint",
+                          )}
+                        >
+                          {rank}
                         </span>
-                      </Link>
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono font-medium tabular-nums">
-                      {fmtRecord(row.wins, row.losses, row.ties)}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums">
-                      {formatPts(row.pf, 1)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums text-muted">
-                      {formatPts(row.pa, 1)}
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-2 py-3">
+                        <Link
+                          to="/league/$leagueId/team/$rosterId"
+                          params={{ leagueId, rosterId: String(row.rosterId) }}
+                          className="flex items-center gap-2.5"
+                        >
+                          <Avatar src={row.avatar} name={row.teamName} className="size-7" tint />
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium">{row.teamName}</span>
+                            <span className="block truncate font-mono text-[10px] text-faint">
+                              {row.manager}
+                            </span>
+                          </span>
+                        </Link>
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono font-medium tabular-nums">
+                        {fmtRecord(row.wins, row.losses, row.ties)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono tabular-nums">
+                        {formatPts(row.pf, 1)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-muted">
+                        {formatPts(row.pa, 1)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+          <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+            <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Week {week} slate</h2>
+            <Link
+              to="/league/$leagueId/matchups"
+              params={{ leagueId }}
+              search={{ week }}
+              className="font-mono text-[10px] uppercase tracking-wide text-accent-strong"
+            >
+              Open matchup
+            </Link>
+          </header>
+          {matchups.isLoading ? (
+            <div className="space-y-2 p-5">
+              <Skeleton className="h-8" />
+              <Skeleton className="h-8" />
+            </div>
+          ) : (
+            <ul>
+              {(matchups.data ?? []).map((pair) => {
+                const homeLeads = !pair.away || pair.home.points >= pair.away.points;
+                const decided = pair.home.points > 0 || (pair.away?.points ?? 0) > 0;
+                const involvesMe =
+                  pair.home.rosterId === mine || pair.away?.rosterId === mine;
+                return (
+                  <li key={pair.matchupId}>
+                    <Link
+                      to="/league/$leagueId/matchup/$week/$matchupId"
+                      params={{ leagueId, week: String(week), matchupId: String(pair.matchupId) }}
+                      className={cn(
+                        "flex items-center gap-3 border-b border-line px-5 py-3 last:border-0 hover:bg-raised",
+                        involvesMe && "bg-raised/60",
+                      )}
+                    >
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        <span className={homeLeads && decided ? "font-semibold" : "text-muted"}>
+                          {pair.home.teamName}
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-mono text-sm tabular-nums">
+                        <span className={homeLeads && decided ? "font-semibold" : "text-muted"}>
+                          {formatPts(pair.home.points, 1)}
+                        </span>
+                        <span className="mx-1.5 text-faint">–</span>
+                        <span className={!homeLeads && decided ? "font-semibold" : "text-muted"}>
+                          {formatPts(pair.away?.points ?? 0, 1)}
+                        </span>
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-right text-sm">
+                        <span className={!homeLeads && decided ? "font-semibold" : "text-muted"}>
+                          {pair.away?.teamName ?? "Bye"}
+                        </span>
+                      </span>
+                    </Link>
+                  </li>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-        {playoff > 0 ? (
-          <p className="mt-2 text-xs text-faint">
-            Top {playoff} make the dance
-            {(league.data.ops?.playoffByes ?? 0) > 0
-              ? ` · #1${league.data.ops!.playoffByes > 1 ? `–${league.data.ops!.playoffByes}` : ""} bye`
-              : ""}
-            {league.data.standings[playoff]
-              ? ` · line sits under ${league.data.standings[playoff - 1]?.teamName}`
-              : ""}
-            .
-          </p>
-        ) : null}
-        {league.data.standings.every((s) => s.wins === 0 && s.losses === 0 && s.ties === 0) ? (
-          <p className="mt-2 text-xs text-faint">
-            Nothing in the book yet. Records stay 0–0 until regular-season kickoff.
-          </p>
-        ) : null}
-      </section>
+            </ul>
+          )}
+        </section>
 
-      <section className="min-w-0">
-        <div className="flex items-end justify-between gap-3">
-          <h2 className="font-display text-2xl font-bold tracking-[-0.03em]">Week {week}</h2>
-          <Link
-            to="/league/$leagueId/matchups"
-            params={{ leagueId }}
-            search={{ week }}
-            className="rounded-pill px-3 py-1.5 text-sm font-medium text-muted hover:bg-raised hover:text-fg"
-          >
-            All weeks
-          </Link>
-        </div>
-        <div className="mt-4 space-y-2">
-          {matchups.isLoading
-            ? Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20" />)
-            : matchups.data?.map((pair) => (
-                <MatchupCard key={pair.matchupId} pair={pair} leagueId={leagueId} week={week} />
+        <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+          <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+            <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Moves</h2>
+            <Link
+              to="/league/$leagueId/activity"
+              params={{ leagueId }}
+              search={{ week: undefined }}
+              className="font-mono text-[10px] uppercase tracking-wide text-accent-strong"
+            >
+              All weeks
+            </Link>
+          </header>
+          {(activity.data ?? []).length === 0 ? (
+            <p className="px-5 pb-5 text-sm text-muted">Nothing has moved this week.</p>
+          ) : (
+            <ul>
+              {(activity.data ?? []).slice(0, 8).map((item) => (
+                <li
+                  key={item.id}
+                  className="flex items-start gap-3 border-b border-line px-5 py-3 last:border-0"
+                >
+                  <Badge tone="muted">{item.type}</Badge>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold">
+                      {item.teamNames.join(", ") || "Someone"}
+                    </span>
+                    <span className="block text-[13px] text-muted">
+                      {[
+                        item.adds.length ? `in ${item.adds.map((a) => a.name).join(", ")}` : null,
+                        item.drops.length
+                          ? `out ${item.drops.map((d) => d.name).join(", ")}`
+                          : null,
+                        item.bid ? `$${item.bid}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </span>
+                </li>
               ))}
-          {matchups.data && matchups.data.length === 0 ? (
-            <p className="text-sm text-muted">No matchups posted for this week.</p>
-          ) : null}
-        </div>
-      </section>
+            </ul>
+          )}
+        </section>
       </div>
+
+      <div className="flex min-w-0 flex-col gap-5">
+        {recap.data ? (
+          <Link
+            to="/league/$leagueId/recap"
+            params={{ leagueId }}
+            search={{ week, story: undefined }}
+            className="block rounded-xl bg-surface px-5 py-5 shadow-[var(--shadow-border)] transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-border-hover)]"
+          >
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+              {recap.data.kicker}
+            </p>
+            <p className="mt-1.5 font-display text-xl font-bold leading-snug tracking-[-0.03em]">
+              <span className="hl">{recap.data.headline}</span>
+            </p>
+            <p className="mt-2.5 text-sm text-muted">{recap.data.dek}</p>
+          </Link>
+        ) : null}
+
+        {league.data.hosted ? (
+          <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+            <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+              <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Open trades</h2>
+              <Link
+                to="/league/$leagueId/trades"
+                params={{ leagueId }}
+                className="font-mono text-[10px] uppercase tracking-wide text-accent-strong"
+              >
+                Trade desk
+              </Link>
+            </header>
+            {open.length === 0 ? (
+              <p className="px-5 pb-5 text-sm text-muted">Nothing on the table.</p>
+            ) : (
+              <ul>
+                {open.slice(0, 4).map((t) => {
+                  const waitingOnMe =
+                    mine != null && t.sides.some((s) => s.rosterId === mine && !s.accepted);
+                  return (
+                    <li
+                      key={t.id}
+                      className="flex items-center gap-3 border-b border-line px-5 py-3 last:border-0"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">
+                          {t.sides.map((s) => s.teamName).join(" ↔ ")}
+                        </span>
+                        <span className="block font-mono text-[10px] uppercase tracking-wide text-faint">
+                          {waitingOnMe ? "waiting on you" : "awaiting them"}
+                        </span>
+                      </span>
+                      {waitingOnMe ? <Badge tone="loss">You</Badge> : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        ) : null}
+
+        <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+          <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+            <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Seats</h2>
+            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+              {league.data.standings.length} teams
+            </span>
+          </header>
+          <ul>
+            {league.data.standings.slice(0, 5).map((row) => (
+              <li
+                key={row.rosterId}
+                className="flex items-center gap-3 border-b border-line px-5 py-2.5 last:border-0"
+              >
+                <Avatar src={row.avatar} name={row.teamName} className="size-7" tint />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{row.teamName}</span>
+                  <span className="block truncate font-mono text-[10px] text-faint">
+                    {row.manager}
+                  </span>
+                </span>
+                {row.rosterId === mine ? <Badge tone="win">You</Badge> : null}
+              </li>
+            ))}
+          </ul>
+          {league.data.inviteCode ? (
+            <p className="px-5 py-3 font-mono text-[11px] text-faint">
+              Invite {league.data.inviteCode}
+            </p>
+          ) : null}
+        </section>
+
+        <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+          <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+            <h2 className="font-display text-lg font-bold tracking-[-0.03em]">House rules</h2>
+            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+              Read only
+            </span>
+          </header>
+          <dl>
+            <Rule k="Scoring" v={league.data.scoringLabel} />
+            <Rule k="Format" v={league.data.formatLabel} />
+            {ops ? (
+              <>
+                <Rule
+                  k="Waivers"
+                  v={ops.waiverType === "faab" ? `FAAB $${ops.faabBudget}` : "Rolling order"}
+                />
+                <Rule k="Trade deadline" v={`Week ${ops.tradeDeadlineWeek}`} />
+                <Rule
+                  k="Playoffs"
+                  v={`Top ${playoff} · wk ${ops.playoffStartWeek}`}
+                />
+              </>
+            ) : null}
+          </dl>
+          <div className="px-5 py-3">
+            <Link
+              to="/league/$leagueId/settings"
+              params={{ leagueId }}
+              className="font-mono text-[10px] uppercase tracking-wide text-accent-strong"
+            >
+              Open league setup
+            </Link>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Rule({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-2.5 last:border-0">
+      <dt className="text-sm text-muted">{k}</dt>
+      <dd className="font-mono text-sm font-medium">{v}</dd>
     </div>
   );
 }
