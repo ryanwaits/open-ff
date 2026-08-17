@@ -191,16 +191,11 @@ export const getPlayerSearch = createServerFn({ method: "GET" })
 export const getRecap = createServerFn({ method: "GET" })
   .validator(z.object({ leagueId: z.string(), week: z.number() }))
   .handler(async ({ data }) => {
-    const sleeper = await import("./sleeper.server");
     if (isHostedLeague(data.leagueId)) {
       const eng = await import("@/lib/league/engine.server");
-      const [bundle, pairs, activity] = await Promise.all([
-        eng.loadLeagueBundle(data.leagueId, null),
-        eng.loadMatchups(data.leagueId, data.week),
-        eng.loadActivity(data.leagueId, data.week),
-      ]);
-      return sleeper.writeRecap(bundle.league.name, data.week, pairs, activity);
+      return eng.loadDispatch(data.leagueId, data.week);
     }
+    const sleeper = await import("./sleeper.server");
     const [bundle, pairs, activity] = await Promise.all([
       sleeper.loadLeagueBundle(data.leagueId),
       sleeper.loadMatchups(data.leagueId, data.week),

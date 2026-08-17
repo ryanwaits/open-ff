@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { MatchupCard } from "@/components/matchup-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getLeagueBundle, getMatchups } from "@/lib/data/fns";
+import { getLeagueBundle, getMatchups, getRecap } from "@/lib/data/fns";
 import { cn, fmtRecord, formatPts, initials } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$leagueId/")({
@@ -23,6 +23,11 @@ function StandingsPage() {
     enabled: Boolean(league.data),
     refetchInterval: () => (league.data?.scoringLive ? 15_000 : false),
   });
+  const recap = useQuery({
+    queryKey: ["recap", leagueId, week],
+    queryFn: () => getRecap({ data: { leagueId, week } }),
+    enabled: Boolean(league.data),
+  });
 
   if (league.isLoading) {
     return (
@@ -38,7 +43,26 @@ function StandingsPage() {
   const playoff = league.data.league.settings.playoff_teams ?? 0;
 
   return (
-    <div className="grid gap-10 lg:grid-cols-[1.15fr_0.85fr]">
+    <div>
+      {recap.data ? (
+        <Link
+          to="/league/$leagueId/recap"
+          params={{ leagueId }}
+          search={{ week, story: undefined }}
+          className="mb-10 block rounded-xl bg-surface px-4 py-4 shadow-[var(--shadow-border)] transition-[box-shadow] hover:shadow-[var(--shadow-border-hover)]"
+        >
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+            {recap.data.kicker}
+          </p>
+          <p className="mt-1 font-display text-2xl tracking-tight">{recap.data.headline}</p>
+          <p className="mt-2 text-sm text-muted">{recap.data.dek}</p>
+          <p className="mt-3 font-mono text-[11px] uppercase tracking-wide text-faint">
+            Open the desk
+          </p>
+        </Link>
+      ) : null}
+
+      <div className="grid gap-10 lg:grid-cols-[1.15fr_0.85fr]">
       <section>
         <h2 className="font-display text-2xl">Standings</h2>
         <div className="mt-4 overflow-x-auto rounded-xl bg-surface shadow-[var(--shadow-border)]">
@@ -133,6 +157,7 @@ function StandingsPage() {
           ) : null}
         </div>
       </section>
+      </div>
     </div>
   );
 }

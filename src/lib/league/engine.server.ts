@@ -777,7 +777,7 @@ export async function createLeague(input: { userId: string; name: string; teamNa
 		season
 	};
 }
-export async function joinLeague(userId: string, code: string, teamName: string): Promise<{ leagueId: string; season: string; name: string }> {
+export async function joinLeague(userId: string, code: string, teamName: string, rosterId?: number | null): Promise<{ leagueId: string; season: string; name: string }> {
 	await ensureDemo();
 	const sql = await getSql();
 	const league = (await sql`select * from ff_leagues where invite_code = ${code.trim().toUpperCase()}`)[0];
@@ -786,15 +786,18 @@ export async function joinLeague(userId: string, code: string, teamName: string)
 	if ((await sql`select * from ff_rosters where league_id = ${league.id} and owner_id = ${userId}`)[0]) {
 		return { leagueId: league.id, season: league.season, name: league.name };
 	}
-	const seat = (await sql`
+	const seat = rosterId
+		? (await sql`select * from ff_rosters where league_id = ${league.id} and roster_id = ${rosterId} and owner_id is null`)[0]
+		: (await sql`
       select * from ff_rosters
       where league_id = ${league.id} and owner_id is null
       order by roster_id
       limit 1
     `)[0];
-	if (!seat) throw new Error("League is full.");
+	if (!seat) throw new Error(rosterId ? "That seat is taken." : "League is full.");
+	const keepName = teamName.trim() || seat.team_name;
 	await sql`
-    update ff_rosters set owner_id = ${userId}, team_name = ${teamName.trim().slice(0, 28) || `Club ${seat.roster_id}`}
+    update ff_rosters set owner_id = ${userId}, team_name = ${keepName.slice(0, 28) || `Club ${seat.roster_id}`}
     where league_id = ${league.id} and roster_id = ${seat.roster_id}
   `;
 	return { leagueId: league.id, season: league.season, name: league.name };
@@ -1818,3 +1821,138 @@ export async function rebuildSchedule(userId: string, leagueId: string): Promise
     }
   }
 }
+
+export async function previewInvite(code: string): Promise<{
+  leagueId: string;
+  name: string;
+  season: string;
+  seats: { rosterId: number; teamName: string }[];
+} | null> {
+	await ensureDemo();
+	const sql = await getSql();
+	const league = (await sql`select * from ff_leagues where invite_code = ${code.trim().toUpperCase()}`)[0];
+	if (!league || league.locked) return null;
+	const seats = await sql`
+    select roster_id, team_name from ff_rosters
+    where league_id = ${league.id} and owner_id is null
+    order by roster_id
+  `;
+	return {
+		leagueId: league.id,
+		name: league.name,
+		season: league.season,
+		seats: seats.map((s) => ({ rosterId: s.roster_id, teamName: s.team_name })),
+	};
+}
+
+export async function loadDispatch(leagueId: string, week: number): Promise<import("./dispatch").DispatchArticle> {
+	const desk = await loadDesk(leagueId, week);
+	return desk.articles[0]!;
+}
+
+export async function loadDesk(leagueId: string, week: number): Promise<import("./dispatch").DeskEdition> {
+	await ensureDemo();
+	await (await import("./ops.server")).ensureOpsSchema();
+	const sql = await getSql();
+	const { parseJson } = await import("./dispatch");
+	const existing = await sql`
+    select * from ff_dispatches
+    where league_id = ${leagueId} and week = ${week}
+    order by created_at asc
+  `;
+	const stale =
+		existing.length <= 1 &&
+		existing.some((r) => /blank paper|still blank/i.test(String(r.headline)));
+	if (existing.length >= 2 && !stale) {
+		return {
+			week,
+			edition: existing.some((r) => r.kind === "recap") ? "recap" : "prep",
+			kicker: existing.some((r) => r.kind === "recap") ? `Week ${week} recap` : `Week ${week} prep`,
+			articles: existing.map((r) => ({
+				id: r.id,
+				leagueId,
+				week: r.week,
+				kind: r.kind,
+				slug: r.slug || r.id,
+				kicker: r.kind === "lead" || r.kind === "preview" ? `Week ${week} prep` : r.kind === "recap" ? `Week ${week} recap` : "From the draft",
+				headline: r.headline,
+				dek: r.dek,
+				body: parseJson(r.body_json, []),
+				bullets: parseJson(r.bullets_json, []),
+				box: parseJson(r.box_json, []),
+				focus: parseJson(r.focus_json, []),
+				source: r.source === "llm" ? "llm" : "rules",
+				createdAt: String(r.created_at),
+			})),
+		};
+	}
+	if (stale || existing.length) {
+		await sql`delete from ff_dispatches where league_id = ${leagueId} and week = ${week}`;
+	}
+	const row = await getLeague(leagueId);
+	const rosters = await getRosters(leagueId);
+	const spots = await getSpots(leagueId);
+	const standings = await scoredStandings(row, rosters, spots);
+	const pairs = await loadMatchups(leagueId, week);
+	const activity = await loadActivity(leagueId, week);
+	const rosterCards = rosters.map((r) => ({
+		team: r.team_name,
+		manager: managerOf(r),
+		players: spots
+			.filter((s) => s.roster_id === r.roster_id)
+			.map((s) => {
+				const p = getPlayer(s.player_id);
+				return {
+					name: p?.full_name ?? playerName(s.player_id),
+					pos: p?.position ?? null,
+				};
+			}),
+	}));
+	if (rosterCards.some((r) => r.players.length < 5) && /wiffl/i.test(row.name)) {
+		const { WIFFL_2026 } = await import("./recaps/wiffl-2026");
+		for (const card of rosterCards) {
+			const known = WIFFL_2026.teams.find((t) => t.teamName === card.team);
+			if (!known) continue;
+			card.players = known.names.map((name) => {
+				const p = matchPlayerName(name);
+				return { name: p?.full_name ?? name, pos: p?.position ?? null };
+			});
+		}
+	}
+	const { buildDispatchContext, composeDesk } = await import("./dispatch");
+	const ctx = buildDispatchContext({
+		leagueId,
+		leagueName: row.name,
+		season: row.season,
+		week,
+		status: row.status,
+		standings,
+		pairs,
+		activity,
+		rosters: rosterCards,
+	});
+	const desk = composeDesk(ctx);
+	const now = new Date().toISOString();
+	const articles = [];
+	for (const draft of desk.articles) {
+		const id = `ds_${leagueId}_${week}_${draft.slug}`.slice(0, 64);
+		await sql`
+      insert into ff_dispatches (
+        id, league_id, week, kind, slug, headline, dek, body_json, bullets_json, box_json, focus_json, context_json, source
+      ) values (
+        ${id}, ${leagueId}, ${week}, ${draft.kind}, ${draft.slug}, ${draft.headline}, ${draft.dek},
+        ${JSON.stringify(draft.body)}, ${JSON.stringify(draft.bullets)}, ${JSON.stringify(draft.box)},
+        ${JSON.stringify(draft.focus)}, ${JSON.stringify({ week: ctx.week, league: ctx.leagueName })}, ${draft.source}
+      )
+    `;
+		articles.push({
+			...draft,
+			id,
+			leagueId,
+			createdAt: now,
+		});
+	}
+	return { week, edition: desk.edition, kicker: desk.kicker, articles };
+}
+
+

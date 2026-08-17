@@ -41,7 +41,7 @@ type RosterOps = {
 };
 
 let opsReady = 0;
-const OPS_SCHEMA = 2;
+const OPS_SCHEMA = 3;
 
 export async function ensureOpsSchema(): Promise<void> {
   if (opsReady >= OPS_SCHEMA) return;
@@ -75,6 +75,16 @@ export async function ensureOpsSchema(): Promise<void> {
     `create table if not exists ff_trade_assets (
       id text primary key, trade_id text not null, from_roster int not null, to_roster int not null,
       kind text not null, player_id text, pick_no int)`,
+    `create table if not exists ff_dispatches (
+      id text primary key, league_id text not null, week int not null,
+      kind text not null default 'recap', headline text not null, dek text not null,
+      body_json text not null default '[]', bullets_json text not null default '[]',
+      box_json text not null default '[]',
+      context_json text, source text not null default 'rules',
+      created_at timestamptz not null default now())`,
+    `alter table ff_dispatches add column if not exists box_json text not null default '[]'`,
+    `alter table ff_dispatches add column if not exists slug text`,
+    `alter table ff_dispatches add column if not exists focus_json text not null default '[]'`,
   ];
   for (const s of stmts) await sql.query(s);
   await sql.query(

@@ -1,18 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Sparkles } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getLeagueBundle, getRecap } from "@/lib/data/fns";
-import { cn, formatPts } from "@/lib/utils";
+import { getLeagueBundle } from "@/lib/data/fns";
+import type { DispatchArticle } from "@/lib/league/dispatch";
+import { getDesk } from "@/lib/league/fns";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$leagueId/recap")({
   validateSearch: (s: Record<string, unknown>) => ({
     week: s.week != null ? Number(s.week) : undefined,
+    story: typeof s.story === "string" ? s.story : undefined,
   }),
-  component: RecapPage,
+  component: DeskPage,
 });
 
-function RecapPage() {
+function DeskPage() {
   const { leagueId } = Route.useParams();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
@@ -21,21 +24,38 @@ function RecapPage() {
     queryFn: () => getLeagueBundle({ data: { leagueId } }),
   });
   const week = search.week ?? league.data?.currentWeek ?? 1;
-  const recap = useQuery({
-    queryKey: ["recap", leagueId, week],
-    queryFn: () => getRecap({ data: { leagueId, week } }),
+  const desk = useQuery({
+    queryKey: ["desk", leagueId, week],
+    queryFn: () => getDesk({ data: { leagueId, week } }),
     enabled: Boolean(league.data),
   });
 
+  const articles = desk.data?.articles ?? [];
+  const lead = articles.find((a) => a.kind === "lead" || a.kind === "recap") ?? articles[0];
+  const story = search.story
+    ? articles.find((a) => a.slug === search.story || a.id === search.story)
+    : null;
+  const rest = articles.filter((a) => a !== lead);
+
   return (
-    <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-      <article>
-        <div className="flex gap-1 overflow-x-auto pb-4">
+    <div>
+      <header className="border-b border-line pb-4">
+        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-faint">
+          The desk · {league.data?.league.name ?? "League"} · {league.data?.league.season}
+        </p>
+        <h2 className="mt-1 font-display text-4xl tracking-tight">
+          {desk.data?.edition === "recap" ? "Recap edition" : "Prep edition"}
+        </h2>
+        <p className="mt-2 max-w-xl text-sm text-muted">
+          Official copy for this league. Written from the draft board and the week {week}{" "}
+          slate — not a national wire.
+        </p>
+        <div className="mt-4 flex gap-1 overflow-x-auto">
           {Array.from({ length: 18 }, (_, i) => i + 1).map((w) => (
             <button
               key={w}
               type="button"
-              onClick={() => navigate({ search: { week: w } })}
+              onClick={() => navigate({ search: { week: w, story: undefined } })}
               className={cn(
                 "flex size-10 shrink-0 items-center justify-center rounded-sm font-mono text-sm",
                 w === week ? "bg-accent text-accent-fg" : "bg-raised text-muted",
@@ -45,70 +65,114 @@ function RecapPage() {
             </button>
           ))}
         </div>
+      </header>
 
-        {recap.isLoading ? (
-          <div className="space-y-3">
-            <Skeleton className="h-8 w-40" />
-            <Skeleton className="h-16" />
-            <Skeleton className="h-24" />
-          </div>
-        ) : recap.data ? (
-          <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">
-              {recap.data.kicker}
-            </p>
-            <h2 className="mt-2 font-display text-4xl leading-[1.05] tracking-tight">
-              {recap.data.headline}
-            </h2>
-            <p className="mt-4 text-base leading-relaxed text-muted">{recap.data.dek}</p>
-            <ul className="mt-6 space-y-3">
-              {recap.data.bullets.map((b) => (
-                <li key={b} className="border-t border-line pt-3 text-sm leading-relaxed">
-                  {b}
-                </li>
-              ))}
-            </ul>
-            {recap.data.wireNote ? (
-              <p className="mt-6 text-sm italic text-muted">{recap.data.wireNote}</p>
+      {desk.isLoading ? (
+        <div className="mt-8 space-y-3">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-40" />
+          <Skeleton className="h-24" />
+        </div>
+      ) : story ? (
+        <ArticleView
+          article={story}
+          onBack={() => navigate({ search: { week, story: undefined } })}
+        />
+      ) : articles.length ? (
+        <div className="mt-8 grid gap-10 lg:grid-cols-[1.15fr_0.85fr]">
+          <section>
+            {lead ? (
+              <button
+                type="button"
+                onClick={() => navigate({ search: { week, story: lead.slug } })}
+                className="w-full text-left"
+              >
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+                  {lead.kicker}
+                </p>
+                <h3 className="mt-2 font-display text-4xl leading-[1.05] tracking-tight">
+                  {lead.headline}
+                </h3>
+                <p className="mt-3 text-base leading-relaxed text-muted">{lead.dek}</p>
+                {lead.body[0] ? (
+                  <p className="mt-4 text-sm leading-relaxed">{lead.body[0]}</p>
+                ) : null}
+                <p className="mt-3 text-sm text-muted">Read the edition →</p>
+              </button>
             ) : null}
-          </div>
-        ) : null}
-      </article>
+          </section>
+          <aside className="space-y-0 divide-y divide-line border-t border-line lg:border-t-0">
+            {rest.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => navigate({ search: { week, story: a.slug } })}
+                className="block w-full py-4 text-left"
+              >
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+                  {kickerOf(a)}
+                </p>
+                <p className="mt-1 font-display text-2xl leading-tight tracking-tight">{a.headline}</p>
+                <p className="mt-1 text-sm text-muted">{a.dek}</p>
+              </button>
+            ))}
+          </aside>
+        </div>
+      ) : (
+        <p className="mt-8 text-sm text-muted">No desk copy for this week yet.</p>
+      )}
+    </div>
+  );
+}
 
-      <aside>
-        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-          Box
-        </h3>
-        <ul className="mt-3 divide-y divide-line rounded-xl bg-surface shadow-[var(--shadow-border)]">
-          {recap.data?.box.map((b) => (
-            <li key={`${b.winner}-${b.loser}`} className="px-4 py-3">
-              <p className="text-sm">
-                <span className="text-fg">{b.winner}</span>
-                <span className="text-faint"> over </span>
-                <span className="text-muted">{b.loser}</span>
-              </p>
-              <p className="font-mono text-xs tabular-nums text-faint">
-                {b.score} · {formatPts(b.margin, 1)} margin
-              </p>
+function kickerOf(a: DispatchArticle) {
+  if (a.kind === "preview") return "Matchup";
+  if (a.kind === "feature") return "From the draft";
+  if (a.kind === "brief") return "The card";
+  if (a.kind === "recap") return "Recap";
+  return a.kicker;
+}
+
+function ArticleView({ article, onBack }: { article: DispatchArticle; onBack: () => void }) {
+  return (
+    <article className="mx-auto mt-8 max-w-2xl">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"
+      >
+        <ArrowLeft className="size-3.5" />
+        The desk
+      </button>
+      <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.18em] text-faint">
+        {article.kicker}
+      </p>
+      <h3 className="mt-2 font-display text-4xl leading-[1.05] tracking-tight">{article.headline}</h3>
+      <p className="mt-4 text-lg leading-relaxed text-muted">{article.dek}</p>
+      {article.focus.length ? (
+        <p className="mt-3 font-mono text-[11px] uppercase tracking-wide text-faint">
+          {article.focus.join(" · ")}
+        </p>
+      ) : null}
+      <div className="mt-8 space-y-4">
+        {article.body.map((p) => (
+          <p key={p} className="text-[15px] leading-[1.65]">
+            {p}
+          </p>
+        ))}
+      </div>
+      {article.bullets.length ? (
+        <ul className="mt-8 space-y-3">
+          {article.bullets.map((b) => (
+            <li key={b} className="border-t border-line pt-3 text-sm leading-relaxed">
+              {b}
             </li>
           ))}
-          {recap.data && recap.data.box.length === 0 ? (
-            <li className="px-4 py-6 text-sm text-muted">No scored games this week.</li>
-          ) : null}
         </ul>
-
-        <div className="mt-6 rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
-          <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-            <Sparkles className="size-3.5" />
-            Next: Grok voice
-          </p>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            This dispatch is written from the box score — no model yet. Same
-            payload can feed weekly articles, commissioner notes, and
-            automated smack talk once we wire a language model.
-          </p>
-        </div>
-      </aside>
-    </div>
+      ) : null}
+      <p className="mt-10 font-mono text-[11px] uppercase tracking-wide text-faint">
+        {article.source === "llm" ? "Written for this league" : "Desk copy · from the book"}
+      </p>
+    </article>
   );
 }

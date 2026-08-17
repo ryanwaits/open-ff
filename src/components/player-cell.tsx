@@ -62,11 +62,7 @@ export function PlayerCell({
         <span className="block truncate text-sm text-fg">{name}</span>
         <span className="block truncate font-mono text-[11px] uppercase tracking-wide text-faint">
           {meta}
-          {game?.state === "in" ? (
-            <span className="text-live"> · {game.detail}</span>
-          ) : game ? (
-            <span> · {game.detail}</span>
-          ) : null}
+          {gameLabel(game)}
         </span>
         {line ? (
           <span className="mt-0.5 block truncate font-mono text-[11px] text-muted normal-case tracking-normal">
@@ -74,6 +70,18 @@ export function PlayerCell({
           </span>
         ) : null}
       </span>
+    </span>
+  );
+}
+
+function gameLabel(game: GameChip | null) {
+  if (!game) return null;
+  const bits = [game.opp, game.detail].filter(Boolean);
+  if (!bits.length) return null;
+  return (
+    <span className={game.state === "in" ? "text-live" : undefined}>
+      {" · "}
+      {bits.join(" · ")}
     </span>
   );
 }

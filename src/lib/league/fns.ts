@@ -28,10 +28,30 @@ export const createLeague = createServerFn({ method: "POST" })
 
 export const joinLeague = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ code: z.string(), teamName: z.string() }))
+  .validator(
+    z.object({
+      code: z.string(),
+      teamName: z.string(),
+      rosterId: z.number().nullable().optional(),
+    }),
+  )
   .handler(async ({ context, data }) => {
     const eng = await import("./engine.server");
-    return eng.joinLeague(context.userId, data.code, data.teamName);
+    return eng.joinLeague(context.userId, data.code, data.teamName, data.rosterId);
+  });
+
+export const previewInvite = createServerFn({ method: "GET" })
+  .validator(z.object({ code: z.string() }))
+  .handler(async ({ data }) => {
+    const eng = await import("./engine.server");
+    return eng.previewInvite(data.code);
+  });
+
+export const getDesk = createServerFn({ method: "GET" })
+  .validator(z.object({ leagueId: z.string(), week: z.number() }))
+  .handler(async ({ data }) => {
+    const eng = await import("./engine.server");
+    return eng.loadDesk(data.leagueId, data.week);
   });
 
 export const getDraft = createServerFn({ method: "GET" })

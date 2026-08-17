@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -6,7 +6,7 @@ import { Shell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { joinLeague } from "@/lib/league/fns";
+import { joinLeague, previewInvite } from "@/lib/league/fns";
 import { useLeagueStore } from "@/lib/store";
 
 type Search = { code?: string };
@@ -24,12 +24,25 @@ function JoinLeague() {
   const navigate = useNavigate();
   const remember = useLeagueStore((s) => s.remember);
   const [code, setCode] = useState(search.code ?? "");
-  const [teamName, setTeamName] = useState("");
+  const [rosterId, setRosterId] = useState<number | "">("");
+
+  const preview = useQuery({
+    queryKey: ["invite", code.trim().toUpperCase()],
+    queryFn: () => previewInvite({ data: { code: code.trim() } }),
+    enabled: code.trim().length >= 4,
+  });
 
   const join = useMutation({
-    mutationFn: () => joinLeague({ data: { code, teamName } }),
+    mutationFn: () =>
+      joinLeague({
+        data: {
+          code,
+          teamName: "",
+          rosterId: rosterId === "" ? null : rosterId,
+        },
+      }),
     onSuccess: (res) => {
-      remember({ leagueId: res.leagueId, name: res.name || teamName || "My league", season: res.season });
+      remember({ leagueId: res.leagueId, name: res.name || "My league", season: res.season });
       void navigate({ to: "/league/$leagueId", params: { leagueId: res.leagueId } });
     },
     onError: (err) => {
@@ -51,14 +64,14 @@ function JoinLeague() {
   }
   if (!user) return <Navigate to="/login" search={{ redirect: "/join" }} />;
 
+  const pack = preview.data;
+
   return (
     <Shell>
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">
-        Take a seat
-      </p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">Take a seat</p>
       <h1 className="mt-2 font-display text-4xl tracking-tight">Join a league</h1>
       <p className="mt-2 max-w-xl text-sm text-muted">
-        Ask your commissioner for the six-character code. No Sleeper account.
+        Enter the invite code. If seats have names, pick yours.
       </p>
       <form
         className="mt-8 max-w-lg space-y-5"
@@ -74,27 +87,46 @@ function JoinLeague() {
           <Input
             className="mt-1.5 uppercase tracking-[0.2em]"
             value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            onChange={(e) => {
+              setCode(e.target.value.toUpperCase());
+              setRosterId("");
+            }}
             placeholder="YARD26"
             required
             maxLength={8}
           />
         </label>
-        <label className="block">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-            Your team
-          </span>
-          <Input
-            className="mt-1.5"
-            value={teamName}
-            onChange={(e) => setTeamName(e.target.value)}
-            placeholder="Rainey Street"
-            required
-          />
-        </label>
+        {pack ? (
+          <div>
+            <p className="text-sm">
+              {pack.name} <span className="text-faint">· {pack.season}</span>
+            </p>
+            {pack.seats.length ? (
+              <label className="mt-3 block">
+                <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+                  Open seats
+                </span>
+                <select
+                  className="mt-1.5 h-11 w-full rounded-md bg-raised px-3 text-sm text-fg shadow-[var(--shadow-border)]"
+                  value={rosterId}
+                  onChange={(e) => setRosterId(e.target.value ? Number(e.target.value) : "")}
+                >
+                  <option value="">Next open seat</option>
+                  {pack.seats.map((s) => (
+                    <option key={s.rosterId} value={s.rosterId}>
+                      {s.teamName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <p className="mt-2 text-sm text-muted">No open seats left.</p>
+            )}
+          </div>
+        ) : null}
         <div className="flex items-center gap-3">
-          <Button type="submit" disabled={join.isPending}>
-            {join.isPending ? "Joining…" : "Claim a seat"}
+          <Button type="submit" disabled={join.isPending || (pack != null && pack.seats.length === 0)}>
+            {join.isPending ? "Joining…" : "Claim"}
           </Button>
           <Link to="/" className="text-sm text-muted hover:text-fg">
             Cancel
