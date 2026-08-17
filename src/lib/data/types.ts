@@ -130,6 +130,8 @@ export type LeagueBundle = {
   locked: boolean;
   scoringLive: boolean;
   faabRemaining?: number | null;
+  /** Staked on wagers that have not settled; unavailable to claims. */
+  faabAtRisk?: number;
   ops?: {
     waiverType: string;
     faabBudget: number;

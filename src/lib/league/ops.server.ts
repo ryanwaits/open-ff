@@ -207,8 +207,17 @@ export async function requestAdd(
   const amount =
     (league.waiver_type ?? "faab") === "faab" ? Math.max(0, Math.floor(bid || 0)) : 0;
   if (waiversOpen(league)) {
-    const purse = mine.faab_remaining ?? faabBudget(league);
-    if (amount > purse) throw new Error(`Bid $${amount} is over your $${purse} remaining.`);
+    // One balance. Money staked on a wager is gone until it settles, so a claim
+    // is measured against what is actually spendable rather than the headline
+    // figure — otherwise $70 on the book and $80 on a player both go through.
+    let purse = mine.faab_remaining ?? faabBudget(league);
+    try {
+      const { spendable } = await import("./wagers.server");
+      purse = await spendable(leagueId, mine.roster_id, purse);
+    } catch {
+      /* no book in this league; the headline figure is the whole story */
+    }
+    if (amount > purse) throw new Error(`Bid $${amount} is over your $${purse} available.`);
     await sql`
       insert into ff_claims (id, league_id, week, roster_id, add_player_id, drop_player_id, bid, status)
       values (

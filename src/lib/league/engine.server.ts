@@ -360,6 +360,15 @@ function nextAutopick(rosterId, byRoster, ranked, taken) {
 	}
 	return available[0] ?? null;
 }
+/** Staked on unsettled wagers, or zero when the league has no book. */
+async function stakedBy(leagueId, rosterId) {
+	try {
+		const { atRisk } = await import("./wagers.server");
+		return await atRisk(leagueId, rosterId);
+	} catch {
+		return 0;
+	}
+}
 function asSleeper(row) {
 	const slots = parseSlots(row.roster_slots);
 	return {
@@ -516,6 +525,7 @@ export async function loadLeagueBundle(leagueId: string, userId: string | null, 
 		locked: row.locked === 1,
 		scoringLive,
 		faabRemaining: mine ? rosters.find((r) => r.roster_id === mine)?.faab_remaining ?? row.faab_budget ?? 100 : null,
+		faabAtRisk: mine ? await stakedBy(leagueId, mine) : 0,
 		ops: {
 			waiverType: row.waiver_type ?? "faab",
 			faabBudget: row.faab_budget ?? 100,

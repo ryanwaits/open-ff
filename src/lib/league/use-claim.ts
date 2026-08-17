@@ -67,7 +67,13 @@ export function useClaim(leagueId: string) {
       bundle && rosterId != null
         ? (bundle.standings.find((s) => s.rosterId === rosterId)?.waiverPos ?? null)
         : null,
-    faabRemaining: bundle?.faabRemaining ?? 0,
+    // One balance: what is staked on the book is not available to a claim, and
+    // the server enforces the same thing, so the dialog must not promise more.
+    faabRemaining: Math.max(0, (bundle?.faabRemaining ?? 0) - (bundle?.faabAtRisk ?? 0)),
+    /** Sum of your live claim bids, for the wager ticket's collision warning. */
+    pendingClaimTotal: (claims.data?.items ?? [])
+      .filter((c) => c.mine && c.status === "pending")
+      .reduce((t, c) => t + c.bid, 0),
     mustDrop: rosterAtCap(bundle, team.data),
     droppable: droppableFrom(team.data),
     /** How full the roster is, so the dialog can explain rather than just demand. */

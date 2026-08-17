@@ -6,7 +6,7 @@ import { MatchupEdge } from "@/components/matchup-edge";
 import { MatchupSpine } from "@/components/matchup-spine";
 import { LinePanel } from "@/components/book-panel";
 import { WagerTicket, type TicketTarget } from "@/components/wager-ticket";
-import { getBook } from "@/lib/league/fns";
+import { getBook, getClaims } from "@/lib/league/fns";
 import { PlayerCell } from "@/components/player-cell";
 import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
 import { PlayerWatch, watchFromLine, type WatchTarget } from "@/components/player-watch";
@@ -167,6 +167,11 @@ function MatchupsPage() {
     queryFn: () => getBook({ data: { leagueId, week } }),
     enabled: Boolean(league.data?.hosted),
   });
+  const claims = useQuery({
+    queryKey: ["claims", leagueId],
+    queryFn: () => getClaims({ data: { leagueId } }),
+    enabled: Boolean(league.data?.hosted),
+  });
   const weekStats = useQuery({
     queryKey: ["week-stats", league.data?.league.season, week],
     queryFn: () =>
@@ -190,6 +195,11 @@ function MatchupsPage() {
       }),
     enabled: Boolean(priorSeason) && Number.isFinite(Number(priorSeason)),
   });
+  // What your queued waiver claims add up to, so a stake can say out loud when
+  // it would leave them unfunded on Wednesday.
+  const pendingClaimTotal = (claims.data?.items ?? [])
+    .filter((c) => c.mine && c.status === "pending")
+    .reduce((t, c) => t + c.bid, 0);
   const liveFinals = weekStats.data ?? {};
   const hasLiveStats = Object.keys(liveFinals).length > 0;
   const book = bookFromLeague(league.data?.league.scoring_settings);
@@ -525,7 +535,7 @@ function MatchupsPage() {
           leagueId={leagueId}
           target={ticket}
           book={wagerBook.data}
-          claimsPending={0}
+          claimsPending={pendingClaimTotal}
         />
       ) : null}
 
