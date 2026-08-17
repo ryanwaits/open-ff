@@ -19,7 +19,28 @@ export function LinePanel({
   onPick: (t: TicketTarget) => void;
   className?: string;
 }) {
-  if (!line.live) return null;
+  // A dead line still needs to say so. Returning null here meant a commissioner
+  // could switch betting on, see nothing at all, and have no way to tell whether
+  // the feature was broken or simply had nothing to price yet.
+  if (!line.live) {
+    return (
+      <section
+        className={cn("rounded-xl bg-surface shadow-[var(--shadow-border)]", className)}
+      >
+        <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+          <h2 className="font-display text-lg font-bold tracking-[-0.03em]">The line</h2>
+          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+            no price
+          </span>
+        </header>
+        <p className="px-5 pb-5 text-sm text-muted">
+          Nothing to price yet. A line needs projections for both rosters, which arrive once the
+          season has weeks behind it &mdash; in the preseason every player&rsquo;s spread is zero,
+          so there is no margin to quote.
+        </p>
+      </section>
+    );
+  }
 
   const fav = line.spread <= 0;
   const homeSpread = line.spread;

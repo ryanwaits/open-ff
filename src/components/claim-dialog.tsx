@@ -47,6 +47,8 @@ export function ClaimDialog({
   droppable,
   /** True when the roster is at its cap, so the server will demand a drop. */
   mustDrop,
+  rosterCount,
+  rosterCap,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -58,6 +60,9 @@ export function ClaimDialog({
   waiverPos: number | null;
   droppable: RosterPlayer[];
   mustDrop: boolean;
+  /** Shown so the count is visible rather than merely asserted. */
+  rosterCount?: number;
+  rosterCap?: number;
 }) {
   const qc = useQueryClient();
   // null is "you have not named a price yet", which is different from $0.
@@ -222,12 +227,45 @@ export function ClaimDialog({
               </section>
             ) : null}
 
-            {mustDrop ? (
+            {droppable.length > 0 ? (
               <section className="border-b border-line px-5 py-4">
                 <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
-                  Drop someone
+                  {mustDrop ? "Drop someone" : "Drop someone (optional)"}
                 </span>
+                {rosterCap ? (
+                  <span className="mt-0.5 block font-mono text-[10px] text-faint">
+                    {rosterCount} of {rosterCap} spots used
+                  </span>
+                ) : null}
                 <div className="mt-2 flex flex-col gap-0.5">
+                  {!mustDrop ? (
+                    <label
+                      className={cn(
+                        "flex cursor-pointer items-center gap-3 rounded-md border px-2.5 py-2 transition-colors duration-150",
+                        dropId == null
+                          ? "border-accent-deep bg-raised"
+                          : "border-transparent hover:bg-raised",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="claim-drop"
+                        className="sr-only"
+                        checked={dropId == null}
+                        onChange={() => setDropId(null)}
+                      />
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "size-4 shrink-0 rounded-pill border-2",
+                          dropId == null
+                            ? "border-accent-deep bg-accent-deep shadow-[inset_0_0_0_3px_var(--color-surface)]"
+                            : "border-line-strong",
+                        )}
+                      />
+                      <span className="flex-1 text-sm font-medium">Nobody — I have room</span>
+                    </label>
+                  ) : null}
                   {droppable.map((p) => {
                     const on = dropId === p.player_id;
                     return (

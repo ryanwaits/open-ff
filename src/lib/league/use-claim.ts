@@ -70,6 +70,9 @@ export function useClaim(leagueId: string) {
     faabRemaining: bundle?.faabRemaining ?? 0,
     mustDrop: rosterAtCap(bundle, team.data),
     droppable: droppableFrom(team.data),
+    /** How full the roster is, so the dialog can explain rather than just demand. */
+    rosterCount: team.data?.players.length ?? 0,
+    rosterCap: (bundle?.league.roster_positions ?? []).length || 15,
     mode: (waiversOpen ? "claim" : "add") as ClaimMode,
     /**
      * Per player, because a list draws one button per row. `ownedBy` is optional
@@ -124,6 +127,10 @@ function decide(input: {
 /**
  * The server demands a drop once the roster is at its cap, counting every shelf
  * — so this counts the same way rather than guessing from the bench alone.
+ *
+ * Returns false while the roster is still loading, which is why the dialog offers
+ * the drop picker whenever there is a roster to pick from rather than only when
+ * this says yes. Being wrong here used to mean the picker never appeared at all.
  */
 function rosterAtCap(bundle: LeagueBundle | undefined, team: TeamBundle | undefined): boolean {
   if (!bundle || !team) return false;

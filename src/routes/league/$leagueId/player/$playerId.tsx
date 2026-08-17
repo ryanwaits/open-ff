@@ -168,6 +168,8 @@ function PlayerPage() {
         waiverPos={claim.waiverPos}
         droppable={claim.droppable}
         mustDrop={claim.mustDrop}
+        rosterCount={claim.rosterCount}
+        rosterCap={claim.rosterCap}
       />
     </div>
   );
