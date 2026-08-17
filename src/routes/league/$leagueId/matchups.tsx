@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { MatchupEdge } from "@/components/matchup-edge";
+import { MatchupSpine } from "@/components/matchup-spine";
 import { PlayerCell } from "@/components/player-cell";
 import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
 import { PlayerWatch, watchFromLine, type WatchTarget } from "@/components/player-watch";
@@ -433,7 +434,31 @@ function MatchupsPage() {
                     Full box score
                   </Link>
                 </div>
-                <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                {/* Two columns is right the moment there is room for two columns.
+                    Under `sm` there is not, and stacking the rosters buries the
+                    comparison — so the phone gets the same data paired by slot. */}
+                {pair.away ? (
+                  <MatchupSpine
+                    home={pair.home}
+                    away={pair.away}
+                    stats={finals}
+                    onPlayer={(line, side) =>
+                      openPlayer(
+                        watchFromLine(
+                          line,
+                          side.teamName,
+                          formatStatLine(
+                            line.player?.position,
+                            line.stats ?? (line.playerId ? finals[line.playerId] : undefined),
+                          ),
+                          line.stats ?? (line.playerId ? finals[line.playerId] : undefined),
+                        ),
+                      )
+                    }
+                  />
+                ) : null}
+
+                <div className="hidden gap-6 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                   <SideCol
                     side={pair.home}
                     prev={prevShown?.[selected]?.home ?? null}
@@ -453,6 +478,9 @@ function MatchupsPage() {
                     <p className="text-sm text-muted">Bye week</p>
                   )}
                 </div>
+                {!pair.away ? (
+                  <p className="text-sm text-muted sm:hidden">Bye week</p>
+                ) : null}
               </article>
               <MatchupEdge
                 pair={pair}
