@@ -23,6 +23,7 @@ import {
   scoringLabel,
 } from "./scoring";
 import { clampPlayoffByes, defaultPlayoffByes, playoffRoundLabel } from "./playoffs";
+import { recordEvent } from "./events.server";
 import { invertSlotKey, labeledStartSlots, normalizeSlots, slotBreakdown } from "./roster";
 
 export const DEMO_HOSTED_ID = "lg_backyard";
@@ -1042,6 +1043,14 @@ export async function startPlayer(userId: string, leagueId: string, playerId: st
       update ff_spots set slot = ${"starter"}, starter_slot = ${swap.starter_slot}
       where league_id = ${leagueId} and roster_id = ${mine.roster_id} and player_id = ${playerId}
     `;
+		await recordEvent({
+			leagueId,
+			week: league.current_week,
+			kind: "lineup_set",
+			actorRoster: mine.roster_id,
+			playerId,
+			payload: { slot: swap.starter_slot, benched: swap.player_id, via: "swap" }
+		});
 		return;
 	}
 	if (slot) {
@@ -1057,6 +1066,14 @@ export async function startPlayer(userId: string, leagueId: string, playerId: st
       update ff_spots set slot = ${"starter"}, starter_slot = ${slot}
       where league_id = ${leagueId} and roster_id = ${mine.roster_id} and player_id = ${playerId}
     `;
+		await recordEvent({
+			leagueId,
+			week: league.current_week,
+			kind: "lineup_set",
+			actorRoster: mine.roster_id,
+			playerId,
+			payload: { slot, benched: occupant?.player_id ?? null, via: "slot" }
+		});
 		return;
 	}
 	const labeled = labeledStartSlots(parseSlots(league.roster_slots));
@@ -1073,15 +1090,39 @@ export async function startPlayer(userId: string, leagueId: string, playerId: st
     update ff_spots set slot = ${"starter"}, starter_slot = ${next}
     where league_id = ${leagueId} and roster_id = ${mine.roster_id} and player_id = ${playerId}
   `;
+	await recordEvent({
+		leagueId,
+		week: league.current_week,
+		kind: "lineup_set",
+		actorRoster: mine.roster_id,
+		playerId,
+		payload: { slot: next, benched: null, via: "auto" }
+	});
 }
 export async function sitPlayer(userId: string, leagueId: string, playerId: string): Promise<void> {
-	if ((await getLeague(leagueId)).locked) throw new Error("This desk is locked.");
+	const league = await getLeague(leagueId);
+	if (league.locked) throw new Error("This desk is locked.");
 	const mine = (await getRosters(leagueId)).find((r) => r.owner_id === userId);
 	if (!mine) throw new Error("You don't have a seat.");
-	await (await getSql())`
+	const sql = await getSql();
+	const before = (await sql<{ starter_slot: string | null }>`
+    select starter_slot from ff_spots
+    where league_id = ${leagueId} and roster_id = ${mine.roster_id} and player_id = ${playerId}
+  `)[0];
+	await sql`
     update ff_spots set slot = ${"bench"}, starter_slot = ${null}
     where league_id = ${leagueId} and roster_id = ${mine.roster_id} and player_id = ${playerId}
   `;
+	// The slot he vacated is the part worth keeping: an empty FLEX on Sunday is
+	// a story, and after the write there is nothing left to say which one it was.
+	await recordEvent({
+		leagueId,
+		week: league.current_week,
+		kind: "lineup_benched",
+		actorRoster: mine.roster_id,
+		playerId,
+		payload: { fromSlot: before?.starter_slot ?? null }
+	});
 }
 export async function addDrop(userId: string, leagueId: string, addId: string, dropId: string | null, bid = 0): Promise<{ mode: "claim" | "free_agent" }> {
 	return (await import("./ops.server")).requestAdd(userId, leagueId, addId, dropId, bid);

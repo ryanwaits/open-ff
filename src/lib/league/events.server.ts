@@ -33,7 +33,13 @@ export type LeagueEventKind =
   | "trade_proposed"
   | "trade_accepted"
   | "trade_rejected"
-  | "trade_cancelled";
+  | "trade_cancelled"
+  /** A player was moved into a starting slot, displacing whoever was there. */
+  | "lineup_set"
+  /** A starter was sent to the bench, leaving the slot he held empty. */
+  | "lineup_benched"
+  /** A player's injury designation changed between two daily refreshes. */
+  | "injury_changed";
 
 export type LeagueEvent = {
   leagueId: string;
