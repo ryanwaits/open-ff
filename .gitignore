@@ -8,3 +8,7 @@ node_modules/
 # tracked, which made every build look like a 6MB diff.
 .vercel/
 .tanstack/
+
+# Working notes. Deployment runbooks and scratch thinking that describe
+# environment setup — useful locally, not part of the app.
+.notes/
