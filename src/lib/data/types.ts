@@ -358,6 +358,12 @@ export const LIVE_2026_LEAGUE_NAME = "#SFB16 — Forza";
 export const DEMO_HOSTED_ID = "lg_backyard";
 export const DEMO_HOSTED_NAME = "The Backyard";
 
+export type Projection = {
+  points: number;
+  /** Why it is zero, when it is. */
+  reason: "bye" | "out" | "no-data" | null;
+};
+
 export function isHostedLeague(id: string): boolean {
   return id.startsWith("lg_");
 }

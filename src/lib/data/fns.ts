@@ -174,6 +174,47 @@ export const getActivity = createServerFn({ method: "GET" })
     return sleeper.loadActivity(data.leagueId, data.week);
   });
 
+export const getByeWeeks = createServerFn({ method: "GET" })
+  .validator(z.object({ season: z.string() }))
+  .handler(async ({ data }) => {
+    const byes = await import("./byes.server");
+    return byes.byeWeeks(data.season);
+  });
+
+export const getProjections = createServerFn({ method: "GET" })
+  .validator(
+    z.object({
+      leagueId: z.string(),
+      season: z.string(),
+      week: z.number(),
+      players: z.array(
+        z.object({
+          player_id: z.string(),
+          team: z.string().nullable().optional(),
+          injury_status: z.string().nullable().optional(),
+          status: z.string().nullable().optional(),
+        }),
+      ),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const proj = await import("./projections.server");
+    return proj.projectPlayers(data);
+  });
+
+export const getPlayerProfile = createServerFn({ method: "GET" })
+  .validator(
+    z.object({
+      leagueId: z.string(),
+      playerId: z.string(),
+      season: z.string().optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const profile = await import("./player-profile.server");
+    return profile.loadPlayerProfile(data);
+  });
+
 export const getLeaders = createServerFn({ method: "GET" })
   .validator(z.object({ position: z.string() }))
   .handler(async ({ data }) => {
