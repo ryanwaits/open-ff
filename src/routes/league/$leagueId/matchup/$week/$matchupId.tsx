@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Avatar } from "@/components/avatar";
+import { MatchupEdge } from "@/components/matchup-edge";
 import { PlayerCell } from "@/components/player-cell";
 import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
 import { PlayerWatch, watchFromLine, type WatchTarget } from "@/components/player-watch";
@@ -306,6 +307,13 @@ function MatchupPage() {
         live={
           phase == null && Boolean(league.data?.scoringLive) && status.tone === "live"
         }
+      />
+
+      <MatchupEdge
+        pair={pair}
+        leagueId={leagueId}
+        season={league.data?.league.season ?? ""}
+        mine={league.data?.myRosterId ?? null}
       />
 
       <section className="mt-6 rounded-xl bg-surface shadow-[var(--shadow-border)]">

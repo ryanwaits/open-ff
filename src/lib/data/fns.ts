@@ -202,6 +202,19 @@ export const getProjections = createServerFn({ method: "GET" })
     return proj.projectPlayers(data);
   });
 
+export const getOutlooks = createServerFn({ method: "GET" })
+  .validator(
+    z.object({
+      leagueId: z.string(),
+      season: z.string(),
+      playerIds: z.array(z.string()),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const proj = await import("./projections.server");
+    return proj.outlooksFor(data);
+  });
+
 export const getPlayerProfile = createServerFn({ method: "GET" })
   .validator(
     z.object({

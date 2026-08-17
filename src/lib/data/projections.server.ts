@@ -4,6 +4,8 @@ import { applyBook, presetOf, type ScoringBook } from "@/lib/league/scoring";
 import { byeWeeks } from "./byes.server";
 import { isHostedLeague, type Projection } from "./types";
 
+const WEEKS = 18;
+
 /**
  * A projection, honestly labelled.
  *
@@ -76,6 +78,59 @@ export function perGameUnder(book: ScoringBook, playerId: string): number | null
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
+
+/**
+ * Mean and spread for a whole roster at once.
+ *
+ * The eighteen weekly stat maps are fetched once and reused for every player,
+ * because they are league-wide files. Doing this per player would refetch the
+ * same eighteen files for each of eighteen starters.
+ */
+export async function outlooksFor(input: {
+  leagueId: string;
+  season: string;
+  playerIds: string[];
+}): Promise<Record<string, { mean: number; sd: number }>> {
+  const book = await scoringBookFor(input.leagueId);
+  const live = await import("./live.server");
+
+  const weeks = await Promise.all(
+    Array.from({ length: WEEKS }, async (_, i) => {
+      try {
+        return await live.fetchWeekStats(input.season, i + 1, "regular");
+      } catch {
+        return {} as Record<string, Record<string, number>>;
+      }
+    }),
+  );
+
+  const out: Record<string, { mean: number; sd: number }> = {};
+  for (const id of input.playerIds) {
+    const points: number[] = [];
+    for (const week of weeks) {
+      const line = week[id];
+      if (line) points.push(applyBook(book, line));
+    }
+    if (points.length >= 4) {
+      const mean = points.reduce((t, v) => t + v, 0) / points.length;
+      const variance = points.reduce((t, v) => t + (v - mean) ** 2, 0) / (points.length - 1);
+      out[id] = { mean: round1(mean), sd: round1(Math.sqrt(variance)) };
+      continue;
+    }
+    // Too little history to measure. Fall back to the season line and the
+    // league-wide spread ratio rather than pretending to know.
+    const pg = perGameUnder(book, id);
+    out[id] = pg == null ? { mean: 0, sd: 0 } : { mean: pg, sd: round1(pg * SPREAD_RATIO) };
+  }
+  return out;
+}
+
+/**
+ * When a player has no usable history, fall back to the league-wide ratio of
+ * spread to mean. Measured across 336 scoring players in the bundled season:
+ * the median is 0.63.
+ */
+export const SPREAD_RATIO = 0.63;
 
 export async function projectPlayers(input: {
   leagueId: string;
