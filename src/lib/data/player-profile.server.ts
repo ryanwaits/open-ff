@@ -21,6 +21,14 @@ export type PlayerProfile = {
   weekly: (number | null)[];
   byeWeek: number | null;
   scoringNote: string;
+  /**
+   * Who holds him in this league, or null if nobody does.
+   *
+   * The only fact on this page the client cannot work out for itself — the
+   * league bundle carries standings and your own roster, but never says which
+   * of the other rosters a given player sits on.
+   */
+  ownedBy: { rosterId: number; teamName: string } | null;
 };
 
 type StatSeed = Record<string, number> & { player_id: string };
@@ -100,7 +108,35 @@ export async function loadPlayerProfile(input: {
     weekly,
     byeWeek,
     scoringNote: `Scored with this league's book`,
+    ownedBy: await ownerOf(input.leagueId, input.playerId),
   };
+}
+
+/** Only hosted leagues have rosters we can read; an import is always read-only. */
+async function ownerOf(
+  leagueId: string,
+  playerId: string,
+): Promise<{ rosterId: number; teamName: string } | null> {
+  if (!isHostedLeague(leagueId)) return null;
+  try {
+    const { getSql } = await import("@/lib/db");
+    const sql = await getSql();
+    const row = (
+      await sql<{ roster_id: number }>`
+        select roster_id from ff_spots
+        where league_id = ${leagueId} and player_id = ${playerId}
+        limit 1
+      `
+    )[0];
+    if (!row) return null;
+    const eng = await import("@/lib/league/engine.server");
+    const bundle = await eng.loadLeagueBundle(leagueId, null);
+    const seat = bundle.standings.find((s) => s.rosterId === row.roster_id);
+    return { rosterId: row.roster_id, teamName: seat?.teamName ?? `Roster ${row.roster_id}` };
+  } catch {
+    // A league whose tables have not been created yet simply has no owners.
+    return null;
+  }
 }
 
 const META_KEYS = new Set(["player_id", "gp", "pts_ppr", "pts_half_ppr", "pts_std", "pos_rank_ppr"]);

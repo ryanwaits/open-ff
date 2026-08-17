@@ -1,13 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { toast } from "sonner";
+import { ClaimButton } from "@/components/claim-button";
+import { ClaimDialog } from "@/components/claim-dialog";
 import { PlayerCell } from "@/components/player-cell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getLeagueBundle, getTeam, getWire } from "@/lib/data/fns";
-import { addDrop, cancelClaim, getClaims } from "@/lib/league/fns";
+import { getLeagueBundle, getWire } from "@/lib/data/fns";
+import { headshotFor } from "@/lib/data/player-view";
+import { cancelClaim, getClaims } from "@/lib/league/fns";
+import { useClaim } from "@/lib/league/use-claim";
 import { cn, formatPts } from "@/lib/utils";
 
 const POS = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"] as const;
@@ -21,19 +24,9 @@ function WirePage() {
   const qc = useQueryClient();
   const [pos, setPos] = useState<(typeof POS)[number]>("ALL");
   const [q, setQ] = useState("");
-  const [dropId, setDropId] = useState<string>("");
-  const [bid, setBid] = useState(1);
   const league = useQuery({
     queryKey: ["league", leagueId],
     queryFn: () => getLeagueBundle({ data: { leagueId } }),
-  });
-  const week = league.data?.currentWeek ?? 1;
-  const mineId = league.data?.myRosterId;
-  const team = useQuery({
-    queryKey: ["team", leagueId, mineId, week],
-    queryFn: () =>
-      getTeam({ data: { leagueId, rosterId: mineId!, week } }),
-    enabled: Boolean(league.data?.hosted && mineId && !league.data.locked),
   });
   const wire = useQuery({
     queryKey: ["wire", leagueId, pos, q],
@@ -46,30 +39,12 @@ function WirePage() {
     enabled: Boolean(league.data?.hosted),
   });
 
+  // The bid and the drop belong to a claim, not to the page. Everything the
+  // button and the dialog need comes from here so the wire and the player page
+  // cannot disagree about whether you may add someone.
+  const claim = useClaim(leagueId);
+  const mineId = league.data?.myRosterId;
   const drafted = league.data?.draftStatus === "complete";
-  const canClaim =
-    Boolean(league.data?.hosted && mineId && !league.data.locked) && drafted;
-
-  const claim = useMutation({
-    mutationFn: (addId: string) =>
-      addDrop({
-        data: { leagueId, addId, dropId: dropId || null, bid },
-      }),
-    onSuccess: (res) => {
-      void qc.invalidateQueries({ queryKey: ["wire", leagueId] });
-      void qc.invalidateQueries({ queryKey: ["team", leagueId] });
-      void qc.invalidateQueries({ queryKey: ["league", leagueId] });
-      void qc.invalidateQueries({ queryKey: ["claims", leagueId] });
-      toast(
-        res.mode === "claim"
-          ? league.data?.ops?.waiverType === "faab"
-            ? `Bid $${bid} in the wire.`
-            : "Claim queued."
-          : "Added.",
-      );
-    },
-    onError: (e) => toast(e instanceof Error ? e.message : "Could not claim"),
-  });
 
   const wireCopy = !league.data?.hosted
     ? `Everyone not on a roster, ranked by ${league.data?.league.season ?? ""} PPR. Read-only peek.`
@@ -92,40 +67,6 @@ function WirePage() {
   return (
     <div>
       <p className="max-w-xl text-sm text-muted">{wireCopy}</p>
-      {canClaim ? (
-        <div className="mt-4 flex flex-wrap items-end gap-3">
-          <label className="block max-w-xs">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-              Drop if full
-            </span>
-            <select
-              className="mt-1.5 h-11 w-full rounded-md bg-raised px-3 text-sm text-fg shadow-[var(--shadow-border)]"
-              value={dropId}
-              onChange={(e) => setDropId(e.target.value)}
-            >
-              <option value="">No drop</option>
-              {team.data?.players.map((p) => (
-                <option key={p.player_id} value={p.player_id}>
-                  {p.full_name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {league.data?.ops?.waiversOpen && league.data.ops.waiverType === "faab" ? (
-            <label>
-              <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Bid $</span>
-              <Input
-                className="mt-1.5 w-24"
-                type="number"
-                min={0}
-                max={league.data.faabRemaining ?? 100}
-                value={bid}
-                onChange={(e) => setBid(Number(e.target.value))}
-              />
-            </label>
-          ) : null}
-        </div>
-      ) : null}
 
       {claims.data?.items.length ? (
         <ul className="mt-5 space-y-2">
@@ -199,26 +140,39 @@ function WirePage() {
                 <span className="font-mono text-sm tabular-nums">
                   {formatPts(p.pts, 1)}
                 </span>
-                {canClaim ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={claim.isPending}
-                    onClick={() => claim.mutate(p.player_id)}
-                  >
-                    {league.data?.ops?.waiversOpen
-                      ? league.data.ops.waiverType === "faab"
-                        ? "Bid"
-                        : "Claim"
-                      : "Add"}
-                  </Button>
-                ) : null}
+                <ClaimButton
+                  size="sm"
+                  verdict={claim.verdictFor(p.player_id)}
+                  leagueId={leagueId}
+                  onClaim={() =>
+                    claim.setTarget({
+                      player: p,
+                      name: p.full_name,
+                      headshot: headshotFor(p),
+                    })
+                  }
+                />
               </li>
             ))}
       </ul>
       {wire.data && wire.data.length === 0 ? (
         <p className="mt-4 text-sm text-muted">No available players match.</p>
       ) : null}
+
+      <ClaimDialog
+        open={claim.open}
+        onOpenChange={(next) => {
+          if (!next) claim.setTarget(null);
+        }}
+        leagueId={leagueId}
+        target={claim.target}
+        mode={claim.mode}
+        waiverType={claim.waiverType}
+        faabRemaining={claim.faabRemaining}
+        waiverPos={claim.waiverPos}
+        droppable={claim.droppable}
+        mustDrop={claim.mustDrop}
+      />
     </div>
   );
 }
