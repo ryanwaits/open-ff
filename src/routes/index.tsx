@@ -28,11 +28,14 @@ function Home() {
 
   return (
     <Shell>
-      <section className="max-w-xl">
-        <h1 className="font-display text-5xl leading-[0.95] tracking-tight sm:text-6xl">
-          Your league.
+      <section className="max-w-xl pt-6">
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+          Hosted here &middot; no other app
+        </p>
+        <h1 className="mt-3 font-display text-5xl font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-6xl">
+          Your league, <span className="hl">your desk</span>.
         </h1>
-        <p className="mt-4 text-sm leading-relaxed text-muted">
+        <p className="mt-5 text-base leading-relaxed text-muted">
           Sign in, claim a seat, play the week. Commissioners set the book.
         </p>
       </section>
@@ -67,15 +70,15 @@ function Home() {
                     onClick={() =>
                       openLeague({ leagueId: l.leagueId, name: l.name, season: l.season })
                     }
-                    className="flex w-full items-center justify-between gap-3 rounded-lg bg-surface px-4 py-3 text-left shadow-[var(--shadow-border)] transition-[box-shadow] hover:shadow-[var(--shadow-border-hover)]"
+                    className="group flex w-full items-center justify-between gap-3 rounded-xl bg-surface px-4 py-4 text-left shadow-[var(--shadow-border)] transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-border-hover)]"
                   >
                     <span>
-                      <span className="block text-sm">{l.name}</span>
+                      <span className="block text-sm font-semibold">{l.name}</span>
                       <span className="font-mono text-[11px] text-faint">
                         {l.season} · {l.role}
                       </span>
                     </span>
-                    <ArrowRight className="size-4 text-faint" />
+                    <ArrowRight className="size-4 text-faint transition-transform duration-200 ease-out group-hover:translate-x-0.5 group-hover:text-accent-strong" />
                   </button>
                 </li>
               ))}
@@ -96,7 +99,7 @@ function Home() {
             </div>
           </section>
         ) : (
-          <div className="mt-8 flex flex-col gap-2 sm:max-w-sm">
+          <div className="mt-8 flex flex-col gap-3 sm:max-w-xs">
             <Button asChild>
               <Link to="/join">Claim a seat</Link>
             </Button>

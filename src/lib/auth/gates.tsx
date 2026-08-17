@@ -59,19 +59,19 @@ export function UserButton() {
         <img
           src={user.profileImageUrl}
           alt=""
-          className="h-8 w-8 rounded-full object-cover"
+          className="h-8 w-8 shrink-0 rounded-pill object-cover"
         />
       ) : (
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-black/10 text-sm font-medium dark:bg-white/20">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-pill bg-raised font-mono text-xs font-medium">
           {label.charAt(0).toUpperCase()}
         </span>
       )}
-      <span className="text-sm font-medium">{label}</span>
+      <span className="hidden max-w-32 truncate text-sm font-medium sm:inline">{label}</span>
       {authEnabled && (
         <button
           type="button"
           onClick={() => void signOut()}
-          className="cursor-pointer text-sm underline-offset-4 opacity-70 hover:underline"
+          className="shrink-0 cursor-pointer text-sm underline-offset-4 opacity-70 hover:underline"
         >
           Sign out
         </button>

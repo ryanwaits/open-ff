@@ -9,6 +9,7 @@ import { useState } from "react";
 import { Toaster } from "sonner";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { AuthProvider } from "@/lib/auth/provider";
+import { NO_FLASH_SCRIPT, useTheme } from "@/lib/theme";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Ledger";
@@ -28,7 +29,8 @@ export const Route = createRootRoute({
         content: "A custom fantasy football desk for your leagues — standings, matchups, scores, and weekly recaps.",
       },
       { name: "apple-mobile-web-app-title", content: APP_NAME },
-      { name: "theme-color", content: "#0c0c0a" },
+      { name: "theme-color", media: "(prefers-color-scheme: light)", content: "#f7f4ea" },
+      { name: "theme-color", media: "(prefers-color-scheme: dark)", content: "#14161a" },
       { name: "twitter:card", content: "summary_large_image" },
       ...(ogImage
         ? [
@@ -47,7 +49,7 @@ export const Route = createRootRoute({
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap",
       },
     ],
   }),
@@ -55,6 +57,7 @@ export const Route = createRootRoute({
 });
 
 function RootDocument() {
+  const { resolved } = useTheme();
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -68,6 +71,9 @@ function RootDocument() {
     <html lang="en" className="antialiased" suppressHydrationWarning>
       <head>
         <HeadContent />
+        {/* Stamps data-theme before first paint. Must stay inline and before
+            the body, or the page flashes light on a dark device. */}
+        <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />
       </head>
       <body>
         <PreviewHostBridge />
@@ -77,13 +83,24 @@ function RootDocument() {
           </AuthProvider>
         </QueryClientProvider>
         <Toaster
-          theme="dark"
+          theme={resolved}
           position="bottom-center"
+          offset={16}
+          gap={10}
+          duration={4000}
           toastOptions={{
-            style: {
-              background: "#151512",
-              color: "#f1efe6",
-              border: "1px solid #2a2923",
+            unstyled: true,
+            classNames: {
+              toast:
+                "flex w-full items-start gap-3 rounded-lg bg-surface px-4 py-3 shadow-[0_0_0_1px_var(--hairline),var(--lift)]",
+              title: "text-sm font-semibold text-fg",
+              description: "mt-0.5 font-mono text-[11px] leading-relaxed text-muted",
+              icon: "shrink-0 [&>svg]:size-4",
+              success: "[&_[data-icon]]:text-accent-strong",
+              error: "[&_[data-icon]]:text-loss",
+              actionButton:
+                "ml-auto shrink-0 rounded-pill bg-accent px-3 py-1.5 text-xs font-bold text-accent-fg",
+              closeButton: "rounded-pill border border-line bg-surface text-faint",
             },
           }}
         />

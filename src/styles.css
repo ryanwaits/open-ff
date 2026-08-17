@@ -1,40 +1,208 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@theme {
-  --color-bg: #0c0c0a;
-  --color-surface: #151512;
-  --color-raised: #1c1c18;
-  --color-fg: #f1efe6;
-  --color-muted: #9a9688;
-  --color-faint: #6d6a5e;
-  --color-line: #2a2923;
-  --color-accent: #d8d2c3;
-  --color-accent-fg: #14140f;
-  --color-win: #8aa37a;
-  --color-loss: #b07870;
-  --color-live: #c4a574;
+/* Tailwind's stock `dark:` keys off prefers-color-scheme, which ignores an
+   explicit user override. Point it at the attribute the app actually stamps.
+   Prefer plain tokens over `dark:` anyway — they need no variant at all. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-  --font-display: "Instrument Serif", "Times New Roman", serif;
-  --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+/* ============================================================================
+   Ledger — Hum
+   ----------------------------------------------------------------------------
+   Cream paper, rounded everything, one identity colour, one alarm colour.
 
-  --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+   Three layers, in order:
+     1. Raw values on :root / [data-theme] / [data-accent]  — the only place
+        a literal colour is ever written.
+     2. @theme inline — maps raw values onto Tailwind's utility names, by
+        reference, so `bg-surface` and friends re-resolve at runtime.
+     3. Base + component rules, which only ever name a token.
 
-  --shadow-border: 0 0 0 1px rgb(241 239 230 / 0.08);
-  --shadow-border-hover: 0 0 0 1px rgb(241 239 230 / 0.14);
+   Mode is three-state. The inline script in __root.tsx stamps
+   data-theme="light|dark" from localStorage or the OS. The media query below
+   covers the pre-hydration and no-JS cases.
+
+   Accent is green by default. Add data-accent="blue" to <html> for the blue
+   ramp — that is the whole switch.
+   ========================================================================= */
+
+:root {
+  /* surface */
+  --paper: #f7f4ea;
+  --paper-raised: #fffdf7;
+  --paper-sunken: #f0ece0;
+  --band: #f2eee2;
+
+  /* ink */
+  --ink: #17191d;
+  --ink-2: #5b5e60;
+  --ink-3: #8a8b83;
+
+  /* structure */
+  --hairline: #e4dfd1;
+  --hairline-strong: #d2ccba;
+
+  /* identity — green */
+  --brand: #6fdc93;
+  --brand-deep: #3fa765;
+  --brand-strong: #1d7a45;
+  --brand-ink: #12251a;
+  --highlight: #a9e9bd;
+
+  /* the only alarm colour. Wins are not coloured: winning is the default
+     state, losing is the exception that gets marked. */
+  --alarm: #c8503a;
+
+  --lift: 0 10px 26px -16px rgb(23 25 29 / 0.3);
+  --lift-hover: 0 16px 34px -18px rgb(23 25 29 / 0.4);
+  --press-cast: rgb(63 167 101 / 0.4);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14161a;
+    --paper-raised: #1b1e22;
+    --paper-sunken: #23272c;
+    --band: #1a1d21;
+
+    --ink: #f2f1ea;
+    --ink-2: #a8aba6;
+    --ink-3: #7a7e7b;
+
+    --hairline: #2b2f34;
+    --hairline-strong: #3a3f45;
+
+    --brand: #64d68c;
+    --brand-deep: #2f8f55;
+    --brand-strong: #7fe3a2;
+    --brand-ink: #0e1f15;
+    --highlight: #2c5c3e;
+
+    --alarm: #e4705a;
+
+    --lift: 0 10px 26px -16px rgb(0 0 0 / 0.7);
+    --lift-hover: 0 16px 34px -18px rgb(0 0 0 / 0.8);
+    --press-cast: rgb(0 0 0 / 0.5);
+  }
+}
+
+[data-theme="dark"] {
+  --paper: #14161a;
+  --paper-raised: #1b1e22;
+  --paper-sunken: #23272c;
+  --band: #1a1d21;
+
+  --ink: #f2f1ea;
+  --ink-2: #a8aba6;
+  --ink-3: #7a7e7b;
+
+  --hairline: #2b2f34;
+  --hairline-strong: #3a3f45;
+
+  --brand: #64d68c;
+  --brand-deep: #2f8f55;
+  --brand-strong: #7fe3a2;
+  --brand-ink: #0e1f15;
+  --highlight: #2c5c3e;
+
+  --alarm: #e4705a;
+
+  --lift: 0 10px 26px -16px rgb(0 0 0 / 0.7);
+  --lift-hover: 0 16px 34px -18px rgb(0 0 0 / 0.8);
+  --press-cast: rgb(0 0 0 / 0.5);
+}
+
+/* --- accent ramp: blue ---------------------------------------------------- */
+
+[data-accent="blue"] {
+  --brand: #74bdf6;
+  --brand-deep: #3b8fce;
+  --brand-strong: #14639f;
+  --brand-ink: #0b2439;
+  --highlight: #b0dcfa;
+  --press-cast: rgb(59 143 206 / 0.4);
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-accent="blue"]:not([data-theme="light"]) {
+    --brand: #6bb6f2;
+    --brand-deep: #2e76b4;
+    --brand-strong: #93cdf8;
+    --brand-ink: #08192a;
+    --highlight: #234a6b;
+    --press-cast: rgb(0 0 0 / 0.5);
+  }
+}
+
+[data-accent="blue"][data-theme="dark"] {
+  --brand: #6bb6f2;
+  --brand-deep: #2e76b4;
+  --brand-strong: #93cdf8;
+  --brand-ink: #08192a;
+  --highlight: #234a6b;
+  --press-cast: rgb(0 0 0 / 0.5);
+}
+
+/* --- Tailwind surface ----------------------------------------------------- */
+
+@theme inline {
+  --color-bg: var(--paper);
+  --color-surface: var(--paper-raised);
+  --color-raised: var(--paper-sunken);
+  --color-band: var(--band);
+  --color-fg: var(--ink);
+  --color-muted: var(--ink-2);
+  --color-faint: var(--ink-3);
+  --color-line: var(--hairline);
+  --color-line-strong: var(--hairline-strong);
+
+  --color-accent: var(--brand);
+  --color-accent-deep: var(--brand-deep);
+  --color-accent-strong: var(--brand-strong);
+  --color-accent-fg: var(--brand-ink);
+  --color-highlight: var(--highlight);
+
+  /* Wins inherit ink on purpose. Keeping the name means no component churn if
+     that call is ever reversed. */
+  --color-win: var(--ink);
+  --color-loss: var(--alarm);
+  --color-live: var(--alarm);
+
+  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  /* No square corners anywhere. */
+  --radius-xs: 8px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+
+  --shadow-border: 0 0 0 1px var(--hairline), var(--lift);
+  --shadow-border-hover: 0 0 0 1px var(--hairline-strong), var(--lift-hover);
+  --shadow-lift: var(--lift);
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snap: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    color-scheme: light;
+  }
+
+  [data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) {
+      color-scheme: dark;
+    }
   }
 
   html,
@@ -54,6 +222,8 @@
   h2,
   h3 {
     text-wrap: balance;
+    font-weight: 700;
+    letter-spacing: -0.025em;
   }
 
   p {
@@ -65,21 +235,104 @@
     cursor: pointer;
   }
 
+  :focus-visible {
+    outline: 2px solid var(--color-accent-deep);
+    outline-offset: 2px;
+  }
+
   img {
-    outline: 1px solid rgb(241 239 230 / 0.1);
+    outline: 1px solid var(--color-line);
     outline-offset: -1px;
+  }
+
+  /* Figures line up in columns everywhere in this app. */
+  .font-mono,
+  table {
+    font-variant-numeric: tabular-nums;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+/* ============================================================================
+   The highlighter
+   ----------------------------------------------------------------------------
+   Painted as a clipped background on the text itself, never an absolutely
+   positioned bar, so it follows the phrase across line breaks and scales with
+   font-size. box-decoration-break: clone is what gives every wrapped line its
+   own band.
+   ========================================================================= */
+
+/* Anchored to the BOTTOM of the inline box, not the top. The gap between box
+   bottom and baseline is the font's descent, so subtracting a small constant
+   parks the band on the baseline and it stays there across sizes — and
+   degrades to an underline rather than a smudge if the webfont never loads.
+   Top-anchoring with an em offset does not survive either change. */
+.hl {
+  --hl-thickness: 0.33em;
+  --hl-sink: 0.06em;
+  background-image: linear-gradient(var(--highlight) 0 0);
+  background-repeat: no-repeat;
+  background-size: 100% var(--hl-thickness);
+  background-position: 0 calc(100% - var(--hl-sink));
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* UI-scale text, where a full marker band would shout. */
+.hl-thin {
+  --hl-thickness: 0.22em;
+}
+
+/* Clears the baseline, so it reads as an underline rather than a strike. */
+.hl-under {
+  --hl-thickness: 0.18em;
+  --hl-sink: -0.16em;
+}
+
+/* ============================================================================
+   The push button
+   ----------------------------------------------------------------------------
+   The shadow is the button's thickness: a full-width solid edge plus a
+   separate soft cast on the ground. Never a negative spread — that makes the
+   edge narrower than the button. Lift on hover, press DOWN on :active, so the
+   press is the feedback. No scale, no overshoot.
+   ========================================================================= */
+
+.push {
+  box-shadow:
+    0 4px 0 0 var(--brand-deep),
+    0 6px 12px -3px var(--press-cast);
+  transform: translateY(0);
+  transition:
+    transform 140ms var(--ease-snap),
+    box-shadow 140ms var(--ease-snap),
+    background-color 160ms var(--ease-snap);
+}
+
+@media (hover: hover) {
+  .push:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow:
+      0 6px 0 0 var(--brand-deep),
+      0 12px 22px -4px var(--press-cast);
   }
 }
+
+.push:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow:
+    0 1px 0 0 var(--brand-deep),
+    0 2px 6px -2px var(--press-cast);
+  transition-duration: 70ms;
+}
+
+.push:disabled {
+  transform: none;
+  box-shadow: 0 4px 0 0 var(--brand-deep);
+}
+
+/* ============================================================================
+   Motion
+   ========================================================================= */
 
 @keyframes ledger-in {
   from {
@@ -102,4 +355,34 @@
 
 .ledger-in-3 {
   animation: ledger-in 400ms var(--ease-out) 120ms both;
+}
+
+/* The one character mark: the crest breathes. */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.035);
+  }
+}
+
+.breathe {
+  animation: breathe 4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .push:hover:not(:disabled),
+  .push:active:not(:disabled) {
+    transform: none;
+  }
 }

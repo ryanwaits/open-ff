@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Radio, Trophy, UserRound } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { SignedIn, SignedOut, UserButton } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { useLeagueStore } from "@/lib/store";
@@ -15,14 +16,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg text-fg">
-      <header className="sticky top-0 z-30 border-b border-line/80 bg-bg/90 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4">
+      <header className="sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur-md">
+        <div className="mx-auto flex h-15 max-w-6xl items-center gap-3 px-4">
           <Link
             to={league ? "/league/$leagueId" : "/"}
             params={league ? { leagueId: league.leagueId } : undefined}
-            className="flex items-baseline gap-2 shrink-0"
+            className="shrink-0"
           >
-            <span className="font-display text-2xl leading-none tracking-tight">Ledger</span>
+            <span className="font-display text-[26px] font-extrabold leading-none tracking-[-0.03em]">
+              Ledger
+            </span>
           </Link>
           <nav className="hidden items-center gap-1 md:flex">
             {league ? (
@@ -30,8 +33,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 to="/league/$leagueId"
                 params={{ leagueId: league.leagueId }}
                 className={cn(
-                  "rounded-sm px-3 py-2 text-sm transition-colors duration-150",
-                  inLeague ? "text-fg" : "text-muted hover:text-fg",
+                  "rounded-pill px-3.5 py-2 text-sm font-medium transition-colors duration-150",
+                  inLeague ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg",
                 )}
               >
                 {league.name}
@@ -40,16 +43,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <Link
               to="/scores"
               className={cn(
-                "rounded-sm px-3 py-2 text-sm transition-colors duration-150",
-                inScores ? "text-fg" : "text-muted hover:text-fg",
+                "rounded-pill px-3.5 py-2 text-sm font-medium transition-colors duration-150",
+                inScores ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg",
               )}
             >
               Scores
             </Link>
           </nav>
           <div className="ml-auto flex items-center gap-2">
+            <ThemeToggle />
             {isPending ? (
-              <div className="size-8 animate-pulse rounded-full bg-raised" />
+              <div className="size-8 animate-pulse rounded-pill bg-raised" />
             ) : (
               <>
                 <SignedIn>
@@ -58,7 +62,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 <SignedOut>
                   <Link
                     to="/login"
-                    className="inline-flex h-9 items-center rounded-sm px-3 text-sm text-muted hover:text-fg"
+                    className="inline-flex h-9 items-center rounded-pill px-3.5 text-sm font-medium text-muted hover:text-fg"
                   >
                     Sign in
                   </Link>
@@ -78,8 +82,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
               to="/league/$leagueId"
               params={{ leagueId: league.leagueId }}
               className={cn(
-                "flex min-h-12 flex-col items-center justify-center gap-0.5 text-[11px]",
-                inLeague ? "text-fg" : "text-faint",
+                "mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium transition-colors duration-150",
+                inLeague ? "bg-raised text-fg" : "text-faint",
               )}
             >
               <Trophy className="size-4" strokeWidth={1.75} />
@@ -89,8 +93,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <Link
               to="/"
               className={cn(
-                "flex min-h-12 flex-col items-center justify-center gap-0.5 text-[11px]",
-                pathname === "/" ? "text-fg" : "text-faint",
+                "mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium transition-colors duration-150",
+                pathname === "/" ? "bg-raised text-fg" : "text-faint",
               )}
             >
               <Trophy className="size-4" strokeWidth={1.75} />
@@ -100,8 +104,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <Link
             to="/scores"
             className={cn(
-              "flex min-h-12 flex-col items-center justify-center gap-0.5 text-[11px]",
-              inScores ? "text-fg" : "text-faint",
+              "mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium transition-colors duration-150",
+              inScores ? "bg-raised text-fg" : "text-faint",
             )}
           >
             <Radio className="size-4" strokeWidth={1.75} />
@@ -111,8 +115,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <Link
               to="/join"
               className={cn(
-                "flex min-h-12 flex-col items-center justify-center gap-0.5 text-[11px]",
-                pathname === "/join" ? "text-fg" : "text-faint",
+                "mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium transition-colors duration-150",
+                pathname === "/join" ? "bg-raised text-fg" : "text-faint",
               )}
             >
               <UserRound className="size-4" strokeWidth={1.75} />
@@ -122,7 +126,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <SignedOut>
             <Link
               to="/login"
-              className="flex min-h-12 flex-col items-center justify-center gap-0.5 text-[11px] text-faint"
+              className="mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium text-faint"
             >
               <UserRound className="size-4" strokeWidth={1.75} />
               Sign in
