@@ -773,6 +773,17 @@ export async function createLeague(input: { userId: string; name: string; teamNa
 	}
 	await ops.seedRosterOps(id);
 	await ops.ensureDraftBoard(id);
+	// Genesis. Every dollar the league will ever hold is minted here — the
+	// managers' budgets by seedRosterOps above, and the house pool now. Nothing
+	// creates FAAB after this, which is what makes the ledger auditable.
+	try {
+		const { seedPool } = await import("./wagers.server");
+		const seed = Math.max(0, Math.round(teamCount * 20));
+		await sql`update ff_leagues set pool_seed = ${seed} where id = ${id}`;
+		await seedPool(id, seed);
+	} catch {
+		/* a league without a pool simply has betting switched off */
+	}
 	return {
 		leagueId: id,
 		inviteCode: code,

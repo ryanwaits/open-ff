@@ -39,7 +39,13 @@ export type LeagueEventKind =
   /** A starter was sent to the bench, leaving the slot he held empty. */
   | "lineup_benched"
   /** A player's injury designation changed between two daily refreshes. */
-  | "injury_changed";
+  | "injury_changed"
+  /** FAAB was staked on a matchup. */
+  | "wager_placed"
+  /** A wager was withdrawn before the book closed. */
+  | "wager_pulled"
+  | "wager_won"
+  | "wager_lost";
 
 export type LeagueEvent = {
   leagueId: string;

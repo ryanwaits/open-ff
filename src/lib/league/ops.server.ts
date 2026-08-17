@@ -772,6 +772,15 @@ export async function snapshotWeek(leagueId: string, week: number): Promise<void
       `;
     }
   }
+
+  // The week's points are now final, which is the only moment a wager can be
+  // settled honestly — before this there is nothing to compare a line against.
+  try {
+    const { settleWeek } = await import("./wagers.server");
+    await settleWeek(leagueId, week);
+  } catch {
+    // A book failure must never block the week from closing.
+  }
 }
 
 async function seedPlayoffs(leagueId: string, week: number): Promise<void> {
@@ -963,6 +972,19 @@ async function refreshStatusAndRecord(leagueIds: string[]): Promise<number> {
       select league_id, roster_id, player_id from ff_spots
       where player_id = any(${[...byPlayer.keys()]})
     `;
+
+    // The refresh has just brought designations current, so this is the moment
+    // the price is as good as it will get. Closing here rather than at a clock
+    // time means nobody can bet against data the app has already superseded.
+    try {
+      const { lockWeek } = await import("./wagers.server");
+      for (const id of leagueIds) {
+        const l = await leagueOf(id).catch(() => null);
+        if (l) await lockWeek(id, l.current_week);
+      }
+    } catch {
+      /* the clock keeps running either way */
+    }
 
     for (const row of owned) {
       if (!leagueIds.includes(row.league_id)) continue;
