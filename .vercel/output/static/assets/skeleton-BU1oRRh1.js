@@ -1,1 +1,0 @@
-import{d as e}from"./preload-helper-C_yO7rdd.js";import{t}from"./utils-CVDigqcy.js";var n=e();function r({className:e}){return(0,n.jsx)(`div`,{className:t(`animate-pulse rounded-md bg-raised`,e)})}export{r as t};

@@ -3,3 +3,8 @@ node_modules/
 .github_repo
 .env
 .env.*
+
+# Build output. `vite build` regenerates all of it; 136 files of it were
+# tracked, which made every build look like a 6MB diff.
+.vercel/
+.tanstack/
