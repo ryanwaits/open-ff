@@ -45,6 +45,9 @@ function WirePage() {
   const claim = useClaim(leagueId);
   const mineId = league.data?.myRosterId;
   const drafted = league.data?.draftStatus === "complete";
+  // A cancelled or settled claim is finished business — the list is what is
+  // still live, not a history of everything you ever tried.
+  const pendingClaims = (claims.data?.items ?? []).filter((c) => c.status === "pending");
 
   const wireCopy = !league.data?.hosted
     ? `Everyone not on a roster, ranked by ${league.data?.league.season ?? ""} PPR. Read-only peek.`
@@ -68,9 +71,9 @@ function WirePage() {
     <div>
       <p className="max-w-xl text-sm text-muted">{wireCopy}</p>
 
-      {claims.data?.items.length ? (
+      {pendingClaims.length ? (
         <ul className="mt-5 space-y-2">
-          {claims.data.items.map((c) => (
+          {pendingClaims.map((c) => (
             <li
               key={c.id}
               className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface px-3 py-2 text-sm shadow-[var(--shadow-border)]"
@@ -80,7 +83,7 @@ function WirePage() {
                 {c.drop ? ` / −${c.drop.name}` : ""}
                 {c.bid > 0 ? ` · $${c.bid}` : ""} · {c.status}
               </span>
-              {c.mine && c.status === "pending" ? (
+              {c.mine ? (
                 <Button
                   size="sm"
                   variant="ghost"

@@ -182,7 +182,11 @@ function MyTeamPage() {
   const t = team.data;
   const ops = league.data.ops;
   const seed = league.data.standings.findIndex((s) => s.rosterId === rosterId) + 1;
-  const myClaims = (claims.data?.items ?? []).filter((c) => c.mine);
+  // Only live claims. A cancelled or settled one is finished business and
+  // belongs in Your moves, not in a card headed "what is still in".
+  const myClaims = (claims.data?.items ?? []).filter(
+    (c) => c.mine && c.status === "pending",
+  );
   const myTrades = (trades.data ?? []).filter(
     (t2) => t2.status === "proposed" && t2.sides.some((s) => s.rosterId === rosterId),
   );

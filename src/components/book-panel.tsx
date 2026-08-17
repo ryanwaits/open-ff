@@ -87,6 +87,7 @@ export function LinePanel({
             sideName: side(true).name,
             againstName: side(true).other,
             line: homeSpread,
+            mult: 1,
             priceLabel: fmtSpread(homeSpread),
             ownGame: line.restrictedTo === line.homeRoster,
           })
@@ -99,6 +100,7 @@ export function LinePanel({
             sideName: side(false).name,
             againstName: side(false).other,
             line: awaySpread,
+            mult: 1,
             priceLabel: fmtSpread(awaySpread),
             ownGame: line.restrictedTo === line.awayRoster,
           })
@@ -109,13 +111,13 @@ export function LinePanel({
         label="Moneyline"
         sub={`${line.homeName} to win · ${line.awayName} to win`}
         a={{
-          price: `${line.homePct}%`,
-          note: allowed(line.homeRoster) ? "back" : "your game",
+          price: fmtOdds(line.homeMult),
+          note: allowed(line.homeRoster) ? `${line.homePct}%` : "your game",
           on: allowed(line.homeRoster) && !line.locked,
         }}
         b={{
-          price: `${line.awayPct}%`,
-          note: allowed(line.awayRoster) ? "back" : "your game",
+          price: fmtOdds(line.awayMult),
+          note: allowed(line.awayRoster) ? `${line.awayPct}%` : "your game",
           on: allowed(line.awayRoster) && !line.locked,
         }}
         onA={() =>
@@ -126,7 +128,8 @@ export function LinePanel({
             sideName: side(true).name,
             againstName: side(true).other,
             line: 0,
-            priceLabel: `${line.homePct}%`,
+            mult: line.homeMult,
+            priceLabel: fmtOdds(line.homeMult),
             ownGame: line.restrictedTo === line.homeRoster,
           })
         }
@@ -138,7 +141,8 @@ export function LinePanel({
             sideName: side(false).name,
             againstName: side(false).other,
             line: 0,
-            priceLabel: `${line.awayPct}%`,
+            mult: line.awayMult,
+            priceLabel: fmtOdds(line.awayMult),
             ownGame: line.restrictedTo === line.awayRoster,
           })
         }
@@ -239,6 +243,16 @@ function Fig({ n, label }: { n: string; label: string }) {
       </span>
     </span>
   );
+}
+
+/**
+ * Profit per dollar, said plainly.
+ *
+ * American odds are the convention and nobody in a ten-team league reads them,
+ * so this states the thing you actually want to know: what a dollar returns.
+ */
+export function fmtOdds(mult: number): string {
+  return `${mult >= 10 ? mult.toFixed(0) : mult.toFixed(2).replace(/0$/, "")}×`;
 }
 
 function fmtSpread(n: number): string {

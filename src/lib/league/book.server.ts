@@ -36,6 +36,8 @@ export type BookPosition = {
   sideRoster: number;
   sideName: string;
   line: number;
+  /** Profit per dollar this was written at. 1 on a spread. */
+  mult: number;
   stake: number;
   status: WagerStatus;
   payout: number | null;
@@ -60,6 +62,56 @@ export type BookBundle = {
   };
   caps: { wager: number; exposure: number };
 };
+
+/**
+ * Price one matchup, server-side.
+ *
+ * Placement re-quotes rather than trusting whatever the client displayed — the
+ * multiplier decides what the pool owes, so it is not a number a browser gets to
+ * assert. The stored figure is this one, which is also what settlement uses.
+ */
+export async function quoteOne(
+  leagueId: string,
+  week: number,
+  matchupId: number,
+): Promise<Quote | null> {
+  const sql = await getSql();
+  const season = String(
+    (await sql<{ season: string }>`select season from ff_leagues where id = ${leagueId}`)[0]
+      ?.season ?? "",
+  );
+  const eng = await import("./engine.server");
+  const pairs = await eng.loadMatchups(leagueId, week);
+  const pair = pairs.find((p) => p.matchupId === matchupId);
+  if (!pair?.away) return null;
+
+  const ids = [...pair.home.starters, ...pair.away.starters]
+    .map((s) => s.playerId)
+    .filter((x): x is string => Boolean(x));
+  const { outlooksFor } = await import("@/lib/data/projections.server");
+  const outlooks = ids.length ? await outlooksFor({ leagueId, season, playerIds: ids }) : {};
+
+  const side = (s: typeof pair.home): PlayerOutlook[] =>
+    s.starters.map((line) => {
+      const o = line.playerId ? outlooks[line.playerId] : undefined;
+      return {
+        playerId: line.playerId ?? "",
+        team: line.player?.team ?? null,
+        position: line.player?.position ?? null,
+        mean: o?.mean ?? 0,
+        sd: o?.sd ?? 0,
+        game: line.game,
+      };
+    });
+
+  return quoteFrom({
+    matchupId: pair.matchupId,
+    homeRoster: pair.home.rosterId,
+    awayRoster: pair.away.rosterId,
+    scores: [pair.home.points, pair.away.points],
+    starters: [side(pair.home), side(pair.away)],
+  });
+}
 
 export async function loadBook(
   leagueId: string,
@@ -170,11 +222,12 @@ export async function loadBook(
     roster_id: number;
     side_roster: number;
     line: number;
+    payout_mult: number;
     stake: number;
     status: string;
     payout: number | null;
   }>`
-    select id, week, matchup_id, kind, roster_id, side_roster, line, stake, status, payout
+    select id, week, matchup_id, kind, roster_id, side_roster, line, payout_mult, stake, status, payout
     from ff_wagers where league_id = ${leagueId}
     order by created_at desc
     limit 200
@@ -188,6 +241,7 @@ export async function loadBook(
     sideRoster: r.side_roster,
     sideName: nameOf.get(r.side_roster) ?? `Roster ${r.side_roster}`,
     line: r.line,
+    mult: r.payout_mult || 1,
     stake: r.stake,
     status: r.status as WagerStatus,
     payout: r.payout,
@@ -205,9 +259,11 @@ export async function loadBook(
 
   /* -------------------------------------------------------------- purse -- */
   const pool = await poolBalance(leagueId);
+  // What the pool could owe, not what was staked — a long shot commits several
+  // times its stake and that is the number solvency turns on.
   const committed = all
     .filter((p) => p.status === "placed")
-    .reduce((t, p) => t + p.stake, 0);
+    .reduce((t, p) => t + Math.floor(p.stake * p.mult), 0);
 
   const budget = league.faab_budget ?? 100;
   let free = 0;

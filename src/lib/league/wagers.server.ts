@@ -35,9 +35,33 @@ export type Quote = {
   /** 0-100, home side. */
   homePct: number;
   awayPct: number;
+  /**
+   * Profit per dollar staked on the moneyline. Backing a long shot pays several
+   * times the stake; backing a heavy favourite pays a fraction of it.
+   */
+  homeMult: number;
+  awayMult: number;
   /** False when there is nothing to price — no projections, or a bye. */
   live: boolean;
 };
+
+/**
+ * Fair odds, with no house edge.
+ *
+ * A wager that pays even money regardless of who you back is not a price, it is
+ * a gift to whoever takes the favourite. The fair profit on a stake is the ratio
+ * of the two outcomes: back something with probability p and you should win
+ * (1 - p) / p per dollar, so a 25% shot pays 3× and a 75% shot pays a third.
+ *
+ * There is deliberately no vig. The pool is funded by losing stakes rather than
+ * by an edge, so taking one would just tax the league to no end.
+ */
+export function payoutMultiplier(probability: number): number {
+  // A 2% shot would otherwise pay 49×, which one lucky week could drain the pool
+  // with. Clamping caps the extreme at 19× and keeps the book solvent.
+  const p = Math.min(0.95, Math.max(0.05, probability));
+  return Math.round(((1 - p) / p) * 100) / 100;
+}
 
 let ready = false;
 
@@ -54,11 +78,13 @@ export async function ensureWagerSchema(): Promise<void> {
       roster_id int not null,
       side_roster int not null,
       line real not null,
+      payout_mult real not null default 1,
       stake int not null,
       status text not null default 'placed',
       payout int,
       created_at timestamptz not null default now(),
       settled_at timestamptz)`,
+    `alter table ff_wagers add column if not exists payout_mult real not null default 1`,
     `create index if not exists ff_wagers_league_week on ff_wagers (league_id, week)`,
     `create table if not exists ff_pool (
       league_id text primary key,
@@ -158,6 +184,8 @@ export function quoteFrom(input: {
     spread: -spread,
     homePct: pct,
     awayPct: 100 - pct,
+    homeMult: payoutMultiplier(wp.probability),
+    awayMult: payoutMultiplier(1 - wp.probability),
     live: wp.marginSd > 0.01,
   };
 }
@@ -229,13 +257,35 @@ export async function placeWager(input: PlaceInput): Promise<{ id: string }> {
     throw new Error(`That would put you over the $${league.exposure_cap} exposure cap.`);
   }
 
+  // Re-quote rather than trusting the browser. The multiplier decides what the
+  // pool owes if this lands, so it is not a number a client gets to assert.
+  let line = input.line;
+  let mult = 1;
+  try {
+    const { quoteOne } = await import("./book.server");
+    const q = await quoteOne(input.leagueId, league.current_week, input.matchupId);
+    if (q) {
+      const home = input.sideRoster === pair.home_roster;
+      if (input.kind === "spread") {
+        // A spread is built to make both sides a coin flip, so it pays even money.
+        line = home ? q.spread : -q.spread;
+        mult = 1;
+      } else {
+        line = 0;
+        mult = home ? q.homeMult : q.awayMult;
+      }
+    }
+  } catch {
+    // No fresh quote available: fall back to what was offered, at even money.
+  }
+
   const id = wid();
   await sql`
     insert into ff_wagers
-      (id, league_id, week, matchup_id, kind, roster_id, side_roster, line, stake, status)
+      (id, league_id, week, matchup_id, kind, roster_id, side_roster, line, payout_mult, stake, status)
     values (
       ${id}, ${input.leagueId}, ${league.current_week}, ${input.matchupId}, ${input.kind},
-      ${mine.roster_id}, ${input.sideRoster}, ${input.line}, ${stake}, ${"placed"}
+      ${mine.roster_id}, ${input.sideRoster}, ${line}, ${mult}, ${stake}, ${"placed"}
     )
   `;
   await recordEvent({
@@ -245,7 +295,7 @@ export async function placeWager(input: PlaceInput): Promise<{ id: string }> {
     actorRoster: mine.roster_id,
     subjectRoster: input.sideRoster,
     amount: stake,
-    payload: { kind: input.kind, line: input.line, matchupId: input.matchupId, backedSelf: inThisGame },
+    payload: { kind: input.kind, line, mult, matchupId: input.matchupId, backedSelf: inThisGame },
   });
   return { id };
 }
@@ -365,9 +415,10 @@ export async function settleWeek(
     roster_id: number;
     side_roster: number;
     line: number;
+    payout_mult: number;
     stake: number;
   }>`
-    select id, matchup_id, kind, roster_id, side_roster, line, stake
+    select id, matchup_id, kind, roster_id, side_roster, line, payout_mult, stake
     from ff_wagers
     where league_id = ${leagueId} and week = ${week} and status = ${"placed"}
   `;
@@ -439,14 +490,17 @@ export async function settleWeek(
     `;
   }
 
-  const owed = winners.reduce((t, w) => t + w.stake, 0);
+  // What a winner is owed is the stake times the odds it was written at, not the
+  // stake back. A long shot that lands is meant to hurt the pool.
+  const due = (w: (typeof wagers)[number]) => Math.floor(w.stake * (w.payout_mult || 1));
+  const owed = winners.reduce((t, w) => t + due(w), 0);
   const { balance } = await poolBalance(leagueId);
   const scaled = owed > balance;
   const ratio = scaled && owed > 0 ? balance / owed : 1;
 
   let paid = 0;
   for (const w of winners) {
-    const payout = Math.floor(w.stake * ratio);
+    const payout = Math.floor(due(w) * ratio);
     if (payout > 0) {
       await sql`
         update ff_rosters set faab_remaining = coalesce(faab_remaining, 0) + ${payout}

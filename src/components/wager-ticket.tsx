@@ -24,6 +24,8 @@ export type TicketTarget = {
   againstName: string;
   /** The quoted number, stored with the wager so settlement cannot drift. */
   line: number;
+  /** Profit per dollar staked. 1 on a spread, which is built to be a coin flip. */
+  mult: number;
   /** What the button said, e.g. "−13.5" or "71%". */
   priceLabel: string;
   ownGame: boolean;
@@ -193,8 +195,12 @@ export function WagerTicket({
                 </StepButton>
               </div>
               <p className="mt-2 text-xs text-faint">
-                Even money. Cap is ${book.caps.wager} a wager, ${book.caps.exposure} at risk at
-                once.
+                {target.mult === 1
+                  ? "Even money — a spread is built to be a coin flip."
+                  : target.mult > 1
+                    ? `Pays ${target.mult}× your stake. You are taking the underdog.`
+                    : `Pays ${target.mult}× your stake. You are taking the favourite.`}{" "}
+                Cap is ${book.caps.wager} a wager, ${book.caps.exposure} at risk at once.
               </p>
             </section>
           </div>
@@ -203,7 +209,11 @@ export function WagerTicket({
             <dl className="mb-3">
               <Line k="FAAB free" v={`$${free}`} />
               <Line k="This stake" v={`−$${stake ?? 0}`} />
-              <Line k="Pays if it lands" v={`+$${stake ?? 0}`} tone="win" />
+              <Line
+                k="Pays if it lands"
+                v={`+$${Math.floor((stake ?? 0) * target.mult)}`}
+                tone="win"
+              />
               <Line
                 k="Left for waivers"
                 v={`$${Math.max(0, left)}`}
