@@ -1,4 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import type { LucideIcon } from "lucide-react";
 import { Radio, Trophy, UserRound } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SignedIn, SignedOut, UserButton } from "@/lib/auth/gates";
@@ -6,7 +7,28 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { useLeagueStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
-export function Shell({ children }: { children: React.ReactNode }) {
+export type ShellTab = {
+  key: string;
+  label: string;
+  href: string;
+  active: boolean;
+  Icon: LucideIcon;
+};
+
+export function Shell({
+  children,
+  tabs,
+  trailing,
+}: {
+  children: React.ReactNode;
+  /**
+   * Destinations for this context. Rendered as header links on desktop and as
+   * the thumb bar on mobile, from one definition so the two cannot drift.
+   */
+  tabs?: ShellTab[];
+  /** Extra header control, e.g. the league setup gear. */
+  trailing?: React.ReactNode;
+}) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const recent = useLeagueStore((s) => s.recent);
   const league = recent[0];
@@ -27,29 +49,47 @@ export function Shell({ children }: { children: React.ReactNode }) {
               Ledger
             </span>
           </Link>
-          <nav className="hidden items-center gap-1 md:flex">
-            {league ? (
+          {tabs?.length ? (
+            <nav className="hidden min-w-0 items-center gap-0.5 overflow-x-auto md:flex">
+              {tabs.map((t) => (
+                <a
+                  key={t.key}
+                  href={t.href}
+                  className={cn(
+                    "shrink-0 rounded-pill px-3.5 py-2 text-sm font-semibold transition-colors duration-150",
+                    t.active ? "bg-fg text-bg" : "text-muted hover:bg-raised hover:text-fg",
+                  )}
+                >
+                  {t.label}
+                </a>
+              ))}
+              {trailing}
+            </nav>
+          ) : (
+            <nav className="hidden items-center gap-1 md:flex">
+              {league ? (
+                <Link
+                  to="/league/$leagueId"
+                  params={{ leagueId: league.leagueId }}
+                  className={cn(
+                    "rounded-pill px-3.5 py-2 text-sm font-medium transition-colors duration-150",
+                    inLeague ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg",
+                  )}
+                >
+                  {league.name}
+                </Link>
+              ) : null}
               <Link
-                to="/league/$leagueId"
-                params={{ leagueId: league.leagueId }}
+                to="/scores"
                 className={cn(
                   "rounded-pill px-3.5 py-2 text-sm font-medium transition-colors duration-150",
-                  inLeague ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg",
+                  inScores ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg",
                 )}
               >
-                {league.name}
+                Scores
               </Link>
-            ) : null}
-            <Link
-              to="/scores"
-              className={cn(
-                "rounded-pill px-3.5 py-2 text-sm font-medium transition-colors duration-150",
-                inScores ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg",
-              )}
-            >
-              Scores
-            </Link>
-          </nav>
+            </nav>
+          )}
           <div className="ml-auto flex items-center gap-2">
             <ThemeToggle />
             {isPending ? (
@@ -76,63 +116,84 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-6 md:pb-12">{children}</main>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/95 backdrop-blur-md md:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-3 px-2 pb-[env(safe-area-inset-bottom)]">
-          {league ? (
-            <Link
-              to="/league/$leagueId"
-              params={{ leagueId: league.leagueId }}
-              className={cn(
-                "mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium transition-colors duration-150",
-                inLeague ? "bg-raised text-fg" : "text-faint",
-              )}
-            >
-              <Trophy className="size-4" strokeWidth={1.75} />
-              League
-            </Link>
-          ) : (
-            <Link
-              to="/"
-              className={cn(
-                "mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium transition-colors duration-150",
-                pathname === "/" ? "bg-raised text-fg" : "text-faint",
-              )}
-            >
-              <Trophy className="size-4" strokeWidth={1.75} />
-              Home
-            </Link>
-          )}
-          <Link
-            to="/scores"
-            className={cn(
-              "mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium transition-colors duration-150",
-              inScores ? "bg-raised text-fg" : "text-faint",
-            )}
+        {tabs?.length ? (
+          <div
+            className="mx-auto grid max-w-lg px-2 pb-[env(safe-area-inset-bottom)]"
+            style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
           >
-            <Radio className="size-4" strokeWidth={1.75} />
-            Scores
-          </Link>
-          <SignedIn>
+            {tabs.map((t) => (
+              <a
+                key={t.key}
+                href={t.href}
+                className={cn(
+                  "mx-0.5 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[10.5px] font-medium transition-colors duration-150",
+                  t.active ? "bg-raised text-fg" : "text-faint",
+                )}
+              >
+                <t.Icon className="size-4" strokeWidth={1.9} />
+                <span className="max-w-full truncate px-1">{t.label}</span>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <div className="mx-auto grid max-w-lg grid-cols-3 px-2 pb-[env(safe-area-inset-bottom)]">
+            {league ? (
+              <Link
+                to="/league/$leagueId"
+                params={{ leagueId: league.leagueId }}
+                className={cn(
+                  "mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium transition-colors duration-150",
+                  inLeague ? "bg-raised text-fg" : "text-faint",
+                )}
+              >
+                <Trophy className="size-4" strokeWidth={1.75} />
+                League
+              </Link>
+            ) : (
+              <Link
+                to="/"
+                className={cn(
+                  "mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium transition-colors duration-150",
+                  pathname === "/" ? "bg-raised text-fg" : "text-faint",
+                )}
+              >
+                <Trophy className="size-4" strokeWidth={1.75} />
+                Home
+              </Link>
+            )}
             <Link
-              to="/join"
+              to="/scores"
               className={cn(
                 "mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium transition-colors duration-150",
-                pathname === "/join" ? "bg-raised text-fg" : "text-faint",
+                inScores ? "bg-raised text-fg" : "text-faint",
               )}
             >
-              <UserRound className="size-4" strokeWidth={1.75} />
-              Join
+              <Radio className="size-4" strokeWidth={1.75} />
+              Scores
             </Link>
-          </SignedIn>
-          <SignedOut>
-            <Link
-              to="/login"
-              className="mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium text-faint"
-            >
-              <UserRound className="size-4" strokeWidth={1.75} />
-              Sign in
-            </Link>
-          </SignedOut>
-        </div>
+            <SignedIn>
+              <Link
+                to="/join"
+                className={cn(
+                  "mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium transition-colors duration-150",
+                  pathname === "/join" ? "bg-raised text-fg" : "text-faint",
+                )}
+              >
+                <UserRound className="size-4" strokeWidth={1.75} />
+                Join
+              </Link>
+            </SignedIn>
+            <SignedOut>
+              <Link
+                to="/login"
+                className="mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium text-faint"
+              >
+                <UserRound className="size-4" strokeWidth={1.75} />
+                Sign in
+              </Link>
+            </SignedOut>
+          </div>
+        )}
       </nav>
     </div>
   );
