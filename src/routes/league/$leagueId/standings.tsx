@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { Avatar } from "@/components/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getActivity, getLeagueBundle, getMatchups, getRecap } from "@/lib/data/fns";
+import type { LeagueBundle } from "@/lib/data/types";
 import { getTrades } from "@/lib/league/fns";
 import { cn, fmtRecord, formatPts } from "@/lib/utils";
 
@@ -312,37 +314,6 @@ function LeaguePage() {
 
         <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
           <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
-            <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Seats</h2>
-            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
-              {league.data.standings.length} teams
-            </span>
-          </header>
-          <ul>
-            {league.data.standings.slice(0, 5).map((row) => (
-              <li
-                key={row.rosterId}
-                className="flex items-center gap-3 border-b border-line px-5 py-2.5 last:border-0"
-              >
-                <Avatar src={row.avatar} name={row.teamName} className="size-7" tint />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{row.teamName}</span>
-                  <span className="block truncate font-mono text-[10px] text-faint">
-                    {row.manager}
-                  </span>
-                </span>
-                {row.rosterId === mine ? <Badge tone="win">You</Badge> : null}
-              </li>
-            ))}
-          </ul>
-          {league.data.inviteCode ? (
-            <p className="px-5 py-3 font-mono text-[11px] text-faint">
-              Invite {league.data.inviteCode}
-            </p>
-          ) : null}
-        </section>
-
-        <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
-          <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
             <h2 className="font-display text-lg font-bold tracking-[-0.03em]">House rules</h2>
             <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
               Read only
@@ -358,14 +329,12 @@ function LeaguePage() {
                   v={ops.waiverType === "faab" ? `FAAB $${ops.faabBudget}` : "Rolling order"}
                 />
                 <Rule k="Trade deadline" v={`Week ${ops.tradeDeadlineWeek}`} />
-                <Rule
-                  k="Playoffs"
-                  v={`Top ${playoff} · wk ${ops.playoffStartWeek}`}
-                />
+                <Rule k="Playoffs" v={`Top ${playoff} · wk ${ops.playoffStartWeek}`} />
               </>
             ) : null}
           </dl>
-          <div className="px-5 py-3">
+          {league.data.lineup ? <LineupRule lineup={league.data.lineup} /> : null}
+          <div className="border-t border-line px-5 py-3">
             <Link
               to="/league/$leagueId/settings"
               params={{ leagueId }}
@@ -383,8 +352,59 @@ function LeaguePage() {
 function Rule({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-2.5 last:border-0">
-      <dt className="text-sm text-muted">{k}</dt>
-      <dd className="font-mono text-sm font-medium">{v}</dd>
+      <dt className="shrink-0 text-sm text-muted">{k}</dt>
+      <dd className="truncate font-mono text-sm font-medium">{v}</dd>
+    </div>
+  );
+}
+
+/** How many slot chips fit before the row starts looking like a paragraph. */
+const CHIP_BUDGET = 7;
+
+/**
+ * The starting lineup is a list, not a value.
+ *
+ * Printed as one key/value row it wrapped to three mono lines and made the whole
+ * card read as crowded. As its own block of chips it scans in one pass, and a
+ * deep roster (superflex, 2QB) folds the tail behind a count instead of growing
+ * the card.
+ */
+function LineupRule({ lineup }: { lineup: NonNullable<LeagueBundle["lineup"]> }) {
+  const [open, setOpen] = useState(false);
+  // Hiding a single chip behind a "+1 more" costs more room than the chip did.
+  const over = lineup.starters.length - CHIP_BUDGET;
+  const hidden = over > 1 ? over : 0;
+  const shown = open || hidden === 0 ? lineup.starters : lineup.starters.slice(0, CHIP_BUDGET);
+
+  return (
+    <div className="border-t border-line px-5 py-3.5">
+      <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+        Starting lineup
+      </span>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {shown.map((s) => (
+          <span
+            key={s.key}
+            className="rounded-pill bg-raised px-2 py-1 font-mono text-[11px] font-medium"
+          >
+            {s.count > 1 ? `${s.count} ` : ""}
+            {s.label}
+          </span>
+        ))}
+        {hidden > 0 ? (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="rounded-pill px-2 py-1 font-mono text-[11px] font-medium text-accent-strong transition-colors duration-150 hover:bg-raised"
+          >
+            {open ? "Less" : `+${hidden} more`}
+          </button>
+        ) : null}
+      </div>
+      <p className="mt-2 font-mono text-[11px] text-faint">
+        {lineup.startCount} starters &middot; {lineup.bench} bench
+        {lineup.ir > 0 ? ` · ${lineup.ir} IR` : ""}
+      </p>
     </div>
   );
 }
