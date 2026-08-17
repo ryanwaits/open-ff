@@ -115,6 +115,13 @@ export type LeagueBundle = {
   currentWeek: number;
   scoringLabel: string;
   formatLabel: string;
+  /** Starting slots broken out, so the rules card can lay them out rather than print one long line. */
+  lineup?: {
+    starters: { key: string; label: string; count: number }[];
+    bench: number;
+    ir: number;
+    startCount: number;
+  } | null;
   hosted: boolean;
   myRosterId: number | null;
   isCommish: boolean;

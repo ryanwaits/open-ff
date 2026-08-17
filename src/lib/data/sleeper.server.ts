@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slotBreakdown } from "@/lib/league/roster";
 import { sleeperAvatar, slotLabel, START_SLOTS } from "./teams";
 import type {
   ActivityItem,
@@ -312,6 +313,7 @@ export async function loadLeagueBundle(leagueId: string): Promise<LeagueBundle> 
         : Math.max(1, scored || 1),
     scoringLabel: scoringLabel(league.scoring_settings ?? {}),
     formatLabel: formatLabel(league),
+    lineup: league.roster_positions?.length ? slotBreakdown(league.roster_positions) : null,
     hosted: false,
     myRosterId: null,
     isCommish: false,

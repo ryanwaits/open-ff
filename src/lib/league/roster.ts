@@ -108,6 +108,35 @@ export function describeSlots(slots: string[]): string {
   return parts.join(" · ");
 }
 
+/**
+ * The same information as {@link describeSlots}, but still in pieces.
+ *
+ * A joined string has to be re-parsed or wrapped as one long run to be shown,
+ * which is what made the house-rules card crowded. Handing the caller the parts
+ * lets it lay them out as chips, a table, or a truncated list as it likes.
+ */
+export function slotBreakdown(slots: string[]): {
+  starters: { key: SlotKey; label: string; count: number }[];
+  bench: number;
+  ir: number;
+  /** Total bodies that start each week. */
+  startCount: number;
+} {
+  const counts = countsFromSlots(slots);
+  const starters: { key: SlotKey; label: string; count: number }[] = [];
+  for (const row of SLOT_STEPPERS) {
+    if (!row.starter) continue;
+    const n = counts[row.key];
+    if (n) starters.push({ key: row.key, label: row.label, count: n });
+  }
+  return {
+    starters,
+    bench: counts.BN,
+    ir: counts.IR,
+    startCount: starters.reduce((t, s) => t + s.count, 0),
+  };
+}
+
 export function labeledStartSlots(slots: string[]): { key: string; label: string }[] {
   const seen: Record<string, number> = {};
   return slots

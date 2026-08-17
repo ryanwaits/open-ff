@@ -23,7 +23,7 @@ import {
   scoringLabel,
 } from "./scoring";
 import { clampPlayoffByes, defaultPlayoffByes, playoffRoundLabel } from "./playoffs";
-import { describeSlots, invertSlotKey, labeledStartSlots, normalizeSlots } from "./roster";
+import { invertSlotKey, labeledStartSlots, normalizeSlots, slotBreakdown } from "./roster";
 
 export const DEMO_HOSTED_ID = "lg_backyard";
 var DEFAULT_SLOTS = [
@@ -505,7 +505,8 @@ export async function loadLeagueBundle(leagueId: string, userId: string | null, 
 		standings,
 		currentWeek: row.current_week,
 		scoringLabel: scoringLabel(bookOf(row)),
-		formatLabel: `Redraft · ${row.team_count}-team · ${describeSlots(parseSlots(row.roster_slots))}`,
+		formatLabel: `Redraft · ${row.team_count}-team`,
+		lineup: slotBreakdown(parseSlots(row.roster_slots)),
 		hosted: true,
 		myRosterId: mine,
 		isCommish: Boolean(userId && row.commish_id === userId),
