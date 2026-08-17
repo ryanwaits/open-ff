@@ -1,4 +1,5 @@
 import { getSql } from "@/lib/db";
+import { recordEvent } from "./events.server";
 import { getPlayer, playerName } from "@/lib/data/sleeper.server";
 import {
   clampPlayoffByes,
@@ -214,6 +215,15 @@ export async function requestAdd(
         ${addId}, ${dropId}, ${amount}, ${"pending"}
       )
     `;
+    await recordEvent({
+      leagueId,
+      week: league.current_week,
+      kind: "claim_filed",
+      actorRoster: mine.roster_id,
+      playerId: addId,
+      amount,
+      payload: { dropPlayerId: dropId, waiverType: league.waiver_type ?? "faab" },
+    });
     return { mode: "claim" };
   }
   await applyAddDrop(leagueId, mine.roster_id, addId, dropId, "free_agent", null);
@@ -245,6 +255,29 @@ async function applyAddDrop(
     insert into ff_moves (id, league_id, week, roster_id, type, add_player_id, drop_player_id, bid)
     values (${nid("mv_", 12)}, ${leagueId}, ${league.current_week}, ${rosterId}, ${type}, ${addId}, ${dropId}, ${bid})
   `;
+
+  // Every roster change funnels through here, so the ledger only has to be
+  // wired once to catch adds by any route. The drop is its own event because a
+  // player leaving a roster is a story on its own, not a footnote on an add.
+  await recordEvent({
+    leagueId,
+    week: league.current_week,
+    kind: type === "waiver" ? "claim_won" : "free_agent_add",
+    actorRoster: rosterId,
+    playerId: addId,
+    amount: bid,
+    payload: { dropPlayerId: dropId, via: type },
+  });
+  if (dropId) {
+    await recordEvent({
+      leagueId,
+      week: league.current_week,
+      kind: "drop",
+      actorRoster: rosterId,
+      playerId: dropId,
+      payload: { forPlayerId: addId, via: type },
+    });
+  }
 }
 
 export async function cancelClaim(userId: string, leagueId: string, claimId: string): Promise<void> {
@@ -259,6 +292,14 @@ export async function cancelClaim(userId: string, leagueId: string, claimId: str
   if (!row[0] || row[0].status !== "pending") throw new Error("Claim is gone.");
   if (row[0].roster_id !== mine.roster_id) throw new Error("Not your claim.");
   await sql`update ff_claims set status = ${"cancelled"} where id = ${claimId}`;
+  const league = await leagueOf(leagueId);
+  await recordEvent({
+    leagueId,
+    week: league.current_week,
+    kind: "claim_pulled",
+    actorRoster: mine.roster_id,
+    payload: { claimId },
+  });
 }
 
 export async function processWaivers(leagueId: string, week?: number): Promise<{ awarded: number }> {
@@ -309,6 +350,17 @@ export async function processWaivers(leagueId: string, week?: number): Promise<{
     const cash = purse.get(c.roster_id) ?? 0;
     if (taken[0] || c.bid > cash) {
       await sql`update ff_claims set status = ${"lost"} where id = ${c.id}`;
+      // Why it lost is the interesting part and no table keeps it: outbid by
+      // someone earlier in this same loop, or short the money by Wednesday.
+      await recordEvent({
+        leagueId,
+        week: w,
+        kind: "claim_lost",
+        actorRoster: c.roster_id,
+        playerId: c.add_player_id,
+        amount: c.bid,
+        payload: { reason: taken[0] ? "outbid" : "short", had: cash },
+      });
       continue;
     }
     if (c.drop_player_id) {
@@ -318,6 +370,15 @@ export async function processWaivers(leagueId: string, week?: number): Promise<{
       `;
       if (!own[0]) {
         await sql`update ff_claims set status = ${"lost"} where id = ${c.id}`;
+        await recordEvent({
+          leagueId,
+          week: w,
+          kind: "claim_lost",
+          actorRoster: c.roster_id,
+          playerId: c.add_player_id,
+          amount: c.bid,
+          payload: { reason: "drop-gone", dropPlayerId: c.drop_player_id },
+        });
         continue;
       }
     }
@@ -433,6 +494,23 @@ export async function proposeTrade(
     insert into ff_trades (id, league_id, week, status, proposer_roster)
     values (${id}, ${leagueId}, ${league.current_week}, ${"proposed"}, ${mine.roster_id})
   `;
+  await recordEvent({
+    leagueId,
+    week: league.current_week,
+    kind: "trade_proposed",
+    actorRoster: mine.roster_id,
+    payload: {
+      tradeId: id,
+      sides: [...sides],
+      assets: assets.map((a) => ({
+        kind: a.kind,
+        from: a.fromRoster,
+        to: a.toRoster,
+        playerId: a.playerId ?? null,
+        pickNo: a.pickNo ?? null,
+      })),
+    },
+  });
   for (const roster of sides) {
     await sql`
       insert into ff_trade_sides (trade_id, roster_id, accepted)
@@ -476,6 +554,14 @@ export async function voteTrade(
   if (!accept) {
     if (!mySide[0] && !isCommish) throw new Error("You're not in this trade.");
     await sql`update ff_trades set status = ${"rejected"}, resolved_at = ${new Date().toISOString()} where id = ${tradeId}`;
+    await recordEvent({
+      leagueId,
+      week: (await leagueOf(leagueId)).current_week,
+      kind: "trade_rejected",
+      actorRoster: mine?.roster_id ?? null,
+      subjectRoster: trade.proposer_roster,
+      payload: { tradeId, byCommish: isCommish },
+    });
     return;
   }
   if (mySide[0] && mine) {
@@ -516,6 +602,13 @@ export async function cancelTrade(userId: string, leagueId: string, tradeId: str
   if (trade.status !== "proposed") throw new Error("Already settled.");
   if (trade.proposer_roster !== mine.roster_id) throw new Error("Only the proposer can pull it.");
   await sql`update ff_trades set status = ${"cancelled"}, resolved_at = ${new Date().toISOString()} where id = ${tradeId}`;
+  await recordEvent({
+    leagueId,
+    week: (await leagueOf(leagueId)).current_week,
+    kind: "trade_cancelled",
+    actorRoster: mine?.roster_id ?? null,
+    payload: { tradeId },
+  });
 }
 
 async function executeTrade(leagueId: string, tradeId: string): Promise<void> {
@@ -551,6 +644,22 @@ async function executeTrade(leagueId: string, tradeId: string): Promise<void> {
     }
   }
   await sql`update ff_trades set status = ${"processed"}, resolved_at = ${new Date().toISOString()} where id = ${tradeId}`;
+  await recordEvent({
+    leagueId,
+    week: league.current_week,
+    kind: "trade_accepted",
+    actorRoster: null,
+    payload: {
+      tradeId,
+      assets: assets.map((a) => ({
+        kind: a.kind,
+        from: a.from_roster,
+        to: a.to_roster,
+        playerId: a.player_id ?? null,
+        pickNo: a.pick_no ?? null,
+      })),
+    },
+  });
 }
 
 export async function listTrades(leagueId: string) {
