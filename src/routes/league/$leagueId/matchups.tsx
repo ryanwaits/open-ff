@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { MatchupEdge } from "@/components/matchup-edge";
 import { PlayerCell } from "@/components/player-cell";
 import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
@@ -224,13 +225,22 @@ function MatchupsPage() {
     return applyReplayPairs(seededPairs, week, phase - 1, finals);
   }, [seededPairs, phase, week, finals]);
 
-  // Your game is the page; the rest of the slate is context underneath it.
+  // The page shows one matchup at a time. Yours is the default, but every game
+  // in the week is one tap or one arrow key away.
   const mineRosterId = league.data?.myRosterId ?? null;
   const myIndex = shown.findIndex(
     (p) => p.home.rosterId === mineRosterId || p.away?.rosterId === mineRosterId,
   );
-  const myPair = myIndex >= 0 ? shown[myIndex] : null;
-  const rest = shown.filter((_, i) => i !== myIndex);
+  const focusIndex = shown.findIndex((p) => p.matchupId === search.focus);
+  const defaultIndex = focusIndex >= 0 ? focusIndex : myIndex >= 0 ? myIndex : 0;
+  const [picked, setPicked] = useState<number | null>(null);
+  const selected = picked != null && picked < shown.length ? picked : defaultIndex;
+  const pair = shown[selected] ?? null;
+
+  function move(delta: number) {
+    if (!shown.length) return;
+    setPicked((selected + delta + shown.length) % shown.length);
+  }
 
   const weekLive = (matchups.data ?? []).some(pairingIsLive);
   const canReplay = !weekLive;
@@ -304,19 +314,116 @@ function MatchupsPage() {
         </div>
       ) : (
         <div className="space-y-5">
-          {myPair ? (
+          {shown.length > 1 ? (
+            <div
+              role="tablist"
+              aria-label="Matchups this week"
+              onKeyDown={(e) => {
+                if (e.key === "ArrowRight") {
+                  e.preventDefault();
+                  move(1);
+                } else if (e.key === "ArrowLeft") {
+                  e.preventDefault();
+                  move(-1);
+                }
+              }}
+              className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1"
+            >
+              {shown.map((p, i) => {
+                const on = i === selected;
+                const homeLeads = !p.away || p.home.points >= p.away.points;
+                const decided = p.home.points > 0 || (p.away?.points ?? 0) > 0;
+                const yours =
+                  p.home.rosterId === mineRosterId || p.away?.rosterId === mineRosterId;
+                return (
+                  <button
+                    key={p.matchupId}
+                    type="button"
+                    role="tab"
+                    aria-selected={on}
+                    tabIndex={on ? 0 : -1}
+                    onClick={() => setPicked(i)}
+                    className={cn(
+                      "w-44 shrink-0 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150",
+                      on
+                        ? "border-line-strong bg-surface shadow-[var(--shadow-lift)]"
+                        : "border-line bg-transparent hover:bg-surface",
+                    )}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="truncate font-mono text-[9px] uppercase tracking-[0.12em] text-faint">
+                        {yours ? "Your game" : `Game ${i + 1}`}
+                      </span>
+                      {pairingIsLive(p) ? (
+                        <span className="size-1.5 shrink-0 rounded-pill bg-live" />
+                      ) : null}
+                    </span>
+                    <span className="mt-1.5 flex items-baseline justify-between gap-2">
+                      <span className="min-w-0 flex-1 truncate text-[13px]">
+                        <span className={homeLeads && decided ? "font-semibold" : "text-muted"}>
+                          {p.home.teamName}
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-mono text-xs tabular-nums">
+                        {formatPts(p.home.points, 1)}
+                      </span>
+                    </span>
+                    <span className="mt-0.5 flex items-baseline justify-between gap-2">
+                      <span className="min-w-0 flex-1 truncate text-[13px]">
+                        <span className={!homeLeads && decided ? "font-semibold" : "text-muted"}>
+                          {p.away?.teamName ?? "Bye"}
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-mono text-xs tabular-nums">
+                        {formatPts(p.away?.points ?? 0, 1)}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {pair ? (
             <>
               <article className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)] sm:p-5">
-                {myPair.label ? (
+                {pair.label ? (
                   <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-live">
-                    {myPair.label}
+                    {pair.label}
                   </p>
                 ) : null}
-                <div className="mb-4 flex items-baseline justify-between gap-3">
-                  <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Your matchup</h2>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-1">
+                    {shown.length > 1 ? (
+                      <button
+                        type="button"
+                        aria-label="Previous matchup"
+                        onClick={() => move(-1)}
+                        className="grid size-8 place-items-center rounded-pill border border-line text-faint hover:bg-raised hover:text-fg"
+                      >
+                        <ChevronLeft className="size-4" strokeWidth={2} />
+                      </button>
+                    ) : null}
+                    <h2 className="px-1 font-display text-lg font-bold tracking-[-0.03em]">
+                      {pair.home.rosterId === mineRosterId ||
+                      pair.away?.rosterId === mineRosterId
+                        ? "Your matchup"
+                        : `${pair.home.teamName} vs ${pair.away?.teamName ?? "Bye"}`}
+                    </h2>
+                    {shown.length > 1 ? (
+                      <button
+                        type="button"
+                        aria-label="Next matchup"
+                        onClick={() => move(1)}
+                        className="grid size-8 place-items-center rounded-pill border border-line text-faint hover:bg-raised hover:text-fg"
+                      >
+                        <ChevronRight className="size-4" strokeWidth={2} />
+                      </button>
+                    ) : null}
+                  </div>
                   <Link
                     to="/league/$leagueId/matchup/$week/$matchupId"
-                    params={{ leagueId, week: String(week), matchupId: String(myPair.matchupId) }}
+                    params={{ leagueId, week: String(week), matchupId: String(pair.matchupId) }}
                     className="font-mono text-[11px] uppercase tracking-wide text-accent-strong"
                   >
                     Full box score
@@ -324,16 +431,16 @@ function MatchupsPage() {
                 </div>
                 <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                   <SideCol
-                    side={myPair.home}
-                    prev={prevShown?.[myIndex]?.home ?? null}
+                    side={pair.home}
+                    prev={prevShown?.[selected]?.home ?? null}
                     leagueId={leagueId}
                     stats={finals}
                     onPlayer={openPlayer}
                   />
-                  {myPair.away ? (
+                  {pair.away ? (
                     <SideCol
-                      side={myPair.away}
-                      prev={prevShown?.[myIndex]?.away ?? null}
+                      side={pair.away}
+                      prev={prevShown?.[selected]?.away ?? null}
                       leagueId={leagueId}
                       stats={finals}
                       onPlayer={openPlayer}
@@ -344,67 +451,12 @@ function MatchupsPage() {
                 </div>
               </article>
               <MatchupEdge
-                pair={myPair}
+                pair={pair}
                 leagueId={leagueId}
                 season={league.data?.league.season ?? ""}
                 mine={mineRosterId}
               />
             </>
-          ) : null}
-
-          {rest.length ? (
-            <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
-              <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
-                <h2 className="font-display text-lg font-bold tracking-[-0.03em]">
-                  {myPair ? "Rest of the slate" : "Week " + week}
-                </h2>
-                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
-                  {rest.length} {rest.length === 1 ? "game" : "games"}
-                </span>
-              </header>
-              <ul>
-                {rest.map((pair) => {
-                  const homeLeads = !pair.away || pair.home.points >= pair.away.points;
-                  const decided = pair.home.points > 0 || (pair.away?.points ?? 0) > 0;
-                  return (
-                    <li key={pair.matchupId}>
-                      <Link
-                        to="/league/$leagueId/matchup/$week/$matchupId"
-                        params={{
-                          leagueId,
-                          week: String(week),
-                          matchupId: String(pair.matchupId),
-                        }}
-                        className={cn(
-                          "flex items-center gap-3 border-b border-line px-5 py-3 last:border-0 hover:bg-raised",
-                          search.focus === pair.matchupId && "bg-raised",
-                        )}
-                      >
-                        <span className="min-w-0 flex-1 truncate text-sm">
-                          <span className={homeLeads && decided ? "font-semibold" : "text-muted"}>
-                            {pair.home.teamName}
-                          </span>
-                        </span>
-                        <span className="shrink-0 font-mono text-sm tabular-nums">
-                          <span className={homeLeads && decided ? "font-semibold" : "text-muted"}>
-                            {formatPts(pair.home.points, 1)}
-                          </span>
-                          <span className="mx-1.5 text-faint">–</span>
-                          <span className={!homeLeads && decided ? "font-semibold" : "text-muted"}>
-                            {formatPts(pair.away?.points ?? 0, 1)}
-                          </span>
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-right text-sm">
-                          <span className={!homeLeads && decided ? "font-semibold" : "text-muted"}>
-                            {pair.away?.teamName ?? "Bye"}
-                          </span>
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
           ) : null}
 
           {shown.length === 0 ? (
