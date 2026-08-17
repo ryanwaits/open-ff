@@ -15,6 +15,7 @@ import {
   slotsFromCounts,
   type SlotCounts,
 } from "@/lib/league/roster";
+import { getLeagueBundle } from "@/lib/data/fns";
 import { claimRoster, getSettings, saveSettings, processWaivers, advanceWeek } from "@/lib/league/fns";
 import { defaultPlayoffByes, describeBracket } from "@/lib/league/playoffs";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,11 @@ function SettingsPage() {
   const q = useQuery({
     queryKey: ["settings", leagueId],
     queryFn: () => getSettings({ data: { leagueId } }),
+  });
+  // Already cached by the league layout, so this costs nothing.
+  const bundle = useQuery({
+    queryKey: ["league", leagueId],
+    queryFn: () => getLeagueBundle({ data: { leagueId } }),
   });
   const [name, setName] = useState("");
   const [book, setBook] = useState<ScoringBook>({});
@@ -122,6 +128,35 @@ function SettingsPage() {
 
   return (
     <div className="max-w-3xl space-y-10">
+      <header>
+        <h1 className="font-display text-3xl font-extrabold tracking-[-0.03em]">League setup</h1>
+        <p className="mt-1.5 text-sm text-muted">
+          {q.data.isCommish
+            ? "You run this league. Everything here is yours to change."
+            : "Read-only. Your commissioner can change these."}
+        </p>
+      </header>
+
+      {/* The draft lives here rather than in the tab bar: it happens once, and
+          on the night it matters it deserves the whole screen, not a tab. */}
+      <Link
+        to="/league/$leagueId/draft"
+        params={{ leagueId }}
+        className="flex items-center justify-between gap-4 rounded-xl bg-surface px-5 py-4 shadow-[var(--shadow-border)] transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-border-hover)]"
+      >
+        <span>
+          <span className="block font-display text-lg font-bold tracking-[-0.03em]">Draft room</span>
+          <span className="mt-0.5 block text-sm text-muted">
+            {bundle.data?.draftStatus === "live"
+              ? "Live now. Somebody is on the clock."
+              : bundle.data?.draftStatus === "complete"
+                ? "Complete. Open the board to review it."
+                : "Not started yet."}
+          </span>
+        </span>
+        <span className="font-mono text-[11px] uppercase tracking-wide text-accent-strong">Open</span>
+      </Link>
+
       <section>
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
           {q.data.source === "sleeper" ? "Imported from Sleeper" : "Hosted on Ledger"}
@@ -138,8 +173,8 @@ function SettingsPage() {
           />
         </label>
         <div className="mt-4 flex flex-wrap gap-6">
-          <label>
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+          <label className="block">
+            <span className="block font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
               Current week
             </span>
             <Input

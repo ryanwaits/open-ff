@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Avatar } from "@/components/avatar";
 import { PlayerCell } from "@/components/player-cell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { getLeagueBundle, getTeam } from "@/lib/data/fns";
 import type { RosterPlayer } from "@/lib/data/types";
 import { sitPlayer, startPlayer } from "@/lib/league/fns";
 import { labeledStartSlots, slotAccepts } from "@/lib/league/roster";
-import { cn, fmtRecord, formatPts, initials } from "@/lib/utils";
+import { cn, fmtRecord, formatPts } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$leagueId/team/$rosterId")({
   component: TeamPage,
@@ -37,8 +38,10 @@ function TeamPage() {
     refetchInterval: () => (league.data?.scoringLive ? 15_000 : false),
   });
 
-  const mine =
-    league.data?.hosted && league.data.myRosterId === Number(rosterId) && !league.data.locked;
+  // Lineup editing lives on My Team now, so this page is a read-only view of
+  // anybody's roster including your own. One editing surface, not two.
+  const isMine = league.data?.myRosterId === Number(rosterId);
+  const mine = false as boolean;
 
   function invalidate() {
     setPending(null);
@@ -94,13 +97,13 @@ function TeamPage() {
   return (
     <div>
       <div className="flex items-center gap-4">
-        <span className="grid size-14 place-items-center overflow-hidden rounded-full bg-raised text-lg">
-          {team.data.avatar ? (
-            <img src={team.data.avatar} alt="" className="size-full object-cover" />
-          ) : (
-            initials(team.data.teamName)
-          )}
-        </span>
+        <Avatar
+          src={team.data.avatar}
+          name={team.data.teamName}
+          className="size-14"
+          textClassName="text-base"
+          tint
+        />
         <div>
           <h2 className="font-display text-3xl tracking-tight">{team.data.teamName}</h2>
           <p className="text-sm text-muted">
@@ -108,8 +111,14 @@ function TeamPage() {
             {fmtRecord(team.data.record.wins, team.data.record.losses, team.data.record.ties)} ·{" "}
             {formatPts(team.data.record.pf, 1)} PF
           </p>
-          {mine && !pending ? (
-            <p className="mt-1 text-xs text-faint">Sit or start, then tap who they replace.</p>
+          {isMine ? (
+            <Link
+              to="/league/$leagueId"
+              params={{ leagueId }}
+              className="mt-2 inline-flex h-9 items-center rounded-pill bg-raised px-4 text-[13px] font-semibold hover:bg-line"
+            >
+              Set your lineup
+            </Link>
           ) : null}
         </div>
       </div>

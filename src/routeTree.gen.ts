@@ -27,8 +27,10 @@ import { Route as LeagueLeagueIdDraftRouteImport } from './routes/league/$league
 import { Route as LeagueLeagueIdMatchupsRouteImport } from './routes/league/$leagueId/matchups'
 import { Route as LeagueLeagueIdRecapRouteImport } from './routes/league/$leagueId/recap'
 import { Route as LeagueLeagueIdSettingsRouteImport } from './routes/league/$leagueId/settings'
+import { Route as LeagueLeagueIdStandingsRouteImport } from './routes/league/$leagueId/standings'
 import { Route as LeagueLeagueIdTradesRouteImport } from './routes/league/$leagueId/trades'
 import { Route as LeagueLeagueIdWireRouteImport } from './routes/league/$leagueId/wire'
+import { Route as LeagueLeagueIdPlayerPlayerIdRouteImport } from './routes/league/$leagueId/player/$playerId'
 import { Route as LeagueLeagueIdTeamRosterIdRouteImport } from './routes/league/$leagueId/team/$rosterId'
 import { Route as LeagueLeagueIdMatchupWeekMatchupIdRouteImport } from './routes/league/$leagueId/matchup/$week/$matchupId'
 
@@ -122,6 +124,11 @@ const LeagueLeagueIdSettingsRoute = LeagueLeagueIdSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => LeagueLeagueIdRoute,
 } as any)
+const LeagueLeagueIdStandingsRoute = LeagueLeagueIdStandingsRouteImport.update({
+  id: '/standings',
+  path: '/standings',
+  getParentRoute: () => LeagueLeagueIdRoute,
+} as any)
 const LeagueLeagueIdTradesRoute = LeagueLeagueIdTradesRouteImport.update({
   id: '/trades',
   path: '/trades',
@@ -132,6 +139,12 @@ const LeagueLeagueIdWireRoute = LeagueLeagueIdWireRouteImport.update({
   path: '/wire',
   getParentRoute: () => LeagueLeagueIdRoute,
 } as any)
+const LeagueLeagueIdPlayerPlayerIdRoute =
+  LeagueLeagueIdPlayerPlayerIdRouteImport.update({
+    id: '/player/$playerId',
+    path: '/player/$playerId',
+    getParentRoute: () => LeagueLeagueIdRoute,
+  } as any)
 const LeagueLeagueIdTeamRosterIdRoute =
   LeagueLeagueIdTeamRosterIdRouteImport.update({
     id: '/team/$rosterId',
@@ -163,9 +176,11 @@ export interface FileRoutesByFullPath {
   '/league/$leagueId/matchups': typeof LeagueLeagueIdMatchupsRoute
   '/league/$leagueId/recap': typeof LeagueLeagueIdRecapRoute
   '/league/$leagueId/settings': typeof LeagueLeagueIdSettingsRoute
+  '/league/$leagueId/standings': typeof LeagueLeagueIdStandingsRoute
   '/league/$leagueId/trades': typeof LeagueLeagueIdTradesRoute
   '/league/$leagueId/wire': typeof LeagueLeagueIdWireRoute
   '/league/$leagueId/': typeof LeagueLeagueIdIndexRoute
+  '/league/$leagueId/player/$playerId': typeof LeagueLeagueIdPlayerPlayerIdRoute
   '/league/$leagueId/team/$rosterId': typeof LeagueLeagueIdTeamRosterIdRoute
   '/league/$leagueId/matchup/$week/$matchupId': typeof LeagueLeagueIdMatchupWeekMatchupIdRoute
 }
@@ -186,9 +201,11 @@ export interface FileRoutesByTo {
   '/league/$leagueId/matchups': typeof LeagueLeagueIdMatchupsRoute
   '/league/$leagueId/recap': typeof LeagueLeagueIdRecapRoute
   '/league/$leagueId/settings': typeof LeagueLeagueIdSettingsRoute
+  '/league/$leagueId/standings': typeof LeagueLeagueIdStandingsRoute
   '/league/$leagueId/trades': typeof LeagueLeagueIdTradesRoute
   '/league/$leagueId/wire': typeof LeagueLeagueIdWireRoute
   '/league/$leagueId': typeof LeagueLeagueIdIndexRoute
+  '/league/$leagueId/player/$playerId': typeof LeagueLeagueIdPlayerPlayerIdRoute
   '/league/$leagueId/team/$rosterId': typeof LeagueLeagueIdTeamRosterIdRoute
   '/league/$leagueId/matchup/$week/$matchupId': typeof LeagueLeagueIdMatchupWeekMatchupIdRoute
 }
@@ -211,9 +228,11 @@ export interface FileRoutesById {
   '/league/$leagueId/matchups': typeof LeagueLeagueIdMatchupsRoute
   '/league/$leagueId/recap': typeof LeagueLeagueIdRecapRoute
   '/league/$leagueId/settings': typeof LeagueLeagueIdSettingsRoute
+  '/league/$leagueId/standings': typeof LeagueLeagueIdStandingsRoute
   '/league/$leagueId/trades': typeof LeagueLeagueIdTradesRoute
   '/league/$leagueId/wire': typeof LeagueLeagueIdWireRoute
   '/league/$leagueId/': typeof LeagueLeagueIdIndexRoute
+  '/league/$leagueId/player/$playerId': typeof LeagueLeagueIdPlayerPlayerIdRoute
   '/league/$leagueId/team/$rosterId': typeof LeagueLeagueIdTeamRosterIdRoute
   '/league/$leagueId/matchup/$week/$matchupId': typeof LeagueLeagueIdMatchupWeekMatchupIdRoute
 }
@@ -237,9 +256,11 @@ export interface FileRouteTypes {
     | '/league/$leagueId/matchups'
     | '/league/$leagueId/recap'
     | '/league/$leagueId/settings'
+    | '/league/$leagueId/standings'
     | '/league/$leagueId/trades'
     | '/league/$leagueId/wire'
     | '/league/$leagueId/'
+    | '/league/$leagueId/player/$playerId'
     | '/league/$leagueId/team/$rosterId'
     | '/league/$leagueId/matchup/$week/$matchupId'
   fileRoutesByTo: FileRoutesByTo
@@ -260,9 +281,11 @@ export interface FileRouteTypes {
     | '/league/$leagueId/matchups'
     | '/league/$leagueId/recap'
     | '/league/$leagueId/settings'
+    | '/league/$leagueId/standings'
     | '/league/$leagueId/trades'
     | '/league/$leagueId/wire'
     | '/league/$leagueId'
+    | '/league/$leagueId/player/$playerId'
     | '/league/$leagueId/team/$rosterId'
     | '/league/$leagueId/matchup/$week/$matchupId'
   id:
@@ -284,9 +307,11 @@ export interface FileRouteTypes {
     | '/league/$leagueId/matchups'
     | '/league/$leagueId/recap'
     | '/league/$leagueId/settings'
+    | '/league/$leagueId/standings'
     | '/league/$leagueId/trades'
     | '/league/$leagueId/wire'
     | '/league/$leagueId/'
+    | '/league/$leagueId/player/$playerId'
     | '/league/$leagueId/team/$rosterId'
     | '/league/$leagueId/matchup/$week/$matchupId'
   fileRoutesById: FileRoutesById
@@ -434,6 +459,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LeagueLeagueIdSettingsRouteImport
       parentRoute: typeof LeagueLeagueIdRoute
     }
+    '/league/$leagueId/standings': {
+      id: '/league/$leagueId/standings'
+      path: '/standings'
+      fullPath: '/league/$leagueId/standings'
+      preLoaderRoute: typeof LeagueLeagueIdStandingsRouteImport
+      parentRoute: typeof LeagueLeagueIdRoute
+    }
     '/league/$leagueId/trades': {
       id: '/league/$leagueId/trades'
       path: '/trades'
@@ -446,6 +478,13 @@ declare module '@tanstack/react-router' {
       path: '/wire'
       fullPath: '/league/$leagueId/wire'
       preLoaderRoute: typeof LeagueLeagueIdWireRouteImport
+      parentRoute: typeof LeagueLeagueIdRoute
+    }
+    '/league/$leagueId/player/$playerId': {
+      id: '/league/$leagueId/player/$playerId'
+      path: '/player/$playerId'
+      fullPath: '/league/$leagueId/player/$playerId'
+      preLoaderRoute: typeof LeagueLeagueIdPlayerPlayerIdRouteImport
       parentRoute: typeof LeagueLeagueIdRoute
     }
     '/league/$leagueId/team/$rosterId': {
@@ -471,9 +510,11 @@ interface LeagueLeagueIdRouteChildren {
   LeagueLeagueIdMatchupsRoute: typeof LeagueLeagueIdMatchupsRoute
   LeagueLeagueIdRecapRoute: typeof LeagueLeagueIdRecapRoute
   LeagueLeagueIdSettingsRoute: typeof LeagueLeagueIdSettingsRoute
+  LeagueLeagueIdStandingsRoute: typeof LeagueLeagueIdStandingsRoute
   LeagueLeagueIdTradesRoute: typeof LeagueLeagueIdTradesRoute
   LeagueLeagueIdWireRoute: typeof LeagueLeagueIdWireRoute
   LeagueLeagueIdIndexRoute: typeof LeagueLeagueIdIndexRoute
+  LeagueLeagueIdPlayerPlayerIdRoute: typeof LeagueLeagueIdPlayerPlayerIdRoute
   LeagueLeagueIdTeamRosterIdRoute: typeof LeagueLeagueIdTeamRosterIdRoute
   LeagueLeagueIdMatchupWeekMatchupIdRoute: typeof LeagueLeagueIdMatchupWeekMatchupIdRoute
 }
@@ -484,9 +525,11 @@ const LeagueLeagueIdRouteChildren: LeagueLeagueIdRouteChildren = {
   LeagueLeagueIdMatchupsRoute: LeagueLeagueIdMatchupsRoute,
   LeagueLeagueIdRecapRoute: LeagueLeagueIdRecapRoute,
   LeagueLeagueIdSettingsRoute: LeagueLeagueIdSettingsRoute,
+  LeagueLeagueIdStandingsRoute: LeagueLeagueIdStandingsRoute,
   LeagueLeagueIdTradesRoute: LeagueLeagueIdTradesRoute,
   LeagueLeagueIdWireRoute: LeagueLeagueIdWireRoute,
   LeagueLeagueIdIndexRoute: LeagueLeagueIdIndexRoute,
+  LeagueLeagueIdPlayerPlayerIdRoute: LeagueLeagueIdPlayerPlayerIdRoute,
   LeagueLeagueIdTeamRosterIdRoute: LeagueLeagueIdTeamRosterIdRoute,
   LeagueLeagueIdMatchupWeekMatchupIdRoute:
     LeagueLeagueIdMatchupWeekMatchupIdRoute,
