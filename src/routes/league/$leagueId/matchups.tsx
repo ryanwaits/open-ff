@@ -283,7 +283,7 @@ function MatchupsPage() {
   }
 
   const weekLive = (matchups.data ?? []).some(pairingIsLive);
-  const canReplay = !weekLive;
+  const canReplay = matchups.isSuccess && !weekLive;
 
   useEffect(() => {
     if (!canReplay && phase != null) {
@@ -329,7 +329,7 @@ function MatchupsPage() {
         </div>
       ) : null}
 
-      {matchups.isLoading ? (
+      {matchups.data == null && (matchups.isPending || matchups.isLoading || !matchups.isFetched) ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-64" />
@@ -520,7 +520,7 @@ function MatchupsPage() {
             </>
           ) : null}
 
-          {shown.length === 0 ? (
+          {matchups.isSuccess && shown.length === 0 ? (
             <p className="text-sm text-muted">No matchups this week.</p>
           ) : null}
         </div>

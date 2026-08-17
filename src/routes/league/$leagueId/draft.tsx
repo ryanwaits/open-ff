@@ -27,9 +27,15 @@ function DraftPage() {
     queryFn: () => getLeagueBundle({ data: { leagueId } }),
   });
   const draft = useQuery({
-    queryKey: ["draft", leagueId, pos, q],
-    queryFn: () => getDraft({ data: { leagueId, position: pos, query: q } }),
+    queryKey: ["draft", leagueId, pos],
+    queryFn: () => getDraft({ data: { leagueId, position: pos, query: "" } }),
     refetchInterval: (query) => (query.state.data?.status === "live" ? 4000 : false),
+  });
+  const needle = q.trim().toLowerCase();
+  const available = (draft.data?.available ?? []).filter((p) => {
+    if (!needle) return true;
+    const hay = `${p.full_name} ${p.search_full_name ?? ""} ${p.team ?? ""}`.toLowerCase();
+    return hay.includes(needle);
   });
 
   function invalidate() {
@@ -101,9 +107,9 @@ function DraftPage() {
         </div>
 
         <ol className="mt-6 space-y-2">
-          {draft.isLoading
+          {d == null
             ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12" />)
-            : d?.recent.map((p) => (
+            : d.recent.map((p) => (
                 <li
                   key={p.pick}
                   className="flex items-center gap-3 rounded-lg bg-surface px-3 py-2 shadow-[var(--shadow-border)]"
@@ -171,13 +177,13 @@ function DraftPage() {
           </div>
         </div>
         <ul className="mt-4 divide-y divide-line rounded-xl bg-surface shadow-[var(--shadow-border)]">
-          {draft.isLoading
+          {d == null
             ? Array.from({ length: 8 }).map((_, i) => (
                 <li key={i} className="p-3">
                   <Skeleton className="h-8" />
                 </li>
               ))
-            : d?.available.map((p) => (
+            : available.map((p) => (
                 <li key={p.player_id} className="flex items-center gap-3 px-3 py-2">
                   <div className="min-w-0 flex-1">
                     <PlayerCell player={p} compact />
@@ -200,6 +206,11 @@ function DraftPage() {
                 </li>
               ))}
         </ul>
+        {d != null && available.length === 0 ? (
+          <p className="mt-4 text-sm text-muted">
+            {needle ? "No one matches" : "No players left in the pool."}
+          </p>
+        ) : null}
       </section>
     </div>
   );

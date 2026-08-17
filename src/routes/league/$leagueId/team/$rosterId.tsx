@@ -62,7 +62,10 @@ function TeamPage() {
     onError: (e) => toast(e instanceof Error ? e.message : "Could not sit"),
   });
 
-  if (team.isLoading || league.isLoading) {
+  if (
+    (team.data == null && (team.isPending || team.isLoading || !team.isFetched)) ||
+    (league.data == null && league.isPending)
+  ) {
     return (
       <div className="space-y-2">
         {Array.from({ length: 10 }).map((_, i) => (

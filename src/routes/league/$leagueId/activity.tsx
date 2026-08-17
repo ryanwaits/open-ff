@@ -28,13 +28,14 @@ function ActivityPage() {
 
   return (
     <div>
-      {activity.isLoading ? (
+      {activity.data == null &&
+      (activity.isPending || activity.isLoading || !activity.isFetched) ? (
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-16" />
           ))}
         </div>
-      ) : activity.data && activity.data.length === 0 ? (
+      ) : activity.isSuccess && activity.data.length === 0 ? (
         <p className="text-sm text-muted">No transactions this week.</p>
       ) : (
         <ul className="space-y-2">

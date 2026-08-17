@@ -55,14 +55,7 @@ function JoinLeague() {
     },
   });
 
-  if (isPending) {
-    return (
-      <Shell>
-        <div className="h-40 animate-pulse rounded-xl bg-surface" />
-      </Shell>
-    );
-  }
-  if (!user) return <Navigate to="/login" search={{ redirect: "/join" }} />;
+  if (!isPending && !user) return <Navigate to="/login" search={{ redirect: "/join" }} />;
 
   const pack = preview.data;
 
@@ -125,7 +118,10 @@ function JoinLeague() {
           </div>
         ) : null}
         <div className="flex items-center gap-3">
-          <Button type="submit" disabled={join.isPending || (pack != null && pack.seats.length === 0)}>
+          <Button
+            type="submit"
+            disabled={isPending || join.isPending || (pack != null && pack.seats.length === 0)}
+          >
             {join.isPending ? "Joining…" : "Claim"}
           </Button>
           <Link to="/" className="text-sm text-muted hover:text-fg">

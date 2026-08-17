@@ -52,7 +52,7 @@ function DeskPage() {
         </p>
       </header>
 
-      {desk.isLoading ? (
+      {desk.data == null && (desk.isPending || desk.isLoading || !desk.isFetched) ? (
         <div className="mt-8 space-y-3">
           <Skeleton className="h-16" />
           <Skeleton className="h-40" />

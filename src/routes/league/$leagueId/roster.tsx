@@ -152,7 +152,7 @@ function MyTeamPage() {
       .slice(0, 4);
   }, [byes.data, players, week]);
 
-  if (league.isLoading) {
+  if (league.data == null && league.isPending) {
     return (
       <div className="space-y-5">
         <Skeleton className="h-32 rounded-xl" />
@@ -161,7 +161,7 @@ function MyTeamPage() {
     );
   }
   if (!league.data) return null;
-  if (rosterId == null || !team.data) {
+  if (rosterId == null) {
     return (
       <div className="rounded-xl bg-surface px-5 py-6 shadow-[var(--shadow-border)]">
         <p className="font-display text-xl font-bold tracking-[-0.03em]">
@@ -175,6 +175,14 @@ function MyTeamPage() {
         >
           Open the league
         </Link>
+      </div>
+    );
+  }
+  if (!team.data) {
+    return (
+      <div className="space-y-5">
+        <Skeleton className="h-32 rounded-xl" />
+        <Skeleton className="h-96 rounded-xl" />
       </div>
     );
   }

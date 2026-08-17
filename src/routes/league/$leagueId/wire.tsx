@@ -29,8 +29,14 @@ function WirePage() {
     queryFn: () => getLeagueBundle({ data: { leagueId } }),
   });
   const wire = useQuery({
-    queryKey: ["wire", leagueId, pos, q],
-    queryFn: () => getWire({ data: { leagueId, position: pos, query: q } }),
+    queryKey: ["wire", leagueId, pos],
+    queryFn: () => getWire({ data: { leagueId, position: pos, query: "" } }),
+  });
+  const needle = q.trim().toLowerCase();
+  const rows = (wire.data ?? []).filter((p) => {
+    if (!needle) return true;
+    const hay = `${p.full_name} ${p.search_full_name ?? ""} ${p.team ?? ""}`.toLowerCase();
+    return hay.includes(needle);
   });
 
   const claims = useQuery({
@@ -125,13 +131,13 @@ function WirePage() {
       </div>
 
       <ul className="mt-6 divide-y divide-line rounded-xl bg-surface shadow-[var(--shadow-border)]">
-        {wire.isLoading
+        {wire.data == null
           ? Array.from({ length: 8 }).map((_, i) => (
               <li key={i} className="p-3">
                 <Skeleton className="h-8" />
               </li>
             ))
-          : wire.data?.map((p) => (
+          : rows.map((p) => (
               <li key={p.player_id} className="flex items-center gap-3 px-3 py-2.5">
                 <Link
                   to="/league/$leagueId/player/$playerId"
@@ -158,8 +164,10 @@ function WirePage() {
               </li>
             ))}
       </ul>
-      {wire.data && wire.data.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">No available players match.</p>
+      {wire.isSuccess && rows.length === 0 ? (
+        <p className="mt-4 text-sm text-muted">
+          {needle ? "No one matches" : "No available players match."}
+        </p>
       ) : null}
 
       <ClaimDialog

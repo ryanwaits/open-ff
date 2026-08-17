@@ -209,7 +209,11 @@ function MatchupPage() {
     return <p className="text-sm text-muted">That matchup link is broken.</p>;
   }
 
-  if (league.isLoading || matchups.isLoading) {
+  if (
+    (league.data == null && league.isPending) ||
+    (matchups.data == null &&
+      (matchups.isPending || matchups.isLoading || !matchups.isFetched))
+  ) {
     return (
       <div className="space-y-3">
         <Skeleton className="h-8 w-48" />
@@ -352,7 +356,7 @@ function MatchupPage() {
               Bench
             </h2>
           </header>
-          {homeTeam.isLoading || awayTeam.isLoading ? (
+          {!homeTeam.data && !awayTeam.data ? (
             <div className="space-y-2 p-3">
               <Skeleton className="h-10" />
               <Skeleton className="h-10" />
@@ -375,7 +379,7 @@ function MatchupPage() {
               Bench
             </h2>
           </header>
-          {homeTeam.isLoading ? (
+          {!homeTeam.data ? (
             <div className="space-y-2 p-3">
               <Skeleton className="h-10" />
             </div>

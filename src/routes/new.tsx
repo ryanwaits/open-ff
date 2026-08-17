@@ -42,14 +42,7 @@ function NewLeague() {
     },
   });
 
-  if (isPending) {
-    return (
-      <Shell>
-        <div className="h-40 animate-pulse rounded-xl bg-surface" />
-      </Shell>
-    );
-  }
-  if (!user) return <Navigate to="/login" search={{ redirect: "/new" }} />;
+  if (!isPending && !user) return <Navigate to="/login" search={{ redirect: "/new" }} />;
 
   return (
     <Shell>
@@ -155,7 +148,7 @@ function NewLeague() {
           </span>
         </label>
         <div className="flex items-center gap-3">
-          <Button type="submit" disabled={create.isPending}>
+          <Button type="submit" disabled={isPending || create.isPending}>
             {create.isPending ? "Opening…" : "Open the league"}
           </Button>
           <Link to="/import" className="text-sm text-muted hover:text-fg">

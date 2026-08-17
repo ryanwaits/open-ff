@@ -11,6 +11,7 @@ export type SavedLeague = {
 type LeagueStore = {
   recent: SavedLeague[];
   remember: (league: SavedLeague) => void;
+  hasHydrated: boolean;
 };
 
 export const useLeagueStore = create<LeagueStore>()(
@@ -19,6 +20,7 @@ export const useLeagueStore = create<LeagueStore>()(
       recent: [
         { leagueId: DEMO_HOSTED_ID, name: DEMO_HOSTED_NAME, season: "2025" },
       ],
+      hasHydrated: false,
       remember: (league) => {
         const next = [
           league,
@@ -27,6 +29,12 @@ export const useLeagueStore = create<LeagueStore>()(
         set({ recent: next });
       },
     }),
-    { name: "ledger-leagues" },
+    {
+      name: "ledger-leagues",
+      partialize: (s) => ({ recent: s.recent }),
+      onRehydrateStorage: () => () => {
+        useLeagueStore.setState({ hasHydrated: true });
+      },
+    },
   ),
 );

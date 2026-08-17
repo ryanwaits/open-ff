@@ -285,14 +285,7 @@ function ImportPage() {
     preview.mutate({ teams: draft.map(toPayload) });
   }
 
-  if (isPending) {
-    return (
-      <Shell>
-        <div className="h-40 animate-pulse rounded-xl bg-surface" />
-      </Shell>
-    );
-  }
-  if (!user) return <Navigate to="/login" search={{ redirect: "/import" }} />;
+  if (!isPending && !user) return <Navigate to="/login" search={{ redirect: "/import" }} />;
 
   return (
     <Shell>
@@ -535,7 +528,11 @@ function ImportPage() {
           </button>
 
           <div className="sticky bottom-3 mt-6 flex flex-wrap items-center gap-3 rounded-xl bg-bg/90 p-3 shadow-[var(--shadow-border)] backdrop-blur-md">
-            <Button type="button" onClick={() => run.mutate()} disabled={run.isPending || draft.length < 2}>
+            <Button
+              type="button"
+              onClick={() => run.mutate()}
+              disabled={isPending || run.isPending || draft.length < 2}
+            >
               {run.isPending ? "Importing…" : "Confirm import"}
             </Button>
             <p className="text-xs text-muted">
@@ -757,7 +754,7 @@ function ImportPage() {
             </div>
           ) : null}
 
-          <Button type="submit" variant="outline" disabled={preview.isPending}>
+          <Button type="submit" variant="outline" disabled={isPending || preview.isPending}>
             {preview.isPending ? "Reading…" : "Preview & verify"}
           </Button>
         </form>
@@ -802,7 +799,11 @@ function ImportPage() {
             ))}
           </ul>
           <div className="mt-5 flex items-center gap-3">
-            <Button type="button" onClick={() => run.mutate()} disabled={run.isPending}>
+            <Button
+              type="button"
+              onClick={() => run.mutate()}
+              disabled={isPending || run.isPending}
+            >
               {run.isPending ? "Importing…" : "Create league"}
             </Button>
             <Link to="/" className="text-sm text-muted hover:text-fg">

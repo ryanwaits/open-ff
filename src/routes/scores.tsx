@@ -146,17 +146,31 @@ function ScoresPage() {
       </div>
 
       <div className="mt-6">
-        {q.isLoading ? (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-28" />
-            ))}
-          </div>
-        ) : q.data?.games.length ? (
-          <ScoreStrip games={q.data.games} />
-        ) : (
-          <p className="text-sm text-muted">No games for that week.</p>
-        )}
+        {(() => {
+          const scoresReady = q.isFetched && week != null && season != null;
+          if (!scoresReady && !q.data) {
+            return (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <Skeleton key={i} className="h-28" />
+                ))}
+              </div>
+            );
+          }
+          if (q.data?.games.length) {
+            return <ScoreStrip games={q.data.games} />;
+          }
+          if (scoresReady) {
+            return <p className="text-sm text-muted">No games for that week.</p>;
+          }
+          return (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-28" />
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {wire.data?.leaders.length ? (

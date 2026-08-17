@@ -203,7 +203,7 @@ function MyTeamPage() {
     return pairs.find((p) => p.home.rosterId === rosterId || p.away?.rosterId === rosterId) ?? null;
   }, [pairs, rosterId]);
 
-  if (league.isLoading) {
+  if (league.data == null && league.isPending) {
     return (
       <div className="space-y-5">
         <Skeleton className="h-28 rounded-xl" />
@@ -264,7 +264,7 @@ function MyTeamPage() {
 
       <div className="grid gap-5 lg:grid-cols-[1.35fr_1fr] lg:items-start">
         <div id="lineup" className="min-w-0 scroll-mt-20">
-          {team.isLoading || !team.data ? (
+          {!team.data ? (
             <Skeleton className="h-96 rounded-xl" />
           ) : (
             <LineupBoard

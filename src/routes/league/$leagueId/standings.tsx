@@ -61,7 +61,7 @@ function LeaguePage() {
     enabled: Boolean(league.data?.hosted),
   });
 
-  if (league.isLoading) {
+  if (league.data == null && league.isPending) {
     return (
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
         <Skeleton className="h-96 rounded-xl" />
@@ -167,7 +167,8 @@ function LeaguePage() {
               Open matchup
             </Link>
           </header>
-          {matchups.isLoading ? (
+          {matchups.data == null &&
+          (matchups.isPending || matchups.isLoading || !matchups.isFetched) ? (
             <div className="space-y-2 p-5">
               <Skeleton className="h-8" />
               <Skeleton className="h-8" />

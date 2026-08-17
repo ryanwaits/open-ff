@@ -36,8 +36,9 @@ export function Shell({
   trailing?: React.ReactNode;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const hasHydrated = useLeagueStore((s) => s.hasHydrated);
   const recent = useLeagueStore((s) => s.recent);
-  const league = recent[0];
+  const league = hasHydrated ? recent[0] : undefined;
   const { isPending } = useCurrentUserState();
   const inLeague = pathname.startsWith("/league/");
   const inScores = pathname.startsWith("/scores");
@@ -183,27 +184,33 @@ export function Shell({
               <Radio className="size-4" strokeWidth={1.75} />
               Scores
             </Link>
-            <SignedIn>
-              <Link
-                to="/join"
-                className={cn(
-                  "mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium transition-colors duration-150",
-                  pathname === "/join" ? "bg-raised text-fg" : "text-faint",
-                )}
-              >
-                <UserRound className="size-4" strokeWidth={1.75} />
-                Join
-              </Link>
-            </SignedIn>
-            <SignedOut>
-              <Link
-                to="/login"
-                className="mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium text-faint"
-              >
-                <UserRound className="size-4" strokeWidth={1.75} />
-                Sign in
-              </Link>
-            </SignedOut>
+            {isPending ? (
+              <div className="mx-1 min-h-12" />
+            ) : (
+              <>
+                <SignedIn>
+                  <Link
+                    to="/join"
+                    className={cn(
+                      "mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium transition-colors duration-150",
+                      pathname === "/join" ? "bg-raised text-fg" : "text-faint",
+                    )}
+                  >
+                    <UserRound className="size-4" strokeWidth={1.75} />
+                    Join
+                  </Link>
+                </SignedIn>
+                <SignedOut>
+                  <Link
+                    to="/login"
+                    className="mx-1 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[11px] font-medium text-faint"
+                  >
+                    <UserRound className="size-4" strokeWidth={1.75} />
+                    Sign in
+                  </Link>
+                </SignedOut>
+              </>
+            )}
           </div>
         )}
       </nav>
