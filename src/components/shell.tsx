@@ -10,7 +10,13 @@ import { cn } from "@/lib/utils";
 export type ShellTab = {
   key: string;
   label: string;
-  href: string;
+  to:
+    | "/league/$leagueId"
+    | "/league/$leagueId/roster"
+    | "/league/$leagueId/matchups"
+    | "/league/$leagueId/standings"
+    | "/league/$leagueId/wire";
+  params: { leagueId: string };
   active: boolean;
   Icon: LucideIcon;
 };
@@ -52,16 +58,19 @@ export function Shell({
           {tabs?.length ? (
             <nav className="hidden min-w-0 items-center gap-0.5 overflow-x-auto md:flex">
               {tabs.map((t) => (
-                <a
+                <Link
                   key={t.key}
-                  href={t.href}
+                  to={t.to}
+                  params={t.params}
+                  search={(prev) => prev}
+                  preload="intent"
                   className={cn(
                     "shrink-0 rounded-pill px-3.5 py-2 text-sm font-semibold transition-colors duration-150",
                     t.active ? "bg-fg text-bg" : "text-muted hover:bg-raised hover:text-fg",
                   )}
                 >
                   {t.label}
-                </a>
+                </Link>
               ))}
               {trailing}
             </nav>
@@ -122,9 +131,12 @@ export function Shell({
             style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
           >
             {tabs.map((t) => (
-              <a
+              <Link
                 key={t.key}
-                href={t.href}
+                to={t.to}
+                params={t.params}
+                search={(prev) => prev}
+                preload="intent"
                 className={cn(
                   "mx-0.5 flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-pill py-1 text-[10.5px] font-medium transition-colors duration-150",
                   t.active ? "bg-raised text-fg" : "text-faint",
@@ -132,7 +144,7 @@ export function Shell({
               >
                 <t.Icon className="size-4" strokeWidth={1.9} />
                 <span className="max-w-full truncate px-1">{t.label}</span>
-              </a>
+              </Link>
             ))}
           </div>
         ) : (

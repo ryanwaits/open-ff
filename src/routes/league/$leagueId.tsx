@@ -85,7 +85,8 @@ function LeagueLayout() {
     return {
       key: tab.to,
       label: tab.label,
-      href,
+      to: tab.to,
+      params: { leagueId },
       Icon: tab.Icon,
       active: tab.end
         ? pathname === href

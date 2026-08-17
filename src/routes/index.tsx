@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import { Shell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
@@ -12,17 +12,11 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const navigate = useNavigate();
   const remember = useLeagueStore((s) => s.remember);
   const mine = useQuery({
     queryKey: ["my-leagues"],
     queryFn: () => listMyLeagues(),
   });
-
-  function openLeague(league: { leagueId: string; name: string; season: string }) {
-    remember(league);
-    void navigate({ to: "/league/$leagueId", params: { leagueId: league.leagueId } });
-  }
 
   const seats = mine.data ?? [];
 
@@ -65,10 +59,12 @@ function Home() {
             <ul className="mt-3 max-w-lg space-y-2">
               {seats.map((l) => (
                 <li key={l.leagueId}>
-                  <button
-                    type="button"
+                  <Link
+                    to="/league/$leagueId"
+                    params={{ leagueId: l.leagueId }}
+                    preload="intent"
                     onClick={() =>
-                      openLeague({ leagueId: l.leagueId, name: l.name, season: l.season })
+                      remember({ leagueId: l.leagueId, name: l.name, season: l.season })
                     }
                     className="group flex w-full items-center justify-between gap-3 rounded-xl bg-surface px-4 py-4 text-left shadow-[var(--shadow-border)] transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-border-hover)]"
                   >
@@ -79,7 +75,7 @@ function Home() {
                       </span>
                     </span>
                     <ArrowRight className="size-4 text-faint transition-transform duration-200 ease-out group-hover:translate-x-0.5 group-hover:text-accent-strong" />
-                  </button>
+                  </Link>
                 </li>
               ))}
             </ul>
