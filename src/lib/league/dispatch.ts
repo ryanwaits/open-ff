@@ -40,6 +40,12 @@ export type DispatchContext = {
   moves: Array<{ type: string; teams: string[]; note: string }>;
   voice: DispatchVoice;
   teamNotes: Record<string, { note?: string }>;
+  /**
+   * Standing facts about the league's history, already threshold-gated by
+   * loadLeagueFacts. Empty for a young league, which is correct — the desk
+   * should say nothing rather than reach.
+   */
+  facts: Array<{ kind: string; teams: string[]; text: string }>;
 };
 
 export type ArticleKind = "lead" | "preview" | "feature" | "recap" | "brief";
@@ -103,6 +109,7 @@ export function buildDispatchContext(input: {
   pairs: MatchupPair[];
   activity: ActivityItem[];
   rosters: RosterCard[];
+  facts?: Array<{ kind: string; teams: string[]; text: string }>;
 }): DispatchContext {
   const pack = voicePack(input.leagueName);
   return {
@@ -142,6 +149,7 @@ export function buildDispatchContext(input: {
     })),
     voice: { nicknames: pack.nicknames, bits: pack.bits },
     teamNotes: pack.teamNotes,
+    facts: input.facts ?? [],
   };
 }
 
@@ -210,17 +218,45 @@ function construct(card: RosterCard) {
   };
 }
 
+/**
+ * Cap standing facts for one edition. Prefer facts about teams on this week's
+ * slate; drop the rest as filler. At most two. Callers that already filtered
+ * out last week's texts (via context_json) pass the remainder here — we do not
+ * re-query history inside this sync helper.
+ */
+export function selectEditionFacts(
+  ctx: DispatchContext,
+): Array<{ kind: string; teams: string[]; text: string }> {
+  const playing = new Set(ctx.games.flatMap((g) => [g.home, g.away]));
+  const relevant = ctx.facts.filter((f) => f.teams.some((t) => playing.has(t)));
+  if (relevant.length <= 2) return relevant;
+  // Rotate by week so consecutive editions don't always lead with the same two
+  // when the exclude set from last week is empty (week 1, or no prior row).
+  const start = ctx.week % relevant.length;
+  return [...relevant.slice(start), ...relevant.slice(0, start)].slice(0, 2);
+}
+
+function weaveFacts(body: string[], facts: Array<{ text: string }>): void {
+  if (!facts.length) return;
+  if (facts.length === 1) {
+    body.push(`One thing the book already knows: ${facts[0]!.text}`);
+    return;
+  }
+  body.push(`Two things the book already knows: ${facts[0]!.text} Also — ${facts[1]!.text}`);
+}
+
 export function composeDesk(ctx: DispatchContext): DeskEdition {
   const named = (t: string) => call(ctx.voice, t);
   const scored = ctx.games.filter((g) => g.homePts > 0 || g.awayPts > 0);
   const edition: "prep" | "recap" = scored.length ? "recap" : "prep";
   const profiles = ctx.rosters.map(construct);
   const drafts: Draft[] = [];
+  const editionFacts = selectEditionFacts(ctx);
 
   if (edition === "recap") {
-    drafts.push(composeRecapLead(ctx, named));
+    drafts.push(composeRecapLead(ctx, named, editionFacts));
   } else {
-    drafts.push(composePrepLead(ctx, named, profiles));
+    drafts.push(composePrepLead(ctx, named, profiles, editionFacts));
   }
 
   const slate = edition === "prep" ? ctx.games : ctx.games.slice(0, 3);
@@ -258,6 +294,7 @@ function composePrepLead(
   ctx: DispatchContext,
   named: (t: string) => string,
   profiles: ReturnType<typeof construct>[],
+  facts: Array<{ text: string }> = [],
 ): Draft {
   const n = ctx.games.length;
   const twoQb = profiles.filter((p) => p.twoQb);
@@ -284,6 +321,7 @@ function composePrepLead(
         .join(" and ")}. Week ${ctx.week} is the first look at how that split actually plays.`,
     );
   }
+  weaveFacts(body, facts);
   body.push(
     `Kickoff has not hit the book. Lineups can still move. The rest of this edition walks the slate and a few clubs the draft already made interesting.`,
   );
@@ -299,7 +337,11 @@ function composePrepLead(
   );
 }
 
-function composeRecapLead(ctx: DispatchContext, named: (t: string) => string): Draft {
+function composeRecapLead(
+  ctx: DispatchContext,
+  named: (t: string) => string,
+  facts: Array<{ text: string }> = [],
+): Draft {
   const scored = ctx.games.filter((g) => g.homePts > 0 || g.awayPts > 0);
   const box = scored
     .map((g) => {
@@ -323,6 +365,7 @@ function composeRecapLead(ctx: DispatchContext, named: (t: string) => string): D
   if (high?.stud) {
     body.push(`${high.stud.name} led the week with ${high.stud.pts.toFixed(1)} for ${named(high.team)}.`);
   }
+  weaveFacts(body, facts);
   return article(
     ctx.week,
     "recap",

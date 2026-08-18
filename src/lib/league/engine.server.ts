@@ -2298,7 +2298,41 @@ export async function loadDesk(leagueId: string, week: number): Promise<import("
 			});
 		}
 	}
-	const { buildDispatchContext, composeDesk } = await import("./dispatch");
+	// The week's snapshot says what happened; the facts say what it means in the
+	// context of a season. Failing to load them must not stop an edition from
+	// being written.
+	let facts: Array<{ kind: string; teams: string[]; text: string }> = [];
+	try {
+		const { loadLeagueFacts } = await import("./league-facts.server");
+		facts = (await loadLeagueFacts(leagueId, week)).facts;
+	} catch {
+		/* a desk with no memory is still a desk */
+	}
+	// Prefer not to repeat last week's asides: previous edition's context_json
+	// carries the facts it used. Cheap one-row read; fall through on miss.
+	if (facts.length && week > 1) {
+		try {
+			const prev = await sql`
+        select context_json from ff_dispatches
+        where league_id = ${leagueId} and week = ${week - 1}
+        order by created_at asc
+        limit 1
+      `;
+			const prevCtx = parseJson<{ facts?: Array<{ text?: string }> }>(
+				prev[0] ? String(prev[0].context_json) : null,
+				{},
+			);
+			const used = new Set(
+				(prevCtx.facts ?? [])
+					.map((f) => (typeof f.text === "string" ? f.text : ""))
+					.filter(Boolean),
+			);
+			if (used.size) facts = facts.filter((f) => !used.has(f.text));
+		} catch {
+			/* selection still works without the exclude set */
+		}
+	}
+	const { buildDispatchContext, composeDesk, selectEditionFacts } = await import("./dispatch");
 	const ctx = buildDispatchContext({
 		leagueId,
 		leagueName: row.name,
@@ -2309,8 +2343,10 @@ export async function loadDesk(leagueId: string, week: number): Promise<import("
 		pairs,
 		activity,
 		rosters: rosterCards,
+		facts,
 	});
 	const desk = composeDesk(ctx);
+	const selectedFacts = selectEditionFacts(ctx);
 	const now = new Date().toISOString();
 	const articles = [];
 	for (const draft of desk.articles) {
@@ -2321,7 +2357,7 @@ export async function loadDesk(leagueId: string, week: number): Promise<import("
       ) values (
         ${id}, ${leagueId}, ${week}, ${draft.kind}, ${draft.slug}, ${draft.headline}, ${draft.dek},
         ${JSON.stringify(draft.body)}, ${JSON.stringify(draft.bullets)}, ${JSON.stringify(draft.box)},
-        ${JSON.stringify(draft.focus)}, ${JSON.stringify({ week: ctx.week, league: ctx.leagueName })}, ${draft.source}
+        ${JSON.stringify(draft.focus)}, ${JSON.stringify({ week: ctx.week, league: ctx.leagueName, facts: selectedFacts })}, ${draft.source}
       )
     `;
 		articles.push({
