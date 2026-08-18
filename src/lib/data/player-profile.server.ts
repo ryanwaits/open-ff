@@ -50,7 +50,7 @@ const WEEKS = 18;
 async function bookFor(leagueId: string): Promise<ScoringBook> {
   if (isHostedLeague(leagueId)) {
     const eng = await import("@/lib/league/engine.server");
-    const bundle = await eng.loadLeagueBundle(leagueId, null);
+    const bundle = await eng.loadLeagueBundle(leagueId, null, { tick: false });
     return (bundle.league.scoring_settings ?? {}) as ScoringBook;
   }
   const sleeper = await import("./sleeper.server");
@@ -130,7 +130,7 @@ async function ownerOf(
     )[0];
     if (!row) return null;
     const eng = await import("@/lib/league/engine.server");
-    const bundle = await eng.loadLeagueBundle(leagueId, null);
+    const bundle = await eng.loadLeagueBundle(leagueId, null, { tick: false });
     const seat = bundle.standings.find((s) => s.rosterId === row.roster_id);
     return { rosterId: row.roster_id, teamName: seat?.teamName ?? `Roster ${row.roster_id}` };
   } catch {

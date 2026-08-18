@@ -300,8 +300,8 @@ export const getClaims = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const ops = await import("./ops.server");
     const eng = await import("./engine.server");
-    const bundle = await eng.loadLeagueBundle(data.leagueId, context.userId);
-    return ops.listClaims(data.leagueId, bundle.myRosterId);
+    const mine = await eng.rosterIdOwnedBy(data.leagueId, context.userId ?? null);
+    return ops.listClaims(data.leagueId, mine);
   });
 
 export const cancelClaim = createServerFn({ method: "POST" })

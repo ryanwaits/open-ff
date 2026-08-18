@@ -44,7 +44,7 @@ const CANNOT_PLAY = new Set(["out", "ir", "doubtful", "suspended", "pup", "na", 
 export async function scoringBookFor(leagueId: string): Promise<ScoringBook> {
   if (isHostedLeague(leagueId)) {
     const eng = await import("@/lib/league/engine.server");
-    const bundle = await eng.loadLeagueBundle(leagueId, null);
+    const bundle = await eng.loadLeagueBundle(leagueId, null, { tick: false });
     return (bundle.league.scoring_settings ?? {}) as ScoringBook;
   }
   const sleeper = await import("./sleeper.server");

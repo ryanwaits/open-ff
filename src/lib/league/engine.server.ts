@@ -231,6 +231,19 @@ async function getLeague(id) {
 async function getRosters(id) {
 	return (await getSql())`select * from ff_rosters where league_id = ${id} order by roster_id`;
 }
+export async function rosterIdOwnedBy(
+	leagueId: string,
+	userId: string | null,
+): Promise<number | null> {
+	if (!userId) return null;
+	const sql = await getSql();
+	const rows = await sql<{ roster_id: number }>`
+		select roster_id from ff_rosters
+		where league_id = ${leagueId} and owner_id = ${userId}
+		limit 1
+	`;
+	return rows[0]?.roster_id ?? null;
+}
 async function getSpots(id) {
 	return (await getSql())`select * from ff_spots where league_id = ${id}`;
 }
@@ -494,7 +507,7 @@ async function scoredStandings(row, rosters, spots) {
 export async function loadLeagueBundle(leagueId: string, userId: string | null, opts?: { tick?: boolean }): Promise<LeagueBundle> {
 	await ensureDemo();
 	let row = await getLeague(leagueId);
-	if (opts?.tick !== false && row.locked !== 1 && row.status !== "pre_draft" && row.status !== "drafting") try {
+	if (opts?.tick === true && row.locked !== 1 && row.status !== "pre_draft" && row.status !== "drafting") try {
 		await (await import("./ops.server")).tickLeague(leagueId);
 		row = await getLeague(leagueId);
 	} catch {}

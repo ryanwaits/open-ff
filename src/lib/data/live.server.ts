@@ -82,7 +82,9 @@ export async function fetchWeekStats(
   return raw;
 }
 
-export async function weekBoard(season: string, week: number, seasonType?: string | null) {
+const boardCache = new Map<string, { at: number; data: Awaited<ReturnType<typeof weekBoardUncached>> }>();
+
+async function weekBoardUncached(season: string, week: number, seasonType?: string | null) {
   const espn = await import("./espn.server");
   const board = await espn.fetchScoreboard({
     week,
@@ -95,4 +97,13 @@ export async function weekBoard(season: string, week: number, seasonType?: strin
     index,
     games: board.games,
   };
+}
+
+export async function weekBoard(season: string, week: number, seasonType?: string | null) {
+  const key = `${season}:${week}:${seasonType ?? ""}`;
+  const hit = boardCache.get(key);
+  if (hit && Date.now() - hit.at < 12_000) return hit.data;
+  const data = await weekBoardUncached(season, week, seasonType);
+  boardCache.set(key, { at: Date.now(), data });
+  return data;
 }
