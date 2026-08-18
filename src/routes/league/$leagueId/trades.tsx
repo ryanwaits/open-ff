@@ -1,7 +1,11 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import {
+  TradeComposer,
+  type TradeComposerInitial,
+} from "@/components/trade-composer";
 import { TradeOfferCard } from "@/components/trade-offer-card";
 import { Button } from "@/components/ui/button";
 import { getLeagueBundle, getProjections, getTeam } from "@/lib/data/fns";
@@ -37,6 +41,7 @@ type PendingSide = {
 function TradesPage() {
   const { leagueId } = Route.useParams();
   const navigate = Route.useNavigate();
+  const search = Route.useSearch();
   const qc = useQueryClient();
   const league = useQuery({
     queryKey: ["league", leagueId],
@@ -60,6 +65,48 @@ function TradesPage() {
   const [partnerId, setPartnerId] = useState<number | null>(null);
   const [thirdId, setThirdId] = useState<number | null>(null);
   const them = partnerId ?? partners[0]?.rosterId ?? null;
+
+  const counterTrade = useMemo(() => {
+    if (!search.counter || !trades.data) return null;
+    return trades.data.find((t) => t.id === search.counter) ?? null;
+  }, [search.counter, trades.data]);
+
+  // Counter: pick the other seat so the composer opens against the right roster.
+  useEffect(() => {
+    if (!counterTrade || mineId == null) return;
+    const other = counterTrade.sides.find((s) => s.rosterId !== mineId);
+    if (other) setPartnerId(other.rosterId);
+  }, [counterTrade, mineId]);
+
+  const composerInitial = useMemo((): TradeComposerInitial | null => {
+    if (!counterTrade || mineId == null) return null;
+    const sendPlayerIds: string[] = [];
+    const getPlayerIds: string[] = [];
+    const sendPickNos: number[] = [];
+    const getPickNos: number[] = [];
+    let sendFaab: number | null = null;
+    let getFaab: number | null = null;
+    for (const a of counterTrade.assets) {
+      if (a.kind === "player" && a.playerId) {
+        if (a.fromRoster === mineId) sendPlayerIds.push(a.playerId);
+        else if (a.toRoster === mineId) getPlayerIds.push(a.playerId);
+      } else if (a.kind === "pick" && a.pickNo != null) {
+        if (a.fromRoster === mineId) sendPickNos.push(a.pickNo);
+        else if (a.toRoster === mineId) getPickNos.push(a.pickNo);
+      } else if (a.kind === "faab" && a.amount != null && a.amount > 0) {
+        if (a.fromRoster === mineId) sendFaab = (sendFaab ?? 0) + a.amount;
+        else if (a.toRoster === mineId) getFaab = (getFaab ?? 0) + a.amount;
+      }
+    }
+    return {
+      sendPlayerIds,
+      sendPickNos,
+      sendFaab,
+      getPlayerIds,
+      getPickNos,
+      getFaab,
+    };
+  }, [counterTrade, mineId]);
 
   // One getTeam per involved roster, shared across every pending card.
   const bookRosterIds = useMemo(() => {
@@ -98,6 +145,22 @@ function TradesPage() {
     return map;
   }, [rosterById]);
 
+  const mineTeam = useQuery({
+    queryKey: ["team", leagueId, mineId, league.data?.currentWeek],
+    queryFn: () => getTeam({ data: { leagueId, rosterId: mineId!, week: league.data!.currentWeek } }),
+    enabled: Boolean(mineId && league.data?.hosted && !league.data.locked),
+  });
+  const themTeam = useQuery({
+    queryKey: ["team", leagueId, them, league.data?.currentWeek],
+    queryFn: () => getTeam({ data: { leagueId, rosterId: them!, week: league.data!.currentWeek } }),
+    enabled: Boolean(them && league.data),
+  });
+  const thirdTeam = useQuery({
+    queryKey: ["team", leagueId, thirdId, league.data?.currentWeek],
+    queryFn: () => getTeam({ data: { leagueId, rosterId: thirdId!, week: league.data!.currentWeek } }),
+    enabled: Boolean(thirdId && league.data),
+  });
+
   const projectionInputs = useMemo(() => {
     const byId = new Map<
       string,
@@ -108,8 +171,8 @@ function TradesPage() {
         status: string | null | undefined;
       }
     >();
-    for (const players of rosterById.values()) {
-      for (const p of players) {
+    const add = (players: RosterPlayer[] | undefined) => {
+      for (const p of players ?? []) {
         byId.set(p.player_id, {
           player_id: p.player_id,
           team: p.team,
@@ -117,9 +180,14 @@ function TradesPage() {
           status: p.status,
         });
       }
-    }
+    };
+    for (const players of rosterById.values()) add(players);
+    // Composer sides — partner may not yet appear in the book roster set.
+    add(mineTeam.data?.players);
+    add(themTeam.data?.players);
+    add(thirdTeam.data?.players);
     return [...byId.values()];
-  }, [rosterById]);
+  }, [rosterById, mineTeam.data?.players, themTeam.data?.players, thirdTeam.data?.players]);
 
   const projectionsQ = useQuery({
     queryKey: ["projections", leagueId, week, projectionInputs.length],
@@ -213,22 +281,6 @@ function TradesPage() {
     const ids = [mineId, them, thirdId].filter((n): n is number => n != null);
     return standings.filter((s) => ids.includes(s.rosterId));
   }, [mineId, them, thirdId, standings]);
-
-  const mineTeam = useQuery({
-    queryKey: ["team", leagueId, mineId, league.data?.currentWeek],
-    queryFn: () => getTeam({ data: { leagueId, rosterId: mineId!, week: league.data!.currentWeek } }),
-    enabled: Boolean(mineId && league.data?.hosted && !league.data.locked),
-  });
-  const themTeam = useQuery({
-    queryKey: ["team", leagueId, them, league.data?.currentWeek],
-    queryFn: () => getTeam({ data: { leagueId, rosterId: them!, week: league.data!.currentWeek } }),
-    enabled: Boolean(them && league.data),
-  });
-  const thirdTeam = useQuery({
-    queryKey: ["team", leagueId, thirdId, league.data?.currentWeek],
-    queryFn: () => getTeam({ data: { leagueId, rosterId: thirdId!, week: league.data!.currentWeek } }),
-    enabled: Boolean(thirdId && league.data),
-  });
 
   const myPicks = useMemo(
     () => (picks.data ?? []).filter((p) => p.rosterId === mineId),
@@ -355,34 +407,115 @@ function TradesPage() {
             ))}
           </div>
 
-          <div className="mt-5 grid gap-6 lg:grid-cols-2">
-            <AssetCol
-              title="You send"
-              sendTo={mineTo ?? them}
-              destinations={involved.filter((s) => s.rosterId !== mineId)}
-              onDest={(id) => setMineTo(id)}
-              destLabel={nameOf(mineTo ?? them)}
-              players={mineTeam.data?.players ?? []}
-              picks={myPicks}
-              selectedPlayers={minePlayers}
-              selectedPicks={minePicks}
-              onPlayer={(id) => toggle(minePlayers, setMinePlayers, id)}
-              onPick={(n) => toggle(minePicks, setMinePicks, n)}
+          {/* Two-team path uses TradeComposer; three-team keeps AssetCol until plan 020. */}
+          {!thirdId && them != null ? (
+            <TradeComposer
+              leagueId={leagueId}
+              myRosterId={mineId}
+              theirRosterId={them}
+              partners={partners.map((p) => ({ rosterId: p.rosterId, teamName: p.teamName }))}
+              myRoster={mineTeam.data?.players ?? []}
+              theirRoster={themTeam.data?.players ?? []}
+              myPicks={myPicks}
+              theirPicks={theirPicks}
+              projections={projections}
+              rosterPositions={rosterPositions}
+              myFaabFree={Math.max(
+                0,
+                (league.data.faabRemaining ?? 0) - (league.data.faabAtRisk ?? 0),
+              )}
+              theirFaabFree={null}
+              initial={composerInitial}
+              countering={Boolean(counterTrade)}
+              onProposed={() => {
+                invalidate();
+                if (search.counter) {
+                  void navigate({
+                    search: (prev) => {
+                      const next = { ...prev };
+                      delete next.counter;
+                      return next;
+                    },
+                  });
+                }
+              }}
             />
-            <AssetCol
-              title={`${nameOf(them)} sends`}
-              sendTo={themTo ?? mineId}
-              destinations={involved.filter((s) => s.rosterId !== them)}
-              onDest={(id) => setThemTo(id)}
-              destLabel={nameOf(themTo ?? mineId)}
-              players={themTeam.data?.players ?? []}
-              picks={theirPicks}
-              selectedPlayers={themPlayers}
-              selectedPicks={themPicks}
-              onPlayer={(id) => toggle(themPlayers, setThemPlayers, id)}
-              onPick={(n) => toggle(themPicks, setThemPicks, n)}
-            />
-          </div>
+          ) : them != null ? (
+            <>
+              <div className="mt-5 grid gap-6 lg:grid-cols-2">
+                <AssetCol
+                  title="You send"
+                  sendTo={mineTo ?? them}
+                  destinations={involved.filter((s) => s.rosterId !== mineId)}
+                  onDest={(id) => setMineTo(id)}
+                  destLabel={nameOf(mineTo ?? them)}
+                  players={mineTeam.data?.players ?? []}
+                  picks={myPicks}
+                  selectedPlayers={minePlayers}
+                  selectedPicks={minePicks}
+                  onPlayer={(id) => toggle(minePlayers, setMinePlayers, id)}
+                  onPick={(n) => toggle(minePicks, setMinePicks, n)}
+                />
+                <AssetCol
+                  title={`${nameOf(them)} sends`}
+                  sendTo={themTo ?? mineId}
+                  destinations={involved.filter((s) => s.rosterId !== them)}
+                  onDest={(id) => setThemTo(id)}
+                  destLabel={nameOf(themTo ?? mineId)}
+                  players={themTeam.data?.players ?? []}
+                  picks={theirPicks}
+                  selectedPlayers={themPlayers}
+                  selectedPicks={themPicks}
+                  onPlayer={(id) => toggle(themPlayers, setThemPlayers, id)}
+                  onPick={(n) => toggle(themPicks, setThemPicks, n)}
+                />
+              </div>
+              {thirdId ? (
+                <div className="mt-3 space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {partners
+                      .filter((p) => p.rosterId !== them)
+                      .map((p) => (
+                        <button
+                          key={p.rosterId}
+                          type="button"
+                          onClick={() => setThirdId(p.rosterId)}
+                          className={cn(
+                            "h-10 rounded-sm px-3 text-sm",
+                            thirdId === p.rosterId
+                              ? "bg-accent text-accent-fg"
+                              : "bg-raised text-muted",
+                          )}
+                        >
+                          {p.teamName}
+                        </button>
+                      ))}
+                  </div>
+                  <AssetCol
+                    title={`${nameOf(thirdId)} sends`}
+                    sendTo={thirdTo ?? mineId}
+                    destinations={involved.filter((s) => s.rosterId !== thirdId)}
+                    onDest={(id) => setThirdTo(id)}
+                    destLabel={nameOf(thirdTo ?? mineId)}
+                    players={thirdTeam.data?.players ?? []}
+                    picks={thirdPickList}
+                    selectedPlayers={thirdPlayers}
+                    selectedPicks={thirdPicks}
+                    onPlayer={(id) => toggle(thirdPlayers, setThirdPlayers, id)}
+                    onPick={(n) => toggle(thirdPicks, setThirdPicks, n)}
+                  />
+                </div>
+              ) : null}
+              <Button
+                className="mt-5"
+                type="button"
+                onClick={() => send.mutate()}
+                disabled={send.isPending}
+              >
+                {send.isPending ? "Sending…" : "Propose trade"}
+              </Button>
+            </>
+          ) : null}
 
           <div className="mt-4">
             <button
@@ -399,44 +532,6 @@ function TradesPage() {
               {thirdId ? "Remove third team" : "Add a third team"}
             </button>
           </div>
-          {thirdId ? (
-            <div className="mt-3 space-y-3">
-              <div className="flex flex-wrap gap-2">
-                {partners
-                  .filter((p) => p.rosterId !== them)
-                  .map((p) => (
-                    <button
-                      key={p.rosterId}
-                      type="button"
-                      onClick={() => setThirdId(p.rosterId)}
-                      className={cn(
-                        "h-10 rounded-sm px-3 text-sm",
-                        thirdId === p.rosterId ? "bg-accent text-accent-fg" : "bg-raised text-muted",
-                      )}
-                    >
-                      {p.teamName}
-                    </button>
-                  ))}
-              </div>
-              <AssetCol
-                title={`${nameOf(thirdId)} sends`}
-                sendTo={thirdTo ?? mineId}
-                destinations={involved.filter((s) => s.rosterId !== thirdId)}
-                onDest={(id) => setThirdTo(id)}
-                destLabel={nameOf(thirdTo ?? mineId)}
-                players={thirdTeam.data?.players ?? []}
-                picks={thirdPickList}
-                selectedPlayers={thirdPlayers}
-                selectedPicks={thirdPicks}
-                onPlayer={(id) => toggle(thirdPlayers, setThirdPlayers, id)}
-                onPick={(n) => toggle(thirdPicks, setThirdPicks, n)}
-              />
-            </div>
-          ) : null}
-
-          <Button className="mt-5" type="button" onClick={() => send.mutate()} disabled={send.isPending}>
-            {send.isPending ? "Sending…" : "Propose trade"}
-          </Button>
         </section>
       ) : (
         <p className="text-sm text-muted">Claim a seat to propose trades.</p>
