@@ -12,3 +12,7 @@ node_modules/
 # Working notes. Deployment runbooks and scratch thinking that describe
 # environment setup — useful locally, not part of the app.
 .notes/
+
+# Agent QA screenshots. Not part of the app. A copy of the last dump
+# lives in /tmp/open-ff-screenshots if you need them.
+screenshots/
