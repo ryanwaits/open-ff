@@ -27,7 +27,7 @@ export type ClaimVerdict =
   /** You have a claim in on him already. */
   | { kind: "pending"; claimId: string; bid: number; money: boolean }
   /** Pressable. `mode` decides whether it queues or lands immediately. */
-  | { kind: "open"; mode: ClaimMode };
+  | { kind: "open"; mode: ClaimMode; money: boolean };
 
 export function useClaim(leagueId: string) {
   const [target, setTarget] = useState<ClaimTarget | null>(null);
@@ -81,9 +81,8 @@ export function useClaim(leagueId: string) {
     rosterCap: (bundle?.league.roster_positions ?? []).length || 15,
     mode: (waiversOpen ? "claim" : "add") as ClaimMode,
     /**
-     * Per player, because a list draws one button per row. `ownedBy` is optional
-     * — the wire only ever lists players nobody holds, so only the profile,
-     * which can land on anyone, has to pass it.
+     * Per player, because a list draws one button per row. Pass `ownedBy`
+     * whenever the row might be rostered — All includes taken players.
      */
     verdictFor: (
       playerId: string,
@@ -127,7 +126,11 @@ function decide(input: {
   if (input.ownedBy && input.ownedBy.rosterId !== b.myRosterId) {
     return { kind: "taken", teamName: input.ownedBy.teamName };
   }
-  return { kind: "open", mode: input.waiversOpen ? "claim" : "add" };
+  return {
+    kind: "open",
+    mode: input.waiversOpen ? "claim" : "add",
+    money: input.money,
+  };
 }
 
 /**

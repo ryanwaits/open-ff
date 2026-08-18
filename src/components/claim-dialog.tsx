@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Avatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import type { RosterPlayer, SlimPlayer } from "@/lib/data/types";
-import { addDrop } from "@/lib/league/fns";
+import { addDrop, dropPlayer } from "@/lib/league/fns";
 import { cn } from "@/lib/utils";
 
 /**
@@ -31,6 +31,8 @@ export type ClaimTarget = {
   player: SlimPlayer;
   name: string;
   headshot: string | null;
+  /** Drop is a player you already hold — no add, no bid. */
+  action?: "add" | "drop";
 };
 
 export function ClaimDialog({
@@ -84,23 +86,35 @@ export function ClaimDialog({
     }
   }, [open]);
 
+  const dropping = target?.action === "drop";
+
   const submit = useMutation({
-    mutationFn: () =>
-      addDrop({
+    mutationFn: async (): Promise<{ mode: "drop" | "claim" | "free_agent" }> => {
+      if (dropping) {
+        await dropPlayer({
+          data: { leagueId, playerId: target?.player.player_id ?? "" },
+        });
+        return { mode: "drop" };
+      }
+      return addDrop({
         data: { leagueId, addId: target?.player.player_id ?? "", dropId, bid: bid ?? 0 },
-      }),
+      });
+    },
     onSuccess: (res) => {
       setPlaced(true);
       for (const key of ["wire", "team", "league", "claims", "activity"]) {
         void qc.invalidateQueries({ queryKey: [key, leagueId] });
       }
       void qc.invalidateQueries({ queryKey: ["player", leagueId] });
+      void qc.invalidateQueries({ queryKey: ["player-profile", leagueId] });
       toast(
-        res.mode === "claim"
-          ? money
-            ? `Bid $${bid ?? 0} on ${target?.name ?? "him"}.`
-            : `Claim in for ${target?.name ?? "him"}.`
-          : `Added ${target?.name ?? "him"}.`,
+        res.mode === "drop"
+          ? `Dropped ${target?.name ?? "him"}.`
+          : res.mode === "claim"
+            ? money
+              ? `Bid $${bid ?? 0} on ${target?.name ?? "him"}.`
+              : `Claim in for ${target?.name ?? "him"}.`
+            : `Added ${target?.name ?? "him"}.`,
       );
       // Hold the confirmation long enough to read the number you committed to.
       window.setTimeout(() => onOpenChange(false), 700);
@@ -110,18 +124,28 @@ export function ClaimDialog({
 
   if (!target) return null;
 
-  const overBudget = money && bid != null && bid > faabRemaining;
-  const noBid = money && bid == null;
-  const needDrop = mustDrop && !dropId;
+  const overBudget = !dropping && money && bid != null && bid > faabRemaining;
+  const noBid = !dropping && money && bid == null;
+  const needDrop = !dropping && mustDrop && !dropId;
   const blocked = overBudget || noBid || needDrop;
 
-  const verb = mode === "add" ? "Add" : money ? "Place bid" : "Put in the claim";
+  const verb = dropping
+    ? "Drop"
+    : mode === "add"
+      ? "Add"
+      : money
+        ? "Place bid"
+        : "Put in the claim";
   const label = placed
-    ? mode === "add"
-      ? "Added"
-      : "Bid placed"
+    ? dropping
+      ? "Dropped"
+      : mode === "add"
+        ? "Added"
+        : "Bid placed"
     : submit.isPending
-      ? "Placing…"
+      ? dropping
+        ? "Dropping…"
+        : "Placing…"
       : noBid
         ? "Enter a bid"
         : overBudget
@@ -166,7 +190,18 @@ export function ClaimDialog({
           ) : null}
 
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {money ? (
+            {dropping ? (
+              <section className="border-b border-line px-5 py-4">
+                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+                  Drop
+                </span>
+                <p className="mt-1.5 text-sm text-muted">
+                  {mode === "claim"
+                    ? "He hits waivers. Claims process Wednesday."
+                    : "He becomes a free agent. Anyone can add him."}
+                </p>
+              </section>
+            ) : money ? (
               <section className="border-b border-line px-5 py-4">
                 <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
                   Your bid
@@ -227,7 +262,7 @@ export function ClaimDialog({
               </section>
             ) : null}
 
-            {droppable.length > 0 ? (
+            {!dropping && droppable.length > 0 ? (
               <section className="border-b border-line px-5 py-4">
                 <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
                   {mustDrop ? "Drop someone" : "Drop someone (optional)"}
@@ -273,7 +308,9 @@ export function ClaimDialog({
                         key={p.player_id}
                         className={cn(
                           "flex cursor-pointer items-center gap-3 rounded-md border px-2.5 py-2 transition-colors duration-150 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent-deep",
-                          on ? "border-accent-deep bg-raised" : "border-transparent hover:bg-raised",
+                          on
+                            ? "border-accent-deep bg-raised"
+                            : "border-transparent hover:bg-raised",
                         )}
                       >
                         <input
@@ -310,7 +347,7 @@ export function ClaimDialog({
           </div>
 
           <footer className="px-5 pt-4 pb-5">
-            {money ? (
+            {!dropping && money ? (
               <dl className="mb-3">
                 <Line k="FAAB left" v={`$${faabRemaining}`} />
                 <Line k="This bid" v={`−$${bid ?? 0}`} />
@@ -330,7 +367,7 @@ export function ClaimDialog({
               {placed ? `✓ ${label}` : label}
             </Button>
             <p className="mt-2 text-center text-xs text-faint">
-              {mode === "add"
+              {dropping || mode === "add"
                 ? "Takes effect right away."
                 : "Processes on waiver day. Pull it any time before then."}
             </p>
@@ -365,17 +402,7 @@ function StepButton({
   );
 }
 
-function Line({
-  k,
-  v,
-  tone,
-  total,
-}: {
-  k: string;
-  v: string;
-  tone?: "loss";
-  total?: boolean;
-}) {
+function Line({ k, v, tone, total }: { k: string; v: string; tone?: "loss"; total?: boolean }) {
   return (
     <div
       className={cn(

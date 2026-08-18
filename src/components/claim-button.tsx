@@ -1,5 +1,4 @@
 import { Link } from "@tanstack/react-router";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ClaimVerdict } from "@/lib/league/use-claim";
 
@@ -13,11 +12,16 @@ import type { ClaimVerdict } from "@/lib/league/use-claim";
 export function ClaimButton({
   verdict,
   leagueId,
+  playerId,
+  ownerRosterId,
   onClaim,
   size = "md",
 }: {
   verdict: ClaimVerdict;
   leagueId: string;
+  /** Needed so a taken player opens the composer against the right roster. */
+  playerId?: string;
+  ownerRosterId?: number;
   onClaim: () => void;
   size?: "sm" | "md";
 }) {
@@ -33,13 +37,25 @@ export function ClaimButton({
       );
 
     case "mine":
-      return <Badge tone="win">Yours</Badge>;
+      return (
+        <Button size={size} variant="outline" onClick={onClaim}>
+          Drop
+        </Button>
+      );
 
     case "taken":
       return (
         <Button size={size} variant="outline" asChild>
-          <Link to="/league/$leagueId/trades" params={{ leagueId }}>
-            Propose a trade
+          <Link
+            to="/league/$leagueId/trades"
+            params={{ leagueId }}
+            search={
+              playerId && ownerRosterId != null
+                ? { want: playerId, with: ownerRosterId }
+                : undefined
+            }
+          >
+            Trade
           </Link>
         </Button>
       );
@@ -59,7 +75,7 @@ export function ClaimButton({
     case "open":
       return (
         <Button size={size} onClick={onClaim}>
-          {verdict.mode === "add" ? "Add to roster" : "Claim"}
+          {verdict.mode === "add" ? "Add to roster" : verdict.money ? "Bid" : "Claim"}
         </Button>
       );
   }

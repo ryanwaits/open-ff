@@ -249,11 +249,7 @@ async function getSpots(id) {
 }
 export async function ensureDemo(): Promise<void> {
 	(await import("./ops.server")).startLeagueClock();
-	if (!seedPromise) seedPromise = seedDemo().catch((err) => {
-		seedPromise = null;
-		throw err;
-	});
-	return seedPromise;
+	// Demo league seed is off — a local run should start empty until WIFFL is imported.
 }
 async function seedDemo() {
 	const sql = await getSql();
@@ -672,26 +668,57 @@ export async function loadTeam(leagueId: string, rosterId: number, week: number)
 		week
 	};
 }
-export async function loadWire(leagueId: string, position: string, query: string): Promise<WirePlayer[]> {
+export async function loadWire(leagueId: string, position: string, query: string, scope = "available"): Promise<WirePlayer[]> {
 	await ensureDemo();
-	const spots = await getSpots(leagueId);
-	const taken = new Set(spots.map((s) => s.player_id));
+	const [spots, rosters, league] = await Promise.all([
+		getSpots(leagueId),
+		getRosters(leagueId),
+		getLeague(leagueId)
+	]);
+	const names = new Map(rosters.map((r) => [r.roster_id, r.team_name]));
+	const ownerByPlayer = new Map();
+	for (const s of spots) {
+		ownerByPlayer.set(s.player_id, {
+			rosterId: s.roster_id,
+			teamName: names.get(s.roster_id) ?? `Roster ${s.roster_id}`
+		});
+	}
+	const waiverType = league.waiver_type ?? "faab";
+	const waiversOpen = waiverType !== "none" && (league.last_waiver_week ?? 0) < league.current_week;
 	const q = query.trim().toLowerCase();
 	const pos = position === "ALL" ? null : position;
+	const pts = pprMap();
+	const seen = new Set();
 	const out = [];
-	for (const row of loadSeasonPpr()) {
-		if (taken.has(row.player_id)) continue;
-		const p = getPlayer(row.player_id);
-		if (!p) continue;
-		if (pos && p.position !== pos && !(p.fantasy_positions ?? []).includes(pos)) continue;
-		if (q && !`${p.full_name} ${p.search_full_name ?? ""} ${p.team ?? ""}`.toLowerCase().includes(q)) continue;
+
+	function consider(p, points, rank) {
+		if (!p || seen.has(p.player_id)) return;
+		const ownedBy = ownerByPlayer.get(p.player_id) ?? null;
+		const availability = ownedBy ? "rostered" : waiversOpen ? "waiver" : "free_agent";
+		if (scope === "available" && availability === "rostered") return;
+		if (scope === "free_agent" && availability !== "free_agent") return;
+		if (pos && p.position !== pos && !(p.fantasy_positions ?? []).includes(pos)) return;
+		if (q && !`${p.full_name} ${p.search_full_name ?? ""} ${p.team ?? ""}`.toLowerCase().includes(q)) return;
+		seen.add(p.player_id);
 		out.push({
 			...p,
-			pts: row.pts_ppr,
-			rank: null
+			pts: points ?? null,
+			rank: rank ?? null,
+			availability,
+			ownedBy
 		});
-		if (out.length >= 80) break;
 	}
+
+	for (const row of loadSeasonPpr()) {
+		consider(getPlayer(row.player_id), row.pts_ppr, row.pos_rank_ppr ?? null);
+	}
+	// Rostered players missing from the season seed still belong on All.
+	if (scope === "all") {
+		for (const s of spots) {
+			consider(getPlayer(s.player_id), pts.get(s.player_id) ?? null, null);
+		}
+	}
+	out.sort((a, b) => (b.pts ?? -1) - (a.pts ?? -1) || a.full_name.localeCompare(b.full_name));
 	return out;
 }
 export async function loadActivity(leagueId: string, _week: number): Promise<ActivityItem[]> {
@@ -1432,6 +1459,9 @@ export async function sitPlayer(userId: string, leagueId: string, playerId: stri
 }
 export async function addDrop(userId: string, leagueId: string, addId: string, dropId: string | null, bid = 0): Promise<{ mode: "claim" | "free_agent" }> {
 	return (await import("./ops.server")).requestAdd(userId, leagueId, addId, dropId, bid);
+}
+export async function dropPlayer(userId: string, leagueId: string, playerId: string): Promise<void> {
+	return (await import("./ops.server")).requestDrop(userId, leagueId, playerId);
 }
 export async function previewSleeperImport(sleeperId: string): Promise<{
   sleeperId: string;

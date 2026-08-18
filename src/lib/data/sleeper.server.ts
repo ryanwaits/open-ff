@@ -21,6 +21,7 @@ import type {
   TeamBundle,
   TrendingPlayer,
   WirePlayer,
+  WireScope,
 } from "./types";
 
 const SLEEPER = "https://api.sleeper.app/v1";
@@ -417,27 +418,57 @@ export async function loadTeam(leagueId: string, rosterId: number, week: number)
   };
 }
 
-export async function loadWire(leagueId: string, position: string, query: string): Promise<WirePlayer[]> {
-  const [rosters, seed] = await Promise.all([
+export async function loadWire(
+  leagueId: string,
+  position: string,
+  query: string,
+  scope: WireScope = "available",
+): Promise<WirePlayer[]> {
+  const [rosters, users, seed] = await Promise.all([
     sget<SleeperRoster[]>(`/league/${leagueId}/rosters`, 30_000),
+    sget<SleeperUser[]>(`/league/${leagueId}/users`, 60_000),
     loadStatRows(),
   ]);
-  const taken = new Set<string>();
-  for (const r of rosters) for (const id of r.players ?? []) taken.add(id);
+  const byUser = new Map(users.map((u) => [u.user_id, u]));
+  const ownerByPlayer = new Map<string, { rosterId: number; teamName: string }>();
+  for (const r of rosters) {
+    const teamName = teamLabel(r.owner_id ? byUser.get(r.owner_id) : undefined, r.roster_id).teamName;
+    for (const id of r.players ?? []) {
+      ownerByPlayer.set(id, { rosterId: r.roster_id, teamName });
+    }
+  }
   const q = query.trim().toLowerCase();
   const pos = position === "ALL" ? null : position;
   const pts = new Map(seed.map((s) => [s.player_id, s]));
+  const seen = new Set<string>();
   const out: WirePlayer[] = [];
-  for (const [id, p] of Object.entries(loadPlayers())) {
-    if (taken.has(id)) continue;
-    if (p.position === "DEF" && pos && pos !== "DEF") continue;
-    if (pos && p.position !== pos && !(p.fantasy_positions ?? []).includes(pos)) continue;
-    if (q && !`${p.full_name} ${p.search_full_name ?? ""} ${p.team ?? ""}`.toLowerCase().includes(q)) continue;
-    const s = pts.get(id);
-    out.push({ ...p, pts: s?.pts_ppr ?? null, rank: s?.pos_rank_ppr ?? null });
+
+  const consider = (p: SlimPlayer | null, points: number | null, rank: number | null) => {
+    if (!p || seen.has(p.player_id)) return;
+    const ownedBy = ownerByPlayer.get(p.player_id) ?? null;
+    // Imports have no waiver window we can read — unowned is a free agent.
+    const availability = ownedBy ? "rostered" : "free_agent";
+    if (scope === "available" && availability === "rostered") return;
+    if (scope === "free_agent" && availability !== "free_agent") return;
+    if (p.position === "DEF" && pos && pos !== "DEF") return;
+    if (pos && p.position !== pos && !(p.fantasy_positions ?? []).includes(pos)) return;
+    if (q && !`${p.full_name} ${p.search_full_name ?? ""} ${p.team ?? ""}`.toLowerCase().includes(q)) return;
+    seen.add(p.player_id);
+    out.push({ ...p, pts: points, rank, availability, ownedBy });
+  };
+
+  for (const s of seed) {
+    const p = getPlayer(s.player_id);
+    consider(p, s.pts_ppr ?? null, s.pos_rank_ppr ?? null);
+  }
+  if (scope === "all") {
+    for (const id of ownerByPlayer.keys()) {
+      const s = pts.get(id);
+      consider(getPlayer(id), s?.pts_ppr ?? null, s?.pos_rank_ppr ?? null);
+    }
   }
   out.sort((a, b) => (b.pts ?? -1) - (a.pts ?? -1) || a.full_name.localeCompare(b.full_name));
-  return out.slice(0, 80);
+  return out;
 }
 
 export async function loadActivity(leagueId: string, week: number): Promise<ActivityItem[]> {

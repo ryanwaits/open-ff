@@ -74,9 +74,9 @@ export const getMockPool = createServerFn({ method: "GET" })
     const { scoringBookFor, perGameUnder } = await import("@/lib/data/projections.server");
     const { getPlayer } = await import("@/lib/data/sleeper.server");
     const book = await scoringBookFor(data.leagueId);
-    const seed = JSON.parse(
-      readFileSync(join(process.cwd(), "data/stats-2025.json"), "utf8"),
-    ) as { player_id: string }[];
+    const seed = JSON.parse(readFileSync(join(process.cwd(), "data/stats-2025.json"), "utf8")) as {
+      player_id: string;
+    }[];
     const out: {
       playerId: string;
       name: string;
@@ -202,6 +202,15 @@ export const addDrop = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const eng = await import("./engine.server");
     return eng.addDrop(context.userId, data.leagueId, data.addId, data.dropId, data.bid ?? 0);
+  });
+
+export const dropPlayer = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ leagueId: z.string(), playerId: z.string() }))
+  .handler(async ({ context, data }) => {
+    const eng = await import("./engine.server");
+    await eng.dropPlayer(context.userId, data.leagueId, data.playerId);
+    return { ok: true };
   });
 
 export const previewImport = createServerFn({ method: "GET" })

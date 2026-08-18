@@ -1,36 +1,75 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { ClaimButton } from "@/components/claim-button";
 import { ClaimDialog } from "@/components/claim-dialog";
 import { PlayerCell } from "@/components/player-cell";
+import { TablePager } from "@/components/table-pager";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getLeagueBundle, getWire } from "@/lib/data/fns";
 import { headshotFor } from "@/lib/data/player-view";
+import type { WirePlayer, WireScope } from "@/lib/data/types";
 import { cancelClaim, getClaims } from "@/lib/league/fns";
 import { useClaim } from "@/lib/league/use-claim";
 import { cn, formatPts } from "@/lib/utils";
 
 const POS = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"] as const;
+const SCOPES = [
+  { id: "all" as const, label: "All" },
+  { id: "available" as const, label: "Available" },
+  { id: "free_agent" as const, label: "Free agent" },
+];
+const PAGE_SIZE = 10;
+
+type WireSearch = {
+  scope?: WireScope;
+  pos?: (typeof POS)[number];
+  page?: number;
+};
 
 export const Route = createFileRoute("/league/$leagueId/wire")({
+  validateSearch: (s: Record<string, unknown>): WireSearch => {
+    const out: WireSearch = {};
+    if (s.scope === "all" || s.scope === "available" || s.scope === "free_agent") {
+      out.scope = s.scope;
+    }
+    if (POS.includes(s.pos as (typeof POS)[number])) out.pos = s.pos as (typeof POS)[number];
+    const page = parsePage(s.page);
+    if (page > 1) out.page = page;
+    return out;
+  },
   component: WirePage,
 });
 
+function parsePage(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(1, Math.floor(value));
+  if (typeof value === "string" && /^\d+$/.test(value)) return Math.max(1, Number(value));
+  return 1;
+}
+
 function WirePage() {
   const { leagueId } = Route.useParams();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
   const qc = useQueryClient();
-  const [pos, setPos] = useState<(typeof POS)[number]>("ALL");
   const [q, setQ] = useState("");
+  const scope = search.scope ?? "available";
+  const pos = search.pos ?? "ALL";
   const league = useQuery({
     queryKey: ["league", leagueId],
     queryFn: () => getLeagueBundle({ data: { leagueId } }),
   });
   const wire = useQuery({
-    queryKey: ["wire", leagueId, pos],
-    queryFn: () => getWire({ data: { leagueId, position: pos, query: "" } }),
+    queryKey: ["wire", leagueId, pos, scope],
+    queryFn: () =>
+      getWire({
+        data: { leagueId, position: pos, query: "", scope },
+      }),
+    // A leftover All list under Free agent is worse than a brief skeleton.
+    placeholderData: undefined,
   });
   const needle = q.trim().toLowerCase();
   const rows = (wire.data ?? []).filter((p) => {
@@ -55,6 +94,26 @@ function WirePage() {
   // still live, not a history of everything you ever tried.
   const pendingClaims = (claims.data?.items ?? []).filter((c) => c.status === "pending");
 
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const page = Math.min(search.page ?? 1, pageCount);
+  const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  function setSearch(next: Partial<WireSearch>) {
+    void navigate({
+      search: (prev) => {
+        const scopeNext = next.scope ?? prev.scope ?? "available";
+        const posNext = next.pos ?? prev.pos ?? "ALL";
+        const pageNext = next.page ?? 1;
+        return {
+          scope: scopeNext === "available" ? undefined : scopeNext,
+          pos: posNext === "ALL" ? undefined : posNext,
+          page: pageNext > 1 ? pageNext : undefined,
+        };
+      },
+      replace: true,
+    });
+  }
+
   const wireCopy = !league.data?.hosted
     ? `Everyone not on a roster, ranked by ${league.data?.league.season ?? ""} PPR. Read-only peek.`
     : !drafted
@@ -72,6 +131,15 @@ function WirePage() {
                 ? `You have $${league.data.faabRemaining ?? 100} FAAB left for next week's wire.`
                 : "Next week's wire uses rolling priority."
             }`;
+
+  const waiversOpen = Boolean(league.data?.ops?.waiversOpen);
+  const emptyCopy = needle
+    ? "No one matches"
+    : scope === "free_agent" && waiversOpen
+      ? "Waivers are open. Free agents appear after claims process."
+      : scope === "all"
+        ? "No players match."
+        : "No available players match.";
 
   return (
     <div>
@@ -106,69 +174,118 @@ function WirePage() {
           ))}
         </ul>
       ) : null}
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+
+      <div className="mt-4 flex flex-col gap-3">
         <Input
           value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search available players"
+          onChange={(e) => {
+            setQ(e.target.value);
+            if ((search.page ?? 1) !== 1) setSearch({ page: 1 });
+          }}
+          placeholder="Search players"
           className="sm:max-w-xs"
         />
         <div className="flex flex-wrap gap-1">
+          {SCOPES.map((s) => (
+            <Chip key={s.id} active={scope === s.id} onClick={() => setSearch({ scope: s.id })}>
+              {s.label}
+            </Chip>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1">
           {POS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPos(p)}
-              className={cn(
-                "h-9 rounded-sm px-3 font-mono text-xs",
-                pos === p ? "bg-accent text-accent-fg" : "bg-raised text-muted",
-              )}
-            >
+            <Chip key={p} active={pos === p} onClick={() => setSearch({ pos: p })}>
               {p}
-            </button>
+            </Chip>
           ))}
         </div>
       </div>
 
-      <ul className="mt-6 divide-y divide-line rounded-xl bg-surface shadow-[var(--shadow-border)]">
-        {wire.data == null
-          ? Array.from({ length: 8 }).map((_, i) => (
-              <li key={i} className="p-3">
-                <Skeleton className="h-8" />
-              </li>
-            ))
-          : rows.map((p) => (
-              <li key={p.player_id} className="flex items-center gap-3 px-3 py-2.5">
-                <Link
-                  to="/league/$leagueId/player/$playerId"
-                  params={{ leagueId, playerId: p.player_id }}
-                  className="min-w-0 flex-1 rounded-md"
-                >
-                  <PlayerCell player={p} compact />
-                </Link>
-                <span className="font-mono text-sm tabular-nums">
-                  {formatPts(p.pts, 1)}
-                </span>
-                <ClaimButton
-                  size="sm"
-                  verdict={claim.verdictFor(p.player_id)}
-                  leagueId={leagueId}
-                  onClaim={() =>
-                    claim.setTarget({
-                      player: p,
-                      name: p.full_name,
-                      headshot: headshotFor(p),
-                    })
-                  }
-                />
-              </li>
-            ))}
-      </ul>
-      {wire.isSuccess && rows.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">
-          {needle ? "No one matches" : "No available players match."}
-        </p>
-      ) : null}
+      <div className="mt-6 overflow-x-auto rounded-xl bg-surface shadow-[var(--shadow-border)]">
+        <table className="w-full text-left text-sm">
+          <thead className="font-mono text-[11px] uppercase tracking-wide text-faint">
+            <tr className="border-b border-line">
+              <th className="px-4 py-3 font-medium">Player</th>
+              <th className="hidden px-3 py-3 font-medium sm:table-cell">Status</th>
+              <th className="px-3 py-3 text-right font-medium">Pts</th>
+              <th className="px-4 py-3 text-right font-medium">
+                <span className="sr-only">Action</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {wire.data == null ? (
+              ["a", "b", "c", "d", "e", "f", "g", "h"].map((key) => (
+                <tr key={key} className="border-b border-line">
+                  <td colSpan={4} className="px-4 py-3">
+                    <Skeleton className="h-8" />
+                  </td>
+                </tr>
+              ))
+            ) : pageRows.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-8 text-sm text-muted">
+                  {emptyCopy}
+                </td>
+              </tr>
+            ) : (
+              pageRows.map((p) => (
+                <tr key={p.player_id} className="border-b border-line last:border-0">
+                  <td className="px-4 py-2.5">
+                    <Link
+                      to="/league/$leagueId/player/$playerId"
+                      params={{ leagueId, playerId: p.player_id }}
+                      className="rounded-md"
+                    >
+                      <PlayerCell player={p} compact />
+                    </Link>
+                    <div className="mt-1 sm:hidden">
+                      <StatusCell player={p} />
+                    </div>
+                  </td>
+                  <td className="hidden px-3 py-2.5 sm:table-cell">
+                    <StatusCell player={p} />
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono tabular-nums">
+                    {formatPts(p.pts, 1)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <ClaimButton
+                      size="sm"
+                      verdict={claim.verdictFor(p.player_id, p.ownedBy)}
+                      leagueId={leagueId}
+                      playerId={p.player_id}
+                      ownerRosterId={p.ownedBy?.rosterId}
+                      onClaim={() =>
+                        claim.setTarget({
+                          player: p,
+                          name: p.full_name,
+                          headshot: headshotFor(p),
+                          action:
+                            claim.verdictFor(p.player_id, p.ownedBy).kind === "mine"
+                              ? "drop"
+                              : "add",
+                        })
+                      }
+                    />
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+        {wire.isSuccess && rows.length > 0 ? (
+          <div className="border-t border-line">
+            <TablePager
+              page={page}
+              pageCount={pageCount}
+              total={rows.length}
+              pageSize={PAGE_SIZE}
+              onPage={(next) => setSearch({ scope, pos, page: next })}
+            />
+          </div>
+        ) : null}
+      </div>
 
       <ClaimDialog
         open={claim.open}
@@ -188,4 +305,35 @@ function WirePage() {
       />
     </div>
   );
+}
+
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "h-9 rounded-sm px-3 font-mono text-xs",
+        active ? "bg-accent text-accent-fg" : "bg-raised text-muted",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function StatusCell({ player }: { player: WirePlayer }) {
+  if (player.availability === "rostered") {
+    return <span className="text-xs text-muted">{player.ownedBy?.teamName ?? "Rostered"}</span>;
+  }
+  if (player.availability === "waiver") return <Badge>Waiver</Badge>;
+  return <Badge tone="muted">FA</Badge>;
 }
