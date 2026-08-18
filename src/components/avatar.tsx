@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { cn, initials } from "@/lib/utils";
 
 /**
@@ -53,12 +53,19 @@ export function Avatar({
 }: Props) {
   const [broken, setBroken] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   // A recycled row (virtualised lists, week changes) must not keep the previous
-  // player's load state.
-  useEffect(() => {
+  // player's load state. Cached shots (persist + disk cache) often finish
+  // before onLoad is attached — read `complete` or they stay opacity-0.
+  useLayoutEffect(() => {
     setBroken(false);
     setLoaded(false);
+    if (!src) return;
+    const el = imgRef.current;
+    if (!el?.complete) return;
+    if (el.naturalWidth > 0) setLoaded(true);
+    else setBroken(true);
   }, [src]);
 
   const showImage = Boolean(src) && !broken;
@@ -70,20 +77,16 @@ export function Avatar({
         "relative grid shrink-0 place-items-center overflow-hidden rounded-pill bg-raised",
         className,
       )}
-      style={
-        tint && !showImage
-          ? { background: TINTS[tintOf(name ?? "?")] }
-          : undefined
-      }
+      style={tint && !showImage ? { background: TINTS[tintOf(name ?? "?")] } : undefined}
     >
       {showImage ? null : (
         <span className={cn("font-mono font-medium text-muted", textClassName)}>{label}</span>
       )}
-      {showImage ? (
+      {src && !broken ? (
         <img
-          src={src!}
+          ref={imgRef}
+          src={src}
           alt=""
-          loading="lazy"
           decoding="async"
           className={cn(
             "absolute inset-0 size-full object-cover transition-opacity duration-200 ease-out",
