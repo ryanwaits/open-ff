@@ -183,7 +183,6 @@ export function LineupBoard({
                 <span className="min-w-0 flex-1 text-sm font-semibold text-loss">Empty</span>
               )}
               {bye ? <Badge tone="loss">Bye</Badge> : null}
-              {p?.injury_status ? <Badge tone="loss">{p.injury_status}</Badge> : null}
               <Points player={p} projection={projections?.[p?.player_id ?? ""]} />
               {armed ? (
                 <button
@@ -253,7 +252,6 @@ export function LineupBoard({
                 <PlayerCell player={p} compact game={p.game} />
               </button>
               {onBye(p, byes, week) ? <Badge tone="loss">Bye</Badge> : null}
-              {p.injury_status ? <Badge tone="loss">{p.injury_status}</Badge> : null}
               <Points player={p} projection={projections?.[p.player_id]} />
               {editable && canStart ? (
                 <button

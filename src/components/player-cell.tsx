@@ -1,7 +1,60 @@
 import { Avatar } from "@/components/avatar";
-import { canonTeam, playerHeadshot, teamLogo } from "@/lib/data/teams";
+import { Badge } from "@/components/ui/badge";
+import { canonTeam, dstLabel, playerHeadshot, teamLogo } from "@/lib/data/teams";
 import type { GameChip, SlimPlayer } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
+
+/** Short mark next to a name. Q is caution; everything worse is alarm. */
+export function injuryMark(status?: string | null): {
+  letter: string;
+  label: string;
+  tone: "warn" | "loss";
+  title: string;
+} | null {
+  const raw = (status ?? "").trim();
+  if (!raw) return null;
+  const s = raw.toLowerCase();
+  if (s === "questionable" || s === "q") {
+    return { letter: "Q", label: "QUEST", tone: "warn", title: raw };
+  }
+  if (s === "doubtful" || s === "d" || s.includes("doubtful")) {
+    return { letter: "D", label: "DOUBT", tone: "loss", title: raw };
+  }
+  if (s === "pup" || s.includes("pup") || s.includes("physically unable")) {
+    return { letter: "PUP", label: "PUP", tone: "loss", title: raw };
+  }
+  if (s === "out" || s.startsWith("out")) {
+    return { letter: "O", label: "OUT", tone: "loss", title: raw };
+  }
+  if (s === "ir" || s.includes("injured reserve")) {
+    return { letter: "IR", label: "IR", tone: "loss", title: raw };
+  }
+  if (s.includes("suspend")) {
+    return { letter: "SUS", label: "SUS", tone: "loss", title: raw };
+  }
+  const cut = raw.slice(0, 5).toUpperCase();
+  return { letter: raw.slice(0, 3).toUpperCase(), label: cut, tone: "loss", title: raw };
+}
+
+export function InjuryMark({
+  status,
+  className,
+}: {
+  status?: string | null;
+  className?: string;
+}) {
+  const mark = injuryMark(status);
+  if (!mark) return null;
+  return (
+    <Badge
+      tone={mark.tone}
+      title={mark.title}
+      className={cn("shrink-0 px-1.5 py-0 text-[9px] font-semibold leading-4", className)}
+    >
+      {mark.letter}
+    </Badge>
+  );
+}
 
 export function PlayerCell({
   player,
@@ -25,7 +78,7 @@ export function PlayerCell({
   const src = isDef
     ? teamLogo(player.team ?? player.player_id)
     : playerHeadshot(player.player_id, player.espn_id);
-  const name = isDef && player.team ? `${player.team} D/ST` : player.full_name;
+  const name = isDef && player.team ? dstLabel(player.team) : player.full_name;
   const meta = [player.position, player.team].filter(Boolean).join(" · ");
 
   return (
@@ -46,7 +99,15 @@ export function PlayerCell({
         ) : null}
       </Avatar>
       <span className="min-w-0">
-        <span className="block truncate text-sm font-medium text-fg">{name}</span>
+        <span
+          className={cn(
+            "flex min-w-0 items-center gap-1.5",
+            align === "right" && "flex-row-reverse",
+          )}
+        >
+          <span className="truncate text-sm font-medium text-fg">{name}</span>
+          <InjuryMark status={player.injury_status} />
+        </span>
         <span className="block truncate font-mono text-[11px] uppercase tracking-wide text-faint">
           {meta}
           {gameLabel(game, player.team)}

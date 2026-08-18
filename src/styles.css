@@ -52,6 +52,7 @@
   /* the only alarm colour. Wins are not coloured: winning is the default
      state, losing is the exception that gets marked. */
   --alarm: #c8503a;
+  --caution: #c4921a;
 
   --lift: 0 10px 26px -16px rgb(23 25 29 / 0.3);
   --lift-hover: 0 16px 34px -18px rgb(23 25 29 / 0.4);
@@ -79,6 +80,7 @@
     --highlight: #2c5c3e;
 
     --alarm: #e4705a;
+    --caution: #e3b341;
 
     --lift: 0 10px 26px -16px rgb(0 0 0 / 0.7);
     --lift-hover: 0 16px 34px -18px rgb(0 0 0 / 0.8);
@@ -106,6 +108,7 @@
   --highlight: #2c5c3e;
 
   --alarm: #e4705a;
+  --caution: #e3b341;
 
   --lift: 0 10px 26px -16px rgb(0 0 0 / 0.7);
   --lift-hover: 0 16px 34px -18px rgb(0 0 0 / 0.8);
@@ -167,6 +170,7 @@
   --color-win: var(--ink);
   --color-loss: var(--alarm);
   --color-live: var(--alarm);
+  --color-warn: var(--caution);
 
   --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;

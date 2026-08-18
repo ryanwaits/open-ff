@@ -10,7 +10,6 @@ import {
   ProfileSplits,
   ProfileStats,
   ProfileThisWeek,
-  ScoringNote,
 } from "@/components/player-profile";
 import { usePlayerProfile } from "@/lib/data/player-view";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -123,7 +122,6 @@ function Body({
             <div className="border-b border-line">
               <ProfileStats p={p} player={player} />
             </div>
-            <ScoringNote />
             <ProfileNews notes={p.news} />
             <ProfileThisWeek p={p} player={player} game={game} />
             <ProfileSchedule games={p.schedule} week={p.slateWeek} compact />

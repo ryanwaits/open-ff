@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { slotBreakdown } from "@/lib/league/roster";
-import { sleeperAvatar, slotLabel, START_SLOTS } from "./teams";
+import { dstLabel, sleeperAvatar, slotLabel, START_SLOTS } from "./teams";
 import type {
   ActivityItem,
   LeaderRow,
@@ -135,7 +135,7 @@ export function getPlayer(id: string | null | undefined): SlimPlayer | null {
 export function playerName(id: string): string {
   const p = getPlayer(id);
   if (p?.full_name) return p.full_name;
-  if (p?.position === "DEF" && p.team) return `${p.team} D/ST`;
+  if (p?.position === "DEF" && p.team) return dstLabel(p.team);
   return id;
 }
 

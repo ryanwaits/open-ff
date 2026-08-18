@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getPlayerProfile } from "./fns";
-import { playerHeadshot, teamLogo } from "./teams";
+import { dstLabel, playerHeadshot, teamLogo } from "./teams";
 import type { SlimPlayer } from "./types";
 
 export type Profile = NonNullable<Awaited<ReturnType<typeof getPlayerProfile>>>;
@@ -19,5 +19,5 @@ export function headshotFor(player: SlimPlayer): string | null {
 }
 
 export function displayName(player: SlimPlayer): string {
-  return player.position === "DEF" && player.team ? `${player.team} D/ST` : player.full_name;
+  return player.position === "DEF" && player.team ? dstLabel(player.team) : player.full_name;
 }

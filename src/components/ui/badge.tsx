@@ -5,7 +5,9 @@ export function Badge({
   className,
   tone = "default",
   ...props
-}: HTMLAttributes<HTMLSpanElement> & { tone?: "default" | "win" | "loss" | "live" | "muted" }) {
+}: HTMLAttributes<HTMLSpanElement> & {
+  tone?: "default" | "win" | "loss" | "live" | "muted" | "warn";
+}) {
   return (
     <span
       className={cn(
@@ -14,6 +16,7 @@ export function Badge({
         tone === "win" && "bg-win/15 text-win",
         tone === "loss" && "bg-loss/15 text-loss",
         tone === "live" && "bg-live/15 text-live",
+        tone === "warn" && "bg-warn/15 text-warn",
         tone === "muted" && "text-faint",
         className,
       )}

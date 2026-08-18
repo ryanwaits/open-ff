@@ -1,8 +1,8 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Check, CircleMinus, Pencil } from "lucide-react";
 import { Avatar } from "@/components/avatar";
-import { Badge } from "@/components/ui/badge";
-import { playerHeadshot, teamLogo } from "@/lib/data/teams";
+import { InjuryMark } from "@/components/player-cell";
+import { dstLabel, playerHeadshot, teamLogo } from "@/lib/data/teams";
 import type { Projection, RosterPlayer } from "@/lib/data/types";
 import { slotAccepts } from "@/lib/league/roster";
 import { cn, formatPts } from "@/lib/utils";
@@ -148,7 +148,7 @@ function Row({
   const src = isDef
     ? teamLogo(player.team ?? player.player_id)
     : playerHeadshot(player.player_id, player.espn_id);
-  const name = isDef && player.team ? `${player.team} D/ST` : player.full_name;
+  const name = isDef && player.team ? dstLabel(player.team) : player.full_name;
   const meta = [player.position, player.team, player.game?.detail].filter(Boolean).join(" · ");
 
   return (
@@ -169,7 +169,7 @@ function Row({
           {actionLabel ?? meta}
         </span>
       </span>
-      {player.injury_status ? <Badge tone="loss">{player.injury_status}</Badge> : null}
+      <InjuryMark status={player.injury_status} />
       <span className="shrink-0 text-right">
         <span className="block font-mono text-sm tabular-nums text-muted">
           {started(player) && player.weekPts != null

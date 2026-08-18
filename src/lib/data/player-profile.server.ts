@@ -17,8 +17,8 @@ export type PlayerProfile = {
   posRankOf: number | null;
   /** Raw component totals, for the splits list. */
   splits: Record<string, number>;
-  /** One entry per week; null means no game recorded. */
-  weekly: (number | null)[];
+  /** One entry per week; null is a bye or a week with nothing to draw. */
+  weekly: WeeklyBar[];
   byeWeek: number | null;
   scoringNote: string;
   /** RotoWire notes when we can resolve an ESPN athlete id. */
@@ -37,6 +37,11 @@ export type PlayerProfile = {
    */
   ownedBy: { rosterId: number; teamName: string } | null;
 };
+
+export type WeeklyBar = {
+  pts: number;
+  kind: "actual" | "proj";
+} | null;
 
 type StatSeed = Record<string, number> & { player_id: string };
 
@@ -110,11 +115,16 @@ export async function loadPlayerProfile(input: {
     }
   }
 
-  const weekly = await weeklyLine(season, input.playerId, book);
-  const [byeWeek, slate] = await Promise.all([
+  const [byeWeek, slate, actuals] = await Promise.all([
     byeWeekFor(season, player.team),
     loadSlate(player),
+    weeklyLine(season, input.playerId, book),
   ]);
+  const weekly: WeeklyBar[] = actuals.map((pts, i) => {
+    if (byeWeek === i + 1) return null;
+    if (pts == null) return null;
+    return { pts, kind: "actual" };
+  });
 
   return {
     player,
@@ -261,3 +271,5 @@ async function weeklyLine(
   );
   return weeks;
 }
+
+

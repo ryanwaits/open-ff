@@ -92,6 +92,19 @@ export function teamName(abbr: string | null | undefined): string {
   return meta ? `${meta.city} ${meta.nick}` : abbr;
 }
 
+/** Nickname only — Packers, not GB or Green Bay Packers. */
+export function teamNick(abbr: string | null | undefined): string | null {
+  if (!abbr) return null;
+  return TEAMS[canonTeam(abbr) ?? abbr.toUpperCase()]?.nick ?? null;
+}
+
+/** Roster/matchup label for a D/ST. */
+export function dstLabel(abbr: string | null | undefined): string {
+  const nick = teamNick(abbr);
+  if (nick) return `${nick} D/ST`;
+  return abbr ? `${abbr} D/ST` : "D/ST";
+}
+
 export function playerHeadshot(playerId: string, espnId?: string | number | null): string {
   if (espnId) {
     return `https://a.espncdn.com/i/headshots/nfl/players/full/${espnId}.png`;

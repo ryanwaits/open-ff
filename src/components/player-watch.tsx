@@ -8,7 +8,7 @@ import { getGameSummary } from "@/lib/data/fns";
 import { playerPlays, playMentionsPlayer, situationIsRedZone } from "@/lib/data/player-plays";
 import { bagForPlayer, simulatePlayerGame } from "@/lib/data/sim-game";
 import { formatStatLine } from "@/lib/data/statline";
-import { baseSlotLabel, playerHeadshot, teamLogo } from "@/lib/data/teams";
+import { baseSlotLabel, dstLabel, playerHeadshot, teamLogo } from "@/lib/data/teams";
 import type { GamePlay, GameSummary, SlimPlayer, StarterLine } from "@/lib/data/types";
 import { REPLAY_PHASES, replayPts, replayStats } from "@/lib/replay";
 import { cn, formatPts } from "@/lib/utils";
@@ -150,7 +150,7 @@ function WatchBody({ target, onClose }: { target: WatchTarget; onClose: () => vo
       : target.points;
   const name =
     target.player.position === "DEF" && target.player.team
-      ? `${target.player.team} D/ST`
+      ? dstLabel(target.player.team)
       : target.player.full_name;
   const src =
     target.player.position === "DEF"

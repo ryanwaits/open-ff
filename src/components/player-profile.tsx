@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { Avatar } from "@/components/avatar";
-import { Badge } from "@/components/ui/badge";
+import { InjuryMark, injuryMark } from "@/components/player-cell";
 import { displayName, headshotFor, type Profile } from "@/lib/data/player-view";
 import type { GameChip, PlayerNote, PlayerScheduleGame, SlimPlayer } from "@/lib/data/types";
 import { cn, formatPts } from "@/lib/utils";
@@ -51,7 +52,7 @@ export function ProfileIdentity({
               {role}
             </span>
           ) : null}
-          {player.injury_status ? <Badge tone="loss">{player.injury_status}</Badge> : null}
+          <InjuryMark status={player.injury_status} />
         </div>
         {book.length ? (
           <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
@@ -118,12 +119,16 @@ export function Section({
   );
 }
 
-export function Row({ k, v, tone }: { k: string; v: string; tone?: "loss" }) {
+export function Row({ k, v, tone }: { k: string; v: string; tone?: "loss" | "warn" }) {
   return (
     <div className="flex items-center justify-between gap-3 px-5 py-1.5">
       <span className="text-sm text-muted">{k}</span>
       <span
-        className={cn("font-mono text-sm font-medium tabular-nums", tone === "loss" && "text-loss")}
+        className={cn(
+          "font-mono text-sm font-medium tabular-nums",
+          tone === "loss" && "text-loss",
+          tone === "warn" && "text-warn",
+        )}
       >
         {v}
       </span>
@@ -132,6 +137,7 @@ export function Row({ k, v, tone }: { k: string; v: string; tone?: "loss" }) {
 }
 
 export function ProfileNews({ notes }: { notes: PlayerNote[] }) {
+  const [open, setOpen] = useState(false);
   if (notes.length === 0) {
     return (
       <Section title="News">
@@ -139,22 +145,57 @@ export function ProfileNews({ notes }: { notes: PlayerNote[] }) {
       </Section>
     );
   }
-  const source = notes[0]?.source;
+  const lead = notes[0];
+  if (!lead) {
+    return (
+      <Section title="News">
+        <p className="px-5 text-sm text-muted">No player notes yet.</p>
+      </Section>
+    );
+  }
+  const rest = notes.slice(1);
+  const body = lead.text && lead.text !== lead.headline ? lead.text : "";
+  const long = body.length > 160 || rest.length > 0;
   return (
-    <Section title="News" meta={source}>
-      <ul>
-        {notes.slice(0, 5).map((n) => (
-          <li key={n.id} className="border-b border-line px-5 py-3 last:border-0">
-            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
-              {noteWhen(n.date)}
-            </p>
-            <p className="mt-1 text-sm font-semibold leading-snug">{n.headline}</p>
-            {n.text && n.text !== n.headline ? (
-              <p className="mt-1 text-[13px] leading-relaxed text-muted">{n.text}</p>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+    <Section title="News" meta={lead.source}>
+      <div className="px-5 pb-1">
+        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+          {noteWhen(lead.date)}
+        </p>
+        <p className="mt-1 text-sm font-semibold leading-snug">{lead.headline}</p>
+        {body ? (
+          <p
+            className={cn(
+              "mt-1 text-[13px] leading-relaxed text-muted",
+              !open && "line-clamp-3",
+            )}
+          >
+            {body}
+          </p>
+        ) : null}
+        {open
+          ? rest.map((n) => (
+              <div key={n.id} className="mt-3 border-t border-line pt-3">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+                  {noteWhen(n.date)}
+                </p>
+                <p className="mt-1 text-sm font-semibold leading-snug">{n.headline}</p>
+                {n.text && n.text !== n.headline ? (
+                  <p className="mt-1 text-[13px] leading-relaxed text-muted">{n.text}</p>
+                ) : null}
+              </div>
+            ))
+          : null}
+        {long ? (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="mt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-accent-strong"
+          >
+            {open ? "Show less" : "Show more"}
+          </button>
+        ) : null}
+      </div>
     </Section>
   );
 }
@@ -162,12 +203,12 @@ export function ProfileNews({ notes }: { notes: PlayerNote[] }) {
 export function ProfileSchedule({
   games,
   week,
-  compact = false,
 }: {
   games: PlayerScheduleGame[];
   week: number;
   compact?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   if (games.length === 0) {
     return (
       <Section title="Schedule">
@@ -175,10 +216,10 @@ export function ProfileSchedule({
       </Section>
     );
   }
-  const shown = compact ? games.filter((g) => g.week >= week).slice(0, 6) : games;
-  const hidden = compact ? Math.max(0, games.filter((g) => g.week >= week).length - shown.length) : 0;
+  const upcoming = games.filter((g) => g.week >= week).slice(0, 3);
+  const shown = open ? games : upcoming;
   return (
-    <Section title="Schedule" meta={compact ? "Next" : `${games.length} weeks`}>
+    <Section title="Schedule" meta={open ? `${games.length} weeks` : "Next 3"}>
       <ul>
         {shown.map((g) => {
           const now = g.week === week;
@@ -203,10 +244,14 @@ export function ProfileSchedule({
           );
         })}
       </ul>
-      {hidden > 0 ? (
-        <p className="px-5 pt-1 pb-2 font-mono text-[10px] uppercase tracking-wide text-faint">
-          +{hidden} more on the full profile
-        </p>
+      {games.length > upcoming.length ? (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="px-5 pt-1 pb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-accent-strong"
+        >
+          {open ? "Show less" : "Show more"}
+        </button>
       ) : null}
     </Section>
   );
@@ -221,14 +266,15 @@ function noteWhen(raw: string): string {
 
 export function ProfileThisWeek({ p, player, game }: { p: Profile; player: SlimPlayer; game?: GameChip | null }) {
   const bye = p.schedule.find((g) => g.bye)?.week ?? p.byeWeek;
+  const mark = injuryMark(player.injury_status);
   return (
     <Section title="This week">
       <Row k="Opponent" v={game?.opp ?? "—"} />
       <Row k="Game" v={game?.detail ?? "Not scheduled"} />
       <Row
         k="Status"
-        v={player.injury_status ?? "No designation"}
-        tone={player.injury_status ? "loss" : undefined}
+        v={mark?.label ?? player.injury_status ?? "No designation"}
+        tone={mark?.tone}
       />
       <Row k="Bye week" v={bye ? `Week ${bye}` : "Unknown"} />
     </Section>
@@ -279,10 +325,8 @@ function fmt(n: number): string {
 }
 
 /**
- * One series, so no legend and no colour-by-value: bar height already encodes
- * magnitude. The average is a reference line rather than a second hue, and
- * weeks with no game are drawn as gaps, because "did not play" and "scored
- * nothing" are different facts.
+ * Last season's unofficial weeks. Green met the dashed per-game line;
+ * cooler gray missed it. Empty slots are byes or games not played.
  */
 export function ProfileGameLog({
   weekly,
@@ -290,30 +334,31 @@ export function ProfileGameLog({
   perGame,
   tall = false,
 }: {
-  weekly: (number | null)[];
+  weekly: Profile["weekly"];
   bye: number | null;
   perGame: number;
   tall?: boolean;
 }) {
-  const played = weekly.filter((v): v is number => v != null);
-  if (played.length === 0) {
+  const drawn = weekly.filter((v): v is NonNullable<Profile["weekly"][number]> => v != null);
+  if (drawn.length === 0) {
     return (
       <Section title="Week by week">
         <p className="px-5 text-sm text-muted">No games recorded for this season yet.</p>
       </Section>
     );
   }
-  const top = Math.max(...played, perGame) * 1.15 || 1;
-  const best = Math.max(...played);
+  const top = Math.max(...drawn.map((b) => b.pts), perGame) * 1.15 || 1;
+  const actuals = drawn.filter((b) => b.kind === "actual");
+  const best = actuals.length ? Math.max(...actuals.map((b) => b.pts)) : null;
 
   return (
     <Section title="Week by week" meta={`Avg ${formatPts(perGame, 1)}`}>
       <div className="px-5 pt-2">
         <div className={cn("relative flex items-end gap-[2px]", tall ? "h-48" : "h-32")}>
-          {weekly.map((v, i) => {
+          {weekly.map((bar, i) => {
             const week = i + 1;
             const isBye = bye === week;
-            if (v == null) {
+            if (bar == null) {
               return (
                 <span
                   key={week}
@@ -326,20 +371,31 @@ export function ProfileGameLog({
                 </span>
               );
             }
+            const met = bar.kind === "actual" && bar.pts + 0.05 >= perGame;
+            const fill =
+              bar.kind === "proj"
+                ? "bg-faint/35"
+                : met
+                  ? "bg-accent-strong"
+                  : "bg-faint";
+            const label =
+              bar.kind === "proj"
+                ? `Week ${week} · ${formatPts(bar.pts, 1)} proj`
+                : `Week ${week} · ${formatPts(bar.pts, 1)}${met ? "" : " · below line"}`;
             return (
               <span
                 key={week}
-                title={`Week ${week} · ${formatPts(v, 1)}`}
+                title={label}
                 className="relative flex h-full flex-1 items-end"
               >
-                {v === best ? (
+                {best != null && bar.kind === "actual" && bar.pts === best ? (
                   <span className="absolute inset-x-0 -top-1 text-center font-mono text-[9px] font-semibold">
-                    {formatPts(v, 1)}
+                    {formatPts(bar.pts, 1)}
                   </span>
                 ) : null}
                 <span
-                  className="w-full rounded-t-xs bg-accent-strong"
-                  style={{ height: `${Math.max((v / top) * 100, 2)}%` }}
+                  className={cn("w-full rounded-t-xs", fill)}
+                  style={{ height: `${Math.max((bar.pts / top) * 100, 2)}%` }}
                 />
               </span>
             );
@@ -358,17 +414,12 @@ export function ProfileGameLog({
           ))}
         </div>
         <p className="pt-2 pb-1 text-xs text-faint">
-          {bye ? `Bye in week ${bye}.` : "Bye week unknown."} Blank weeks are games not played.
+          Green beat the dashed line. Gray missed it.
+          {bye ? ` Bye in week ${bye}.` : ""} Blank weeks are games not played.
         </p>
       </div>
     </Section>
   );
 }
 
-export function ScoringNote() {
-  return (
-    <p className="border-b border-line px-5 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
-      Scored with this league&rsquo;s book
-    </p>
-  );
-}
+

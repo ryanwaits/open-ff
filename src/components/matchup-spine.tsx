@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { InjuryMark } from "@/components/player-cell";
 import { TeamTotal } from "@/components/slot-pts";
 import { liveStatLine, sideIsProjected } from "@/lib/data/matchup-view";
-import { baseSlotLabel } from "@/lib/data/teams";
+import { baseSlotLabel, dstLabel } from "@/lib/data/teams";
 import type { MatchupSide, SlimPlayer, StarterLine } from "@/lib/data/types";
 import { cn, formatPts } from "@/lib/utils";
 
@@ -182,8 +183,17 @@ function Half({
 
   return (
     <span className={cn("min-w-0", right && "text-right")}>
-      <span className={cn("block truncate text-[13px] font-semibold", idle && "text-faint")}>
-        {line?.player ? shortName(line.player) : "—"}
+      <span
+        className={cn(
+          "flex min-w-0 items-center gap-1",
+          right && "flex-row-reverse",
+          idle && "text-faint",
+        )}
+      >
+        <span className="truncate text-[13px] font-semibold">
+          {line?.player ? shortName(line.player) : "—"}
+        </span>
+        <InjuryMark status={line?.player?.injury_status} />
       </span>
       <span className={cn("mt-px flex items-baseline gap-1.5", right && "flex-row-reverse")}>
         <span
@@ -243,7 +253,7 @@ function Detail({
  * formatter, not a data change — the full name is still in the expanded row.
  */
 function shortName(player: SlimPlayer): string {
-  if (player.position === "DEF") return `${player.team ?? ""} D/ST`.trim();
+  if (player.position === "DEF") return dstLabel(player.team);
   const [first = "", ...rest] = player.full_name.trim().split(/\s+/);
   if (rest.length === 0) return player.full_name;
   // A first name that is already initials — A.J., D.K., T.J. — is shorter than

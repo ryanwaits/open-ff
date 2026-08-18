@@ -1,3 +1,4 @@
+import { injuryMark } from "@/components/player-cell";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { playerSearchKeys } from "@/lib/data/player-plays";
@@ -85,7 +86,7 @@ export function PlayerFeed({
 type Row = {
   id: string;
   tag: string | null;
-  tone: "loss" | "win" | "default";
+  tone: "loss" | "win" | "default" | "warn";
   title: string;
   detail: string;
   value?: string;
@@ -115,7 +116,7 @@ function statusRows(players: RosterPlayer[], activity: ActivityItem[], news: New
   for (const p of mine) {
     const s = (p.injury_status ?? "").trim();
     if (!s && !p.latest_note) continue;
-    const severe = /^(out|ir|doubtful|suspended|pup)$/i.test(s);
+    const mark = injuryMark(s);
     const detail = [
       p.injury_body_part,
       formatAgo(p.latest_note?.date ?? p.news_updated),
@@ -126,8 +127,8 @@ function statusRows(players: RosterPlayer[], activity: ActivityItem[], news: New
       .join(" · ");
     rows.push({
       id: `status-${p.player_id}`,
-      tag: s ? s.toUpperCase() : "Note",
-      tone: severe ? "loss" : "default",
+      tag: mark?.label ?? (s ? s.toUpperCase() : "Note"),
+      tone: mark?.tone ?? "default",
       title: p.full_name,
       detail,
     });

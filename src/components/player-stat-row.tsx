@@ -46,7 +46,6 @@ export function PlayerStatRow({
   const avatarPeek = onSelect && onPeek ? onPeek : undefined;
   const interactive = Boolean(rowAction);
 
-  const injury = data.player.injury_status?.trim() || null;
   const weekly = data.weekly ?? [];
   const showSpark = !dense;
 
@@ -88,23 +87,11 @@ export function PlayerStatRow({
           />
         ) : null}
         <PlayerCell player={data.player} compact={dense} />
-        {injury || data.byeWeek != null ? (
-          <div
-            className={cn(
-              "mt-0.5 flex flex-wrap gap-1",
-              dense ? "pl-10" : "pl-[2.875rem]",
-            )}
-          >
-            {injury ? (
-              <span className="rounded-pill bg-raised px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide text-loss">
-                {injury}
-              </span>
-            ) : null}
-            {data.byeWeek != null ? (
-              <span className="rounded-pill bg-raised px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide text-faint">
-                BYE {data.byeWeek}
-              </span>
-            ) : null}
+        {data.byeWeek != null ? (
+          <div className={cn("mt-0.5", dense ? "pl-10" : "pl-[2.875rem]")}>
+            <span className="rounded-pill bg-raised px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide text-faint">
+              BYE {data.byeWeek}
+            </span>
           </div>
         ) : null}
       </div>

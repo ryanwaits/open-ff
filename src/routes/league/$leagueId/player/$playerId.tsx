@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { ClaimButton } from "@/components/claim-button";
 import { ClaimDialog } from "@/components/claim-dialog";
@@ -11,7 +11,6 @@ import {
   ProfileSplits,
   ProfileStats,
   ProfileThisWeek,
-  ScoringNote,
 } from "@/components/player-profile";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getLeagueBundle, getTeam } from "@/lib/data/fns";
@@ -145,7 +144,6 @@ function PlayerPage() {
         <div className="border-t border-line">
           <ProfileStats p={p} player={player} />
         </div>
-        <ScoringNote />
       </section>
 
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr] lg:items-start">
@@ -168,15 +166,6 @@ function PlayerPage() {
           <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
             <ProfileSchedule games={p.schedule} week={p.slateWeek} />
           </section>
-          {!mine && !ownedBy ? (
-            <Link
-              to="/league/$leagueId/wire"
-              params={{ leagueId }}
-              className="rounded-xl bg-surface px-5 py-4 text-sm font-semibold shadow-[var(--shadow-border)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-border-hover)]"
-            >
-              Look for him on the wire
-            </Link>
-          ) : null}
         </div>
       </div>
 

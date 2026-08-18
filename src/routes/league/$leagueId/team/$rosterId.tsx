@@ -4,7 +4,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/avatar";
 import { PlayerCell } from "@/components/player-cell";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getLeagueBundle, getTeam } from "@/lib/data/fns";
@@ -180,7 +179,7 @@ function TeamPage() {
                     <span className="text-sm text-faint">Empty</span>
                   )}
                 </div>
-                {p?.injury_status ? <Badge tone="loss">{p.injury_status}</Badge> : null}
+
                 <span className="w-12 text-right font-mono text-sm tabular-nums">
                   {p ? formatPts(p.weekPts, 1) : ""}
                 </span>
@@ -264,7 +263,7 @@ function PlayerGroup({
               <div className="min-w-0 flex-1">
                 <PlayerCell player={p} compact game={p.game} />
               </div>
-              {p.injury_status ? <Badge tone="loss">{p.injury_status}</Badge> : null}
+
               <span className="w-12 text-right font-mono text-sm tabular-nums">{formatPts(p.weekPts, 1)}</span>
               {mine && hit && onSwap ? (
                 <Button size="sm" disabled={busy} onClick={() => onSwap(p)}>
