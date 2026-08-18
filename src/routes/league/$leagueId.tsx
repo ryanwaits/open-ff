@@ -240,6 +240,9 @@ function ClaimBanner({ leagueId, inviteCode }: { leagueId: string; inviteCode: s
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">This league has open seats. Claim one.</p>
         <select
+          id="claim-seat"
+          name="rosterId"
+          aria-label="Seat to claim"
           className="mt-2 h-11 w-full max-w-xs rounded-pill border border-line bg-raised px-4 text-sm text-fg"
           value={rosterId}
           onChange={(e) => setRosterId(e.target.value ? Number(e.target.value) : "")}

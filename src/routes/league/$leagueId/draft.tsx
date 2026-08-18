@@ -116,6 +116,16 @@ function DraftPage() {
     onError: (e) => toast(e instanceof Error ? e.message : "Could not reorder"),
   });
 
+  if (league.isLoading) {
+    return <Skeleton className="h-64 rounded-xl" />;
+  }
+  if (league.isError) {
+    return (
+      <p className="text-sm text-loss">
+        {league.error instanceof Error ? league.error.message : "Couldn't load this league."}
+      </p>
+    );
+  }
   if (!league.data?.hosted) {
     return (
       <p className="text-sm text-muted">
@@ -150,7 +160,11 @@ function DraftPage() {
 
   return (
     <div className="space-y-8">
-      {d == null ? (
+      {draft.isError ? (
+        <p className="text-sm text-loss">
+          {draft.error instanceof Error ? draft.error.message : "Couldn't load the draft."}
+        </p>
+      ) : d == null ? (
         <Skeleton className="h-64 rounded-xl" />
       ) : (
         <DraftBoard
@@ -374,9 +388,12 @@ function DraftPage() {
         <section>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Input
+              id="draft-pool-search"
+              name="q"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search the pool"
+              aria-label="Search the pool"
               className="sm:max-w-xs"
             />
             <div className="flex flex-wrap gap-1">
