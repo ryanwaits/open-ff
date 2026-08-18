@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { getSql } from "@/lib/db";
 import { getPlayer, playerName } from "@/lib/data/sleeper.server";
 import { readEvents, type StoredEvent } from "./events.server";
@@ -46,17 +44,6 @@ type ResultRow = {
 type SpotRow = { roster_id: number; player_id: string; slot: string };
 type StarterLine = { playerId: string; points: number };
 
-let weeklyPprCache: Record<string, Record<string, number>> | null = null;
-
-function loadWeeklyPpr(): Record<string, Record<string, number>> {
-  if (!weeklyPprCache) {
-    weeklyPprCache = JSON.parse(
-      readFileSync(join(process.cwd(), "data/weekly-ppr-2025.json"), "utf8"),
-    ) as Record<string, Record<string, number>>;
-  }
-  return weeklyPprCache;
-}
-
 function parseStarters(raw: string): StarterLine[] {
   try {
     const v = JSON.parse(raw) as unknown;
@@ -87,8 +74,8 @@ function recordText(wins: number, losses: number, ties: number): string {
 /**
  * Roll the ledger and week results into standing facts for the desk.
  *
- * Facts that miss their threshold are omitted. An empty list is correct for a
- * league with nothing yet worth saying.
+ * Score-based facts only use locked `ff_week_results` rows. Missing history
+ * yields an empty list — never reconstructed scores from the current roster.
  */
 export async function loadLeagueFacts(
   leagueId: string,
@@ -97,7 +84,7 @@ export async function loadLeagueFacts(
   const sql = await getSql();
   const weekCap = Math.max(0, Math.floor(throughWeek));
 
-  const [rosters, matchups, results, spots, leagueRows] = await Promise.all([
+  const [rosters, matchups, results, spots] = await Promise.all([
     sql<RosterRow>`
       select roster_id, team_name from ff_rosters
       where league_id = ${leagueId}
@@ -115,9 +102,6 @@ export async function loadLeagueFacts(
     sql<SpotRow>`
       select roster_id, player_id, slot from ff_spots
       where league_id = ${leagueId}
-    `,
-    sql<{ season: string; scoring: string }>`
-      select season, scoring from ff_leagues where id = ${leagueId}
     `,
   ]);
 
@@ -143,50 +127,17 @@ export async function loadLeagueFacts(
     spotsByRoster.set(s.roster_id, arr);
   }
 
-  const season = leagueRows[0]?.season ?? "2025";
-  const scoring = leagueRows[0]?.scoring ?? "ppr";
-  const weekPtsCache = new Map<number, Record<string, number>>();
-
-  function weekPts(week: number): Record<string, number> {
-    const hit = weekPtsCache.get(week);
-    if (hit) return hit;
-    let pts: Record<string, number> = {};
-    if (season === "2025" && scoring === "ppr") {
-      pts = loadWeeklyPpr()[String(week)] ?? {};
-    }
-    weekPtsCache.set(week, pts);
-    return pts;
-  }
-
-  function pointsFor(rosterId: number, week: number): number | null {
+  function lockedPoints(rosterId: number, week: number): number | null {
     const hit = locked.get(`${week}:${rosterId}`);
-    if (hit) return hit.points;
-    const pts = weekPts(week);
-    let sum = 0;
-    let any = false;
-    for (const s of spotsByRoster.get(rosterId) ?? []) {
-      if (s.slot !== "starter") continue;
-      any = true;
-      sum += pts[s.player_id] ?? 0;
-    }
-    return any ? sum : null;
+    return hit ? hit.points : null;
   }
 
   const facts: LeagueFact[] = [];
-  facts.push(...headToHeadFacts(matchups, pointsFor, nameOf));
-  facts.push(...closeLossFacts(matchups, pointsFor, nameOf));
+  facts.push(...headToHeadFacts(matchups, lockedPoints, nameOf));
+  facts.push(...closeLossFacts(matchups, lockedPoints, nameOf));
   facts.push(...waiverSpendFacts(events, nameOf));
   facts.push(...waiverHeartbreakFacts(events, nameOf));
-  facts.push(
-    ...benchRegretFacts({
-      matchups,
-      locked,
-      spotsByRoster,
-      weekPts,
-      nameOf,
-      throughWeek: weekCap,
-    }),
-  );
+  facts.push(...benchRegretFacts(locked, spotsByRoster, nameOf));
   facts.push(...bookRecordFacts(events, nameOf));
   facts.push(...injuryLuckFacts(events, nameOf));
 
@@ -195,7 +146,7 @@ export async function loadLeagueFacts(
 
 function headToHeadFacts(
   matchups: MatchupRow[],
-  pointsFor: (rosterId: number, week: number) => number | null,
+  lockedPoints: (rosterId: number, week: number) => number | null,
   nameOf: (id: number) => string,
 ): LeagueFact[] {
   type Pair = {
@@ -210,10 +161,9 @@ function headToHeadFacts(
 
   for (const m of matchups) {
     if (m.away_roster == null) continue;
-    const hp = pointsFor(m.home_roster, m.week);
-    const ap = pointsFor(m.away_roster, m.week);
+    const hp = lockedPoints(m.home_roster, m.week);
+    const ap = lockedPoints(m.away_roster, m.week);
     if (hp == null || ap == null) continue;
-    if (hp === 0 && ap === 0) continue;
 
     const key = pairKey(m.home_roster, m.away_roster);
     let pair = pairs.get(key);
@@ -260,17 +210,16 @@ function headToHeadFacts(
 
 function closeLossFacts(
   matchups: MatchupRow[],
-  pointsFor: (rosterId: number, week: number) => number | null,
+  lockedPoints: (rosterId: number, week: number) => number | null,
   nameOf: (id: number) => string,
 ): LeagueFact[] {
   const close = new Map<number, { count: number; totalMargin: number }>();
 
   for (const m of matchups) {
     if (m.away_roster == null) continue;
-    const hp = pointsFor(m.home_roster, m.week);
-    const ap = pointsFor(m.away_roster, m.week);
+    const hp = lockedPoints(m.home_roster, m.week);
+    const ap = lockedPoints(m.away_roster, m.week);
     if (hp == null || ap == null) continue;
-    if (hp === 0 && ap === 0) continue;
     const margin = Math.abs(hp - ap);
     if (margin >= 5 || margin === 0) continue;
     const loser = hp < ap ? m.home_roster : m.away_roster;
@@ -357,23 +306,16 @@ function waiverHeartbreakFacts(
   return out;
 }
 
-function benchRegretFacts(input: {
-  matchups: MatchupRow[];
-  locked: Map<string, { points: number; starters: StarterLine[] }>;
-  spotsByRoster: Map<number, SpotRow[]>;
-  weekPts: (week: number) => Record<string, number>;
-  nameOf: (id: number) => string;
-  throughWeek: number;
-}): LeagueFact[] {
-  const weeks = new Set<number>();
-  for (const m of input.matchups) {
-    if (m.week <= input.throughWeek) weeks.add(m.week);
-  }
-  for (const key of input.locked.keys()) {
-    const week = Number(key.split(":")[0]);
-    if (week <= input.throughWeek) weeks.add(week);
-  }
-
+/**
+ * Bench regret needs locked starter lines and locked points for the benched
+ * player. `starters_json` only stores starters, so a bench comparison is
+ * skipped unless that player already has a locked point in the same snapshot.
+ */
+function benchRegretFacts(
+  locked: Map<string, { points: number; starters: StarterLine[] }>,
+  spotsByRoster: Map<number, SpotRow[]>,
+  nameOf: (id: number) => string,
+): LeagueFact[] {
   type Hit = {
     rosterId: number;
     week: number;
@@ -386,56 +328,53 @@ function benchRegretFacts(input: {
   const bestByRoster = new Map<number, Hit>();
   const countByRoster = new Map<number, number>();
 
-  for (const week of weeks) {
-    const pts = input.weekPts(week);
-    for (const [rosterId, rosterSpots] of input.spotsByRoster) {
-      const locked = input.locked.get(`${week}:${rosterId}`);
-      const starterLines: StarterLine[] =
-        locked?.starters?.length
-          ? locked.starters
-          : rosterSpots
-              .filter((s) => s.slot === "starter")
-              .map((s) => ({
-                playerId: s.player_id,
-                points: pts[s.player_id] ?? 0,
-              }));
-      if (!starterLines.length) continue;
+  for (const [key, row] of locked) {
+    const [weekRaw, rosterRaw] = key.split(":");
+    const week = Number(weekRaw);
+    const rosterId = Number(rosterRaw);
+    if (!Number.isFinite(week) || !Number.isFinite(rosterId)) continue;
+    if (!row.starters.length) continue;
 
-      const starterIds = new Set(starterLines.map((s) => s.playerId));
-      const benchIds = rosterSpots
-        .filter((s) => s.slot === "bench" || !starterIds.has(s.player_id))
-        .map((s) => s.player_id)
-        .filter((id) => !starterIds.has(id));
+    const starterById = new Map(row.starters.map((s) => [s.playerId, s]));
+    const starterIds = new Set(starterById.keys());
+    const rosterSpots = spotsByRoster.get(rosterId) ?? [];
+    const benchIds = rosterSpots
+      .map((s) => s.player_id)
+      .filter((id) => !starterIds.has(id));
 
-      for (const benchId of benchIds) {
-        const benchPts = pts[benchId] ?? 0;
-        const benchPos = getPlayer(benchId)?.position;
-        if (!benchPos) continue;
-        for (const starter of starterLines) {
-          const starterPos = getPlayer(starter.playerId)?.position;
-          if (!starterPos || starterPos !== benchPos) continue;
-          const gap = benchPts - starter.points;
-          if (gap < 8) continue;
-          countByRoster.set(rosterId, (countByRoster.get(rosterId) ?? 0) + 1);
-          const hit: Hit = {
-            rosterId,
-            week,
-            gap,
-            benchId,
-            starterId: starter.playerId,
-            benchPts,
-            starterPts: starter.points,
-          };
-          const prev = bestByRoster.get(rosterId);
-          if (!prev || hit.gap > prev.gap) bestByRoster.set(rosterId, hit);
-        }
+    for (const benchId of benchIds) {
+      // Only compare when the bench player already has a locked point.
+      const lockedBench = starterById.get(benchId);
+      if (!lockedBench) continue;
+      const benchPts = lockedBench.points;
+      const benchPos = getPlayer(benchId)?.position;
+      if (!benchPos) continue;
+
+      for (const starter of row.starters) {
+        if (starter.playerId === benchId) continue;
+        const starterPos = getPlayer(starter.playerId)?.position;
+        if (!starterPos || starterPos !== benchPos) continue;
+        const gap = benchPts - starter.points;
+        if (gap < 8) continue;
+        countByRoster.set(rosterId, (countByRoster.get(rosterId) ?? 0) + 1);
+        const hit: Hit = {
+          rosterId,
+          week,
+          gap,
+          benchId,
+          starterId: starter.playerId,
+          benchPts,
+          starterPts: starter.points,
+        };
+        const prev = bestByRoster.get(rosterId);
+        if (!prev || hit.gap > prev.gap) bestByRoster.set(rosterId, hit);
       }
     }
   }
 
   const out: LeagueFact[] = [];
   for (const hit of bestByRoster.values()) {
-    const team = input.nameOf(hit.rosterId);
+    const team = nameOf(hit.rosterId);
     const bench = playerName(hit.benchId);
     const starter = playerName(hit.starterId);
     const count = countByRoster.get(hit.rosterId) ?? 1;
