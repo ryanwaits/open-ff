@@ -7,7 +7,7 @@
 > in `plans/README.md` — unless a reviewer dispatched you and told you they
 > maintain the index.
 >
-> **Drift check (run first)**: `git diff --stat 553f159..HEAD -- package.json src/lib/league/wagers.server.ts src/lib/league/ops.server.ts src/lib/league/scoring.ts src/lib/league/win-probability.ts src/lib/league/engine.server.ts src/lib/league/mock-draft.test.mjs`
+> **Drift check (run first)**: `git diff --stat 8816706..HEAD -- package.json src/lib/league/wagers.server.ts src/lib/league/ops.server.ts src/lib/league/scoring.ts src/lib/league/win-probability.ts src/lib/league/engine.server.ts src/lib/league/mock-draft.test.mjs`
 > If any in-scope file changed since this plan was written, compare the
 > "Current state" excerpts against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.
@@ -19,7 +19,9 @@
 - **Risk**: LOW
 - **Depends on**: none
 - **Category**: tests
-- **Planned at**: commit `553f159`, 2026-08-17
+- **Planned at**: commit `8816706`, 2026-08-18
+  (reconciled from `553f159`: `ops.server.ts` / `engine.server.ts` grew;
+  waiver award and `claimPick` behavior unchanged, line numbers moved)
 
 ## Why this matters
 
@@ -40,9 +42,11 @@ FAAB dollar becomes an agent-amplified bug. Characterization first.
 - `src/lib/league/wagers.server.ts:59-64` — `payoutMultiplier` clamps p to [0.05, 0.95]
 - `src/lib/league/wagers.server.ts:8-16` states: manager balances + pool = genesis forever
 - `src/lib/league/wagers.server.ts:474-479` — loser: `greatest(0, remaining - stake)` then `movePool(+stake)` for the **full** stake
-- `src/lib/league/ops.server.ts:370-413` — waiver award uses headline `faab_remaining`, not `spendable()`
-- `src/lib/league/ops.server.ts:830-859` — `snapshotWeek` no-ops if any result row exists; `settleWeek` is in a swallowed try/catch
-- `src/lib/league/engine.server.ts:1081-1102` — `claimPick` is check-then-act, update is not `WHERE player_id IS NULL`
+- `src/lib/league/ops.server.ts:398-411` — waiver award uses headline `faab_remaining`, not `spendable()`
+- `src/lib/league/ops.server.ts:877+` — `snapshotWeek` no-ops if any result row exists; `settleWeek` is in a swallowed try/catch
+- `src/lib/league/engine.server.ts:1108-1114` — `claimPick` is check-then-act, update is not `WHERE player_id IS NULL`
+- `applyBook` DST: pass `{ pts_allow: 0 }`, not `{ pts_allow_0: 1 }` — `pts_allow_*` keys are in `LINEAR_SKIP`
+- `winProbability({ scores, starters })` — build `PlayerOutlook` with `game: null` (full remaining)
 - `src/lib/league/scoring.ts:1` — `ScoringBook = Record<string, number>`; `applyBook` is the live scorer
 - `src/lib/db.ts:27-36` — `Sql` has **no** `transaction` helper
 - Convention: existing tests use `node:test` + `node:assert/strict` (see `src/lib/league/mock-draft.test.mjs` and `scripts/query-persist.test.mjs`). Match that. Do **not** add vitest/jest.

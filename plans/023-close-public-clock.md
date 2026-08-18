@@ -6,7 +6,7 @@
 > report — do not improvise. When done, update the status row for this plan
 > in `plans/README.md`.
 >
-> **Drift check (run first)**: `git diff --stat 553f159..HEAD -- src/routes/api/league/tick.ts src/lib/league/fns.ts src/lib/league/engine.server.ts src/lib/league/ops.server.ts src/lib/data/fns.ts vercel.json`
+> **Drift check (run first)**: `git diff --stat 8816706..HEAD -- src/routes/api/league/tick.ts src/lib/league/fns.ts src/lib/league/engine.server.ts src/lib/league/ops.server.ts src/lib/data/fns.ts vercel.json`
 > On a mismatch with the excerpts below, STOP.
 
 ## Status
@@ -16,7 +16,11 @@
 - **Risk**: MED
 - **Depends on**: none (pairs with 025 for documenting `CRON_SECRET`)
 - **Category**: security
-- **Planned at**: commit `553f159`, 2026-08-17
+- **Planned at**: commit `8816706`, 2026-08-18
+  (reconciled: tick.ts / vercel.json unchanged; invite still always
+  returned at `engine.server.ts:532` and `:1960`; `listClaims` still
+  leaks bids at `ops.server.ts:485-495`. `ClaimBanner` already types
+  `inviteCode: string | null`.)
 
 ## Why this matters
 

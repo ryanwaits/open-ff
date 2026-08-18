@@ -131,8 +131,8 @@ conditions, update your row when done.
 | 019  | The composer — a readable deal, and FAAB you can send | P2 | L | 016, 017, 018 | DONE `ec855c3` (not pushed) |
 | 020  | Three-team trades — every asset says where it lands | P3 | M | 019 | DONE `4356a5e` (not pushed) |
 | 021  | The read line — one sentence that arranges the numbers | P3 | S | 016, 018/019 | DONE `7e6cac7` (not pushed) |
-| 022  | Prove FAAB, settlement, and clock with tests | P1 | M | — | TODO |
-| 023  | Close the public clock, invite leak, and bid leak | P1 | S | — | TODO |
+| 022  | Prove FAAB, settlement, and clock with tests | P1 | M | — | DONE `ec0bd72` (not pushed; live mint test skipped — no PGLite fixture in bun) |
+| 023  | Close the public clock, invite leak, and bid leak | P1 | S | — | DONE `d9083ad` (not pushed) |
 | 024  | Publish the primitive catalog and a thin tool surface | P1 | M | 022, 023 | TODO |
 | 025  | Make a stranger able to run a league | P1 | M | 023 | TODO |
 | 026  | Skin contract + scan-to-homescreen | P2 | M | 025 | TODO |
