@@ -5,14 +5,10 @@ import { Avatar } from "@/components/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getGameSummary } from "@/lib/data/fns";
+import { playerPlays, playMentionsPlayer, situationIsRedZone } from "@/lib/data/player-plays";
 import { bagForPlayer, simulatePlayerGame } from "@/lib/data/sim-game";
 import { formatStatLine } from "@/lib/data/statline";
-import {
-  playerPlays,
-  playMentionsPlayer,
-  situationIsRedZone,
-} from "@/lib/data/player-plays";
-import { playerHeadshot, teamLogo } from "@/lib/data/teams";
+import { baseSlotLabel, playerHeadshot, teamLogo } from "@/lib/data/teams";
 import type { GamePlay, GameSummary, SlimPlayer, StarterLine } from "@/lib/data/types";
 import { REPLAY_PHASES, replayPts, replayStats } from "@/lib/replay";
 import { cn, formatPts } from "@/lib/utils";
@@ -165,12 +161,11 @@ function WatchBody({ target, onClose }: { target: WatchTarget; onClose: () => vo
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="shrink-0 border-b border-line px-4 pb-3 pt-2 sm:pt-4">
         <div className="flex items-start gap-3">
-          <Avatar src={src} name={name} className="size-11" textClassName="text-xs">
-          </Avatar>
+          <Avatar src={src} name={name} className="size-11" textClassName="text-xs"></Avatar>
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-base">{name}</h2>
             <p className="font-mono text-[11px] uppercase tracking-wide text-faint">
-              {target.slot}
+              {baseSlotLabel(target.slot)}
               {target.player.team ? ` · ${target.player.team}` : ""}
               {` · ${target.club}`}
             </p>
@@ -219,7 +214,13 @@ function WatchBody({ target, onClose }: { target: WatchTarget; onClose: () => vo
                 setRunning(true);
               }}
             >
-              {running ? "Pause" : phase == null ? "Simulate" : phase >= last ? "Simulate" : "Resume"}
+              {running
+                ? "Pause"
+                : phase == null
+                  ? "Simulate"
+                  : phase >= last
+                    ? "Simulate"
+                    : "Resume"}
             </button>
           </div>
         ) : null}
@@ -292,7 +293,15 @@ function GameStrip({
           {g.away.abbr} @ {g.home.abbr}
         </p>
         <Badge tone={live ? "live" : g.state === "post" ? "win" : "default"}>
-          {sim ? (live ? "Sim live" : g.state === "post" ? "Sim final" : "Sim") : live ? "Live" : g.detail || "Scheduled"}
+          {sim
+            ? live
+              ? "Sim live"
+              : g.state === "post"
+                ? "Sim final"
+                : "Sim"
+            : live
+              ? "Live"
+              : g.detail || "Scheduled"}
         </Badge>
       </div>
       <p className="mt-1 font-display text-2xl tabular-nums tracking-tight">
@@ -317,7 +326,10 @@ function PlayList({ plays, empty }: { plays: GamePlay[]; empty: string }) {
   return (
     <ol className="mt-4 divide-y divide-line rounded-lg bg-raised">
       {shown.map((p) => (
-        <li key={p.id} className={cn("flex items-start gap-3 px-3 py-2.5", p.scoring && "bg-win/10")}>
+        <li
+          key={p.id}
+          className={cn("flex items-start gap-3 px-3 py-2.5", p.scoring && "bg-win/10")}
+        >
           <span className="w-12 shrink-0 font-mono text-[11px] tabular-nums text-faint">
             {p.period ? `Q${p.period}` : ""}
             {p.clock ? ` ${p.clock}` : ""}

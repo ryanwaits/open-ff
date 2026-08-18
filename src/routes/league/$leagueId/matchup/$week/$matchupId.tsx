@@ -1,26 +1,35 @@
-import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Avatar } from "@/components/avatar";
 import { MatchupEdge } from "@/components/matchup-edge";
 import { PlayerCell } from "@/components/player-cell";
 import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
-import { PlayerWatch, watchFromLine, type WatchTarget } from "@/components/player-watch";
+import { PlayerWatch, type WatchTarget, watchFromLine } from "@/components/player-watch";
 import { ReplayBar } from "@/components/replay-bar";
+import { SlotPts } from "@/components/slot-pts";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getLeagueBundle, getMatchups, getTeam, getWeekStats } from "@/lib/data/fns";
+import { fantasyStatKind } from "@/lib/data/calendar";
+import {
+  getLeagueBundle,
+  getMatchups,
+  getTeam,
+  getWeekProjections,
+  getWeekStats,
+} from "@/lib/data/fns";
+import { liveStatLine, paintMatchup, pairIsProjected, slotDisplay } from "@/lib/data/matchup-view";
 import type {
   GameChip,
   MatchupPair,
   MatchupSide,
+  Projection,
+  RosterPlayer,
   StandingRow,
   StarterLine,
   TeamBundle,
 } from "@/lib/data/types";
-import { formatStatLine } from "@/lib/data/statline";
-import { fantasyStatKind } from "@/lib/data/calendar";
 import {
   applyReplaySide,
   bookFromLeague,
@@ -34,6 +43,7 @@ import {
   seedPairForReplay,
 } from "@/lib/replay";
 import { cn, fmtRecord, formatPts } from "@/lib/utils";
+import { baseSlotLabel } from "@/lib/data/teams";
 
 export const Route = createFileRoute("/league/$leagueId/matchup/$week/$matchupId")({
   component: MatchupPage,
@@ -61,18 +71,24 @@ function MatchupPage() {
     }
     setSheet({
       player: t.player,
-      game: t.gameId || t.gameDetail
-        ? { state: t.gameState ?? "pre", detail: t.gameDetail ?? "", opp: null, gameId: t.gameId }
-        : null,
-      context: { label: t.club, rows: [["Slot", t.slot], ["This week", formatPts(t.points, 1)]] },
+      game:
+        t.gameId || t.gameDetail
+          ? { state: t.gameState ?? "pre", detail: t.gameDetail ?? "", opp: null, gameId: t.gameId }
+          : null,
+      context: {
+        label: t.club,
+        rows: [
+          ["Slot", baseSlotLabel(t.slot)],
+          ["This week", formatPts(t.points, 1)],
+        ],
+      },
     });
   }
 
   const league = useQuery({
     queryKey: ["league", leagueId],
     queryFn: () => getLeagueBundle({ data: { leagueId } }),
-    refetchInterval: (q) =>
-      phase == null && q.state.data?.scoringLive ? LIVE_POLL_MS : false,
+    refetchInterval: (q) => (phase == null && q.state.data?.scoringLive ? LIVE_POLL_MS : false),
   });
   const matchups = useQuery({
     queryKey: ["matchups", leagueId, week],
@@ -82,9 +98,7 @@ function MatchupPage() {
       if (phase != null) return false;
       const rows = q.state.data ?? [];
       const live = rows.some((pair) =>
-        [pair.home, pair.away].some((side) =>
-          side?.starters.some((s) => s.game?.state === "in"),
-        ),
+        [pair.home, pair.away].some((side) => side?.starters.some((s) => s.game?.state === "in")),
       );
       return live || league.data?.scoringLive ? LIVE_POLL_MS : false;
     },
@@ -94,25 +108,19 @@ function MatchupPage() {
   const idx = matchups.data?.findIndex((p) => p.matchupId === matchupId) ?? -1;
   const prevNav = idx > 0 ? matchups.data![idx - 1] : null;
   const nextNav =
-    idx >= 0 && matchups.data && idx < matchups.data.length - 1
-      ? matchups.data[idx + 1]
-      : null;
+    idx >= 0 && matchups.data && idx < matchups.data.length - 1 ? matchups.data[idx + 1] : null;
 
   const homeTeam = useQuery({
     queryKey: ["team", leagueId, rawPair?.home.rosterId, week],
-    queryFn: () =>
-      getTeam({ data: { leagueId, rosterId: rawPair!.home.rosterId, week } }),
+    queryFn: () => getTeam({ data: { leagueId, rosterId: rawPair!.home.rosterId, week } }),
     enabled: Boolean(rawPair),
-    refetchInterval: () =>
-      phase == null && league.data?.scoringLive ? LIVE_POLL_MS : false,
+    refetchInterval: () => (phase == null && league.data?.scoringLive ? LIVE_POLL_MS : false),
   });
   const awayTeam = useQuery({
     queryKey: ["team", leagueId, rawPair?.away?.rosterId, week],
-    queryFn: () =>
-      getTeam({ data: { leagueId, rosterId: rawPair!.away!.rosterId, week } }),
+    queryFn: () => getTeam({ data: { leagueId, rosterId: rawPair!.away!.rosterId, week } }),
     enabled: Boolean(rawPair?.away),
-    refetchInterval: () =>
-      phase == null && league.data?.scoringLive ? LIVE_POLL_MS : false,
+    refetchInterval: () => (phase == null && league.data?.scoringLive ? LIVE_POLL_MS : false),
   });
   const weekStats = useQuery({
     queryKey: ["week-stats", league.data?.league.season, week],
@@ -125,8 +133,7 @@ function MatchupPage() {
         },
       }),
     enabled: Boolean(league.data?.league.season) && Number.isFinite(week),
-    refetchInterval: () =>
-      phase == null && league.data?.scoringLive ? LIVE_POLL_MS : false,
+    refetchInterval: () => (phase == null && league.data?.scoringLive ? LIVE_POLL_MS : false),
   });
   const finalsRaw = weekStats.data ?? {};
   const priorSeason = league.data?.league.season
@@ -139,6 +146,19 @@ function MatchupPage() {
         data: { season: priorSeason, week, kind: fantasyStatKind() },
       }),
     enabled: Boolean(priorSeason) && Number.isFinite(Number(priorSeason)),
+  });
+  const projections = useQuery({
+    queryKey: ["week-projections", leagueId, week],
+    queryFn: () =>
+      getWeekProjections({
+        data: {
+          leagueId,
+          season: String(league.data!.league.season),
+          week,
+        },
+      }),
+    enabled: Boolean(league.data?.league.season),
+    staleTime: 60_000,
   });
   const book = bookFromLeague(league.data?.league.scoring_settings);
   const usingDemo = Boolean(rawPair && !pairingHasScores(rawPair));
@@ -164,37 +184,37 @@ function MatchupPage() {
     return () => window.clearTimeout(t);
   }, [running, phase]);
 
-  const pair = useMemo(() => {
+  const livePair = useMemo(() => {
     if (!seeded) return null;
     if (phase == null) return rawPair;
     return {
       ...seeded.pair,
       home: applyReplaySide(seeded.pair.home, week, phase, seeded.finals),
-      away: seeded.pair.away
-        ? applyReplaySide(seeded.pair.away, week, phase, seeded.finals)
-        : null,
+      away: seeded.pair.away ? applyReplaySide(seeded.pair.away, week, phase, seeded.finals) : null,
     };
   }, [rawPair, seeded, phase, week]);
 
+  const stats = useMemo(
+    () => (phase == null ? finalsRaw : replayStatMap(seeded?.finals ?? finalsRaw, phase, week)),
+    [finalsRaw, seeded, phase, week],
+  );
+
+  const pair = useMemo(
+    () => (livePair ? paintMatchup(livePair, projections.data ?? {}, stats) : null),
+    [livePair, projections.data, stats],
+  );
+
   const prevPair = useMemo(() => {
     if (!seeded || phase == null || phase <= 0) return null;
-    return {
+    const raw: MatchupPair = {
+      ...seeded.pair,
       home: applyReplaySide(seeded.pair.home, week, phase - 1, seeded.finals),
       away: seeded.pair.away
         ? applyReplaySide(seeded.pair.away, week, phase - 1, seeded.finals)
         : null,
     };
-  }, [seeded, phase, week]);
-
-  const stats = useMemo(
-    () =>
-      phase == null
-        ? usingDemo
-          ? {}
-          : finalsRaw
-        : replayStatMap(seeded?.finals ?? finalsRaw, phase, week),
-    [finalsRaw, seeded, phase, week, usingDemo],
-  );
+    return paintMatchup(raw, projections.data ?? {}, replayStatMap(seeded.finals, phase - 1, week));
+  }, [seeded, phase, week, projections.data]);
 
   const viewHome = useMemo(
     () => replayRoster(homeTeam.data, phase, week),
@@ -211,8 +231,7 @@ function MatchupPage() {
 
   if (
     (league.data == null && league.isPending) ||
-    (matchups.data == null &&
-      (matchups.isPending || matchups.isLoading || !matchups.isFetched))
+    (matchups.data == null && (matchups.isPending || matchups.isLoading || !matchups.isFetched))
   ) {
     return (
       <div className="space-y-3">
@@ -237,7 +256,7 @@ function MatchupPage() {
   const canReplay = Boolean(rawPair && !pairingIsLive(rawPair));
   const status =
     phase == null
-      ? statusOf(pair)
+      ? statusOf(livePair ?? pair)
       : {
           label: REPLAY_PHASES[phase]?.label ?? "Replay",
           tone: (phase >= lastPhase ? "win" : "live") as "live" | "muted" | "win",
@@ -308,13 +327,12 @@ function MatchupPage() {
         leagueId={leagueId}
         standings={standings}
         status={status}
-        live={
-          phase == null && Boolean(league.data?.scoringLive) && status.tone === "live"
-        }
+        livePoints={[livePair?.home.points ?? 0, livePair?.away?.points ?? 0]}
+        live={phase == null && Boolean(league.data?.scoringLive) && status.tone === "live"}
       />
 
       <MatchupEdge
-        pair={pair}
+        pair={livePair ?? pair}
         leagueId={leagueId}
         season={league.data?.league.season ?? ""}
         mine={league.data?.myRosterId ?? null}
@@ -322,9 +340,7 @@ function MatchupPage() {
 
       <section className="mt-6 rounded-xl bg-surface shadow-[var(--shadow-border)]">
         <header className="flex items-center justify-between border-b border-line px-3 py-2.5 sm:px-4">
-          <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-            Starters
-          </h2>
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Starters</h2>
           <p className="font-mono text-[11px] tabular-nums text-faint">
             Tap a name · {formatPts(starterTotal(pair.home), 1)}
             <span className="mx-1.5 text-line">·</span>
@@ -352,9 +368,7 @@ function MatchupPage() {
       {pair.away ? (
         <section className="mt-6 rounded-xl bg-surface shadow-[var(--shadow-border)]">
           <header className="border-b border-line px-3 py-2.5 sm:px-4">
-            <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-              Bench
-            </h2>
+            <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Bench</h2>
           </header>
           {!homeTeam.data && !awayTeam.data ? (
             <div className="space-y-2 p-3">
@@ -366,6 +380,7 @@ function MatchupPage() {
               home={viewHome}
               away={viewAway}
               stats={stats}
+              projections={projections.data ?? {}}
               homeClub={pair.home.teamName}
               awayClub={pair.away?.teamName ?? ""}
               onWatch={openPlayer}
@@ -375,9 +390,7 @@ function MatchupPage() {
       ) : (
         <section className="mt-6 rounded-xl bg-surface shadow-[var(--shadow-border)]">
           <header className="border-b border-line px-3 py-2.5 sm:px-4">
-            <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-              Bench
-            </h2>
+            <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Bench</h2>
           </header>
           {!homeTeam.data ? (
             <div className="space-y-2 p-3">
@@ -385,39 +398,41 @@ function MatchupPage() {
             </div>
           ) : (
             <ul className="divide-y divide-line">
-              {benchOf(viewHome).map((p) => (
-                <li key={p.player_id}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setWatch({
-                        player: p,
-                        slot: "BN",
-                        points: p.weekPts,
-                        line: formatStatLine(p.position, stats[p.player_id]),
-                        gameState: p.game?.state ?? null,
-                        gameId: p.game?.gameId ?? null,
-                        gameDetail: p.game?.detail ?? null,
-                        club: pair.home.teamName,
-                        stats: stats[p.player_id] ?? null,
-                      })
-                    }
-                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left sm:px-4 hover:bg-raised"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <PlayerCell
-                        player={p}
-                        compact
-                        game={p.game}
-                        line={formatStatLine(p.position, stats[p.player_id])}
+              {benchOf(viewHome).map((p) => {
+                const bag = stats[p.player_id];
+                const line = liveStatLine(p.position, p.game, bag);
+                const disp = slotDisplay(p.game, p.weekPts, projections.data?.[p.player_id]);
+                return (
+                  <li key={p.player_id}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setWatch({
+                          player: p,
+                          slot: "BN",
+                          points: disp.points,
+                          line,
+                          gameState: p.game?.state ?? null,
+                          gameId: p.game?.gameId ?? null,
+                          gameDetail: p.game?.detail ?? null,
+                          club: pair.home.teamName,
+                          stats: bag ?? null,
+                        })
+                      }
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left sm:px-4 hover:bg-raised"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <PlayerCell player={p} compact game={p.game} line={line} />
+                      </div>
+                      <SlotPts
+                        points={disp.points}
+                        forecast={disp.forecast}
+                        className="w-12 text-sm"
                       />
-                    </div>
-                    <span className="w-12 text-right font-mono text-sm tabular-nums">
-                      {formatPts(p.weekPts, 1)}
-                    </span>
-                  </button>
-                </li>
-              ))}
+                    </button>
+                  </li>
+                );
+              })}
               {benchOf(viewHome).length === 0 ? (
                 <li className="px-3 py-4 text-sm text-muted sm:px-4">No one on the pine.</li>
               ) : null}
@@ -514,6 +529,7 @@ function Scoreboard({
   leagueId,
   standings,
   status,
+  livePoints,
   live,
 }: {
   pair: MatchupPair;
@@ -521,9 +537,11 @@ function Scoreboard({
   leagueId: string;
   standings: StandingRow[];
   status: { label: string; tone: "live" | "muted" | "win" };
+  livePoints: [number, number];
   live: boolean;
 }) {
   const away = pair.away;
+  const preview = pairIsProjected(pair);
   const decided = isDecided(pair);
   const homeLeads = !away || pair.home.points > away.points;
   const awayLeads = Boolean(away && away.points > pair.home.points);
@@ -552,14 +570,24 @@ function Scoreboard({
         <div className="text-center">
           <p className="font-display text-4xl tabular-nums tracking-tight sm:text-5xl">
             <span className={homeLeads && decided ? "text-fg" : "text-muted"}>
-              {formatPts(pair.home.points, 1)}
+              {formatPts(preview ? livePoints[0] : pair.home.points, 1)}
             </span>
             <span className="mx-1.5 text-2xl text-faint sm:mx-2">–</span>
             <span className={awayLeads && decided ? "text-fg" : "text-muted"}>
-              {formatPts(away?.points ?? 0, 1)}
+              {formatPts(preview ? livePoints[1] : (away?.points ?? 0), 1)}
             </span>
           </p>
-          {tied ? <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-faint">Tie</p> : null}
+          {preview ? (
+            <p className="mt-1 font-display text-xl tabular-nums tracking-tight text-faint">
+              {formatPts(pair.home.points, 1)}
+              <span className="mx-1.5 text-base">–</span>
+              {formatPts(away?.points ?? 0, 1)}
+              <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.14em]">proj</span>
+            </p>
+          ) : null}
+          {tied ? (
+            <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-faint">Tie</p>
+          ) : null}
           {live ? (
             <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.16em] text-live">
               Unofficial · {LIVE_POLL_MS / 1000}s
@@ -620,14 +648,14 @@ function TeamHead({
         tint
       />
       <span className="min-w-0">
-        <span className={cn("block truncate text-sm sm:text-base", leading ? "text-fg" : "text-muted")}>
+        <span
+          className={cn("block truncate text-sm sm:text-base", leading ? "text-fg" : "text-muted")}
+        >
           {side.teamName}
         </span>
         <span className="block truncate font-mono text-[11px] text-faint">
           {side.manager}
-          {record
-            ? ` · ${fmtRecord(record.wins, record.losses, record.ties)}`
-            : ""}
+          {record ? ` · ${fmtRecord(record.wins, record.losses, record.ties)}` : ""}
         </span>
       </span>
     </Link>
@@ -660,8 +688,8 @@ function StarterRow({
   const bothIn = Boolean(home.player && away?.player);
   const homeHot = bothIn && hp > ap;
   const awayHot = bothIn && ap > hp;
-  const homeBump = hp - (prevHome?.points ?? hp);
-  const awayBump = ap - (prevAway?.points ?? ap);
+  const homeBump = home.forecast ? 0 : hp - (prevHome?.points ?? hp);
+  const awayBump = away?.forecast ? 0 : ap - (prevAway?.points ?? ap);
   return (
     <li className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-line px-3 py-2.5 first:border-t-0 sm:gap-3 sm:px-4">
       <Line
@@ -674,7 +702,7 @@ function StarterRow({
         onWatch={onWatch}
       />
       <span className="w-8 text-center font-mono text-[10px] uppercase tracking-wide text-faint sm:w-10">
-        {home.slot}
+        {baseSlotLabel(home.slot)}
       </span>
       {bye ? (
         <span className="text-right text-sm text-faint">Bye</span>
@@ -714,7 +742,7 @@ function Line({
     return <span className="text-sm text-faint">—</span>;
   }
   const bag = side.stats ?? (side.playerId ? stats[side.playerId] : undefined);
-  const line = formatStatLine(side.player?.position, bag);
+  const line = liveStatLine(side.player?.position, side.game, bag);
   const target = watchFromLine(side, club, line, bag);
   return (
     <button
@@ -724,7 +752,7 @@ function Line({
       className={cn(
         "flex min-w-0 items-center gap-2 rounded-md px-1 py-0.5 text-left transition-colors duration-150",
         align === "right" && "flex-row-reverse text-right",
-        bump > 0.04 && "bg-win/10",
+        bump > 0.04 && "bg-highlight/15",
         target && "hover:bg-raised",
       )}
     >
@@ -738,18 +766,13 @@ function Line({
           line={line}
         />
       </div>
-      <span
-        className={cn(
-          "w-10 shrink-0 font-mono text-sm tabular-nums sm:w-12",
-          align === "right" ? "text-left" : "text-right",
-          hot ? "text-fg" : "text-muted",
-        )}
-      >
-        {formatPts(side.points, 1)}
-        {bump > 0.04 ? (
-          <span className="block text-[10px] text-win">+{formatPts(bump, 1)}</span>
-        ) : null}
-      </span>
+      <SlotPts
+        points={side.points}
+        forecast={side.forecast}
+        bump={bump}
+        align={align}
+        className={cn("w-10 text-sm sm:w-12", !side.forecast && (hot ? "text-fg" : "text-muted"))}
+      />
     </button>
   );
 }
@@ -758,6 +781,7 @@ function BenchGrid({
   home,
   away,
   stats,
+  projections,
   homeClub,
   awayClub,
   onWatch,
@@ -765,6 +789,7 @@ function BenchGrid({
   home?: TeamBundle;
   away?: TeamBundle;
   stats: Record<string, Record<string, number>>;
+  projections: Record<string, Projection>;
   homeClub: string;
   awayClub: string;
   onWatch: (t: WatchTarget) => void;
@@ -786,69 +811,26 @@ function BenchGrid({
             className="grid grid-cols-2 gap-4 border-t border-line px-3 py-2.5 first:border-t-0 sm:px-4"
           >
             {h ? (
-              <button
-                type="button"
-                onClick={() =>
-                  onWatch({
-                    player: h,
-                    slot: "BN",
-                    points: h.weekPts,
-                    line: formatStatLine(h.position, stats[h.player_id]),
-                    gameState: h.game?.state ?? null,
-                    gameId: h.game?.gameId ?? null,
-                    gameDetail: h.game?.detail ?? null,
-                    club: homeClub,
-                    stats: stats[h.player_id] ?? null,
-                  })
-                }
-                className="flex min-w-0 items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-raised"
-              >
-                <div className="min-w-0 flex-1">
-                  <PlayerCell
-                    player={h}
-                    compact
-                    game={h.game}
-                    line={formatStatLine(h.position, stats[h.player_id])}
-                  />
-                </div>
-                <span className="w-10 shrink-0 text-right font-mono text-sm tabular-nums text-muted">
-                  {formatPts(h.weekPts, 1)}
-                </span>
-              </button>
+              <BenchCell
+                player={h}
+                stats={stats}
+                projection={projections[h.player_id]}
+                club={homeClub}
+                align="left"
+                onWatch={onWatch}
+              />
             ) : (
               <span />
             )}
             {a ? (
-              <button
-                type="button"
-                onClick={() =>
-                  onWatch({
-                    player: a,
-                    slot: "BN",
-                    points: a.weekPts,
-                    line: formatStatLine(a.position, stats[a.player_id]),
-                    gameState: a.game?.state ?? null,
-                    gameId: a.game?.gameId ?? null,
-                    gameDetail: a.game?.detail ?? null,
-                    club: awayClub,
-                    stats: stats[a.player_id] ?? null,
-                  })
-                }
-                className="flex min-w-0 flex-row-reverse items-center gap-2 rounded-md px-1 py-0.5 text-right hover:bg-raised"
-              >
-                <div className="min-w-0 flex-1">
-                  <PlayerCell
-                    player={a}
-                    compact
-                    game={a.game}
-                    align="right"
-                    line={formatStatLine(a.position, stats[a.player_id])}
-                  />
-                </div>
-                <span className="w-10 shrink-0 text-left font-mono text-sm tabular-nums text-muted">
-                  {formatPts(a.weekPts, 1)}
-                </span>
-              </button>
+              <BenchCell
+                player={a}
+                stats={stats}
+                projection={projections[a.player_id]}
+                club={awayClub}
+                align="right"
+                onWatch={onWatch}
+              />
             ) : (
               <span />
             )}
@@ -856,6 +838,58 @@ function BenchGrid({
         );
       })}
     </ul>
+  );
+}
+
+function BenchCell({
+  player,
+  stats,
+  projection,
+  club,
+  align,
+  onWatch,
+}: {
+  player: RosterPlayer;
+  stats: Record<string, Record<string, number>>;
+  projection?: Projection;
+  club: string;
+  align: "left" | "right";
+  onWatch: (t: WatchTarget) => void;
+}) {
+  const bag = stats[player.player_id];
+  const line = liveStatLine(player.position, player.game, bag);
+  const disp = slotDisplay(player.game, player.weekPts, projection);
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        onWatch({
+          player,
+          slot: "BN",
+          points: disp.points,
+          line,
+          gameState: player.game?.state ?? null,
+          gameId: player.game?.gameId ?? null,
+          gameDetail: player.game?.detail ?? null,
+          club,
+          stats: bag ?? null,
+        })
+      }
+      className={cn(
+        "flex min-w-0 items-center gap-2 rounded-md px-1 py-0.5 hover:bg-raised",
+        align === "right" ? "flex-row-reverse text-right" : "text-left",
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <PlayerCell player={player} compact game={player.game} align={align} line={line} />
+      </div>
+      <SlotPts
+        points={disp.points}
+        forecast={disp.forecast}
+        align={align}
+        className="w-10 text-sm text-muted"
+      />
+    </button>
   );
 }
 
@@ -903,7 +937,7 @@ function gamesOf(pair: MatchupPair): GameChip[] {
 
 function isDecided(pair: MatchupPair) {
   const games = gamesOf(pair);
-  if (games.length && games.every((g) => g.state === "post")) return true;
+  if (games.length) return games.every((g) => g.state === "post");
   return pair.home.points > 0 || (pair.away?.points ?? 0) > 0;
 }
 
@@ -926,7 +960,8 @@ function statusOf(pair: MatchupPair): { label: string; tone: "live" | "muted" | 
   if (!pair.away) return { label: "Bye", tone: "muted" };
   const games = gamesOf(pair);
   if (games.some((g) => g.state === "in")) return { label: "Live", tone: "live" };
-  if (games.length && games.every((g) => g.state === "post")) return { label: "Final", tone: "win" };
+  if (games.length && games.every((g) => g.state === "post"))
+    return { label: "Final", tone: "win" };
   if (pair.home.points === 0 && pair.away.points === 0) return { label: "Preview", tone: "muted" };
   return { label: "In progress", tone: "live" };
 }

@@ -1,12 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { ScoreStrip } from "@/components/scoreboard";
 import { Shell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getLiveWire, getScores, getPulse } from "@/lib/data/fns";
 import { calendarOf } from "@/lib/data/calendar";
-import { DEMO_HOSTED_ID } from "@/lib/data/types";
 import { cn, formatPts } from "@/lib/utils";
 
 type Search = { week?: number; season?: number; kind?: "pre" | "regular" | "post" };
@@ -126,17 +125,8 @@ function ScoresPage() {
             ? `${wire.data.kind} ${wire.data.season} week ${wire.data.week} · ${wire.data.scoredPlayers} unofficial lines · ${wire.data.gamesIn}/${wire.data.gamesTotal} live`
             : "Checking unofficial feed…"}
         </p>
-        <p className="mt-3 text-sm">
-          Watch a real completed week unfold the same way Sundays will —{" "}
-          <Link
-            to="/league/$leagueId/matchups"
-            params={{ leagueId: DEMO_HOSTED_ID }}
-            search={{ week: 14 }}
-            className="text-fg underline decoration-line underline-offset-4 hover:decoration-fg"
-          >
-            replay The Backyard, week 14
-          </Link>
-          .
+        <p className="mt-3 text-sm text-muted">
+          Replay a locked week from a hosted league&rsquo;s matchups tab once you have one.
         </p>
       </section>
 

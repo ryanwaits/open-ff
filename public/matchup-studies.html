@@ -1,0 +1,750 @@
+<title>Matchup Card Studies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+
+<style>
+/* Hallmark · component: matchup-card · genre: editorial · theme: Hum (project-locked)
+ * pre-emit critique: P5 H5 E4 S5 R5 V4
+ * Tokens lifted verbatim from src/styles.css. No new colour is invented here.
+ */
+
+:root {
+  --paper: #f7f4ea;
+  --paper-raised: #fffdf7;
+  --paper-sunken: #f0ece0;
+  --band: #f2eee2;
+  --ink: #17191d;
+  --ink-2: #5b5e60;
+  --ink-3: #8a8b83;
+  --hairline: #e4dfd1;
+  --hairline-strong: #d2ccba;
+  --brand: #6fdc93;
+  --brand-deep: #3fa765;
+  --brand-strong: #1d7a45;
+  --highlight: #a9e9bd;
+  --alarm: #c8503a;
+  --lift: 0 10px 26px -16px rgb(23 25 29 / 0.3);
+
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14161a;
+    --paper-raised: #1b1e22;
+    --paper-sunken: #23272c;
+    --band: #1a1d21;
+    --ink: #f2f1ea;
+    --ink-2: #a8aba6;
+    --ink-3: #7a7e7b;
+    --hairline: #2b2f34;
+    --hairline-strong: #3a3f45;
+    --brand: #64d68c;
+    --brand-deep: #2f8f55;
+    --brand-strong: #7fe3a2;
+    --highlight: #2c5c3e;
+    --alarm: #e4705a;
+    --lift: 0 10px 26px -16px rgb(0 0 0 / 0.7);
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #14161a;
+  --paper-raised: #1b1e22;
+  --paper-sunken: #23272c;
+  --band: #1a1d21;
+  --ink: #f2f1ea;
+  --ink-2: #a8aba6;
+  --ink-3: #7a7e7b;
+  --hairline: #2b2f34;
+  --hairline-strong: #3a3f45;
+  --brand: #64d68c;
+  --brand-deep: #2f8f55;
+  --brand-strong: #7fe3a2;
+  --highlight: #2c5c3e;
+  --alarm: #e4705a;
+  --lift: 0 10px 26px -16px rgb(0 0 0 / 0.7);
+}
+
+* { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-mono, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 56px 24px 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 56px;
+}
+
+/* ---- page masthead ---- */
+.intro { display: flex; flex-direction: column; gap: 16px; max-width: 64ch; }
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+h1 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.lede { margin: 0; font-size: 15px; line-height: 1.65; color: var(--ink-2); text-wrap: pretty; }
+
+.faults { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0; }
+.faults li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+  padding: 11px 0;
+  border-top: 1px solid var(--hairline);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.faults li:last-child { border-bottom: 1px solid var(--hairline); }
+.faults b { color: var(--ink); font-weight: 600; }
+.faults .n { font-family: var(--font-mono); font-size: 10px; color: var(--ink-3); padding-top: 4px; }
+
+/* ---- study block ---- */
+.study { display: flex; flex-direction: column; gap: 18px; }
+.study-head { display: flex; flex-direction: column; gap: 8px; max-width: 68ch; }
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--brand-strong);
+}
+.tag .dot { width: 5px; height: 5px; border-radius: 999px; background: currentColor; }
+.study h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.study .why { margin: 0; font-size: 14px; line-height: 1.6; color: var(--ink-2); text-wrap: pretty; }
+.study .cost {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+.study .cost b { color: var(--ink-2); font-weight: 500; }
+
+.stage { overflow-x: auto; padding: 2px; }
+
+/* ============================================================
+   THE CARD — shared skeleton. Variants override.
+   ============================================================ */
+.card {
+  min-width: 720px;
+  background: var(--paper-raised);
+  border-radius: 22px;
+  padding: 20px;
+  box-shadow: 0 0 0 1px var(--hairline), var(--lift);
+}
+
+.card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.card-head h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.boxlink {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand-strong);
+  text-decoration: none;
+}
+.boxlink:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* tally */
+.tally { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 40px; }
+.side { min-width: 0; }
+.side .team { font-size: 14px; margin: 0 0 2px; color: var(--ink); }
+.nums { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; }
+.live { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.proj { text-align: right; }
+.proj .v { display: block; font-size: 24px; font-weight: 700; letter-spacing: -0.03em; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.proj .l { display: block; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.side.flip .team { text-align: right; }
+.side.flip .nums { flex-direction: row-reverse; }
+.side.flip .proj { text-align: left; }
+
+/* board */
+.board { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 40px; margin-top: 12px; }
+.col { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.row { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 10px; }
+.slot { width: 32px; flex: 0 0 auto; font-family: var(--font-mono); font-size: 10px; color: var(--ink-3); }
+.who { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; gap: 10px; }
+.ava {
+  width: 32px; height: 32px; flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--paper-sunken);
+  outline: 1px solid var(--hairline); outline-offset: -1px;
+  display: grid; place-items: center;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 600; color: var(--ink-2);
+}
+.txt { min-width: 0; }
+.name { display: block; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta {
+  display: block;
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.03em; text-transform: uppercase; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pts { width: 64px; flex: 0 0 auto; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); }
+.pts .l { display: block; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.col.flip .row { flex-direction: row-reverse; }
+.col.flip .who { flex-direction: row-reverse; }
+.col.flip .txt { text-align: right; }
+.col.flip .pts { text-align: left; }
+
+/* ============================================================
+   A · SCOREBAR — the tally becomes an inset tile
+   ============================================================ */
+.v-a .tally {
+  background: var(--paper-sunken);
+  border-radius: 14px;
+  padding: 14px 18px;
+  grid-template-columns: minmax(0,1fr) 1px minmax(0,1fr);
+  gap: 24px;
+  align-items: center;
+}
+.v-a .axis { background: var(--hairline-strong); align-self: stretch; }
+.v-a .board { margin-top: 20px; }
+.v-a .side { padding: 0 4px; }
+
+/* ============================================================
+   B · LEDGER — full-bleed rule + a labelled column strip
+   ============================================================ */
+.v-b .tally { padding-bottom: 16px; }
+.v-b .bleed {
+  height: 1px;
+  background: var(--hairline-strong);
+  margin: 0 -20px;
+}
+.v-b .strip {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+  gap: 40px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.v-b .strip .lbl {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 0 4px;
+  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3);
+}
+.v-b .strip .lbl.flip { flex-direction: row-reverse; }
+.v-b .board { margin-top: 0; gap: 40px; }
+.v-b .col { gap: 0; }
+.v-b .row { border-bottom: 1px solid var(--hairline); border-radius: 0; padding: 7px 4px; }
+.v-b .col .row:last-child { border-bottom: 0; }
+
+/* ============================================================
+   C · SPINE — one shared axis, slot labels move to the middle
+   ============================================================ */
+.v-c .tally {
+  grid-template-columns: minmax(0,1fr) 56px minmax(0,1fr);
+  gap: 0;
+  align-items: end;
+  padding-bottom: 14px;
+}
+.v-c .tally .gut { display: grid; place-items: center; }
+.v-c .tally .gut span {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3);
+}
+.v-c .side { padding: 0 14px; }
+.v-c .spine { list-style: none; margin: 0; padding: 0; }
+.v-c .srow {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 56px minmax(0,1fr);
+  align-items: center;
+  border-top: 1px solid var(--hairline);
+}
+.v-c .srow:first-child { border-top: 1px solid var(--hairline-strong); }
+.v-c .half { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 7px 14px; }
+.v-c .half.flip { flex-direction: row-reverse; }
+.v-c .half.flip .who { flex-direction: row-reverse; }
+.v-c .half.flip .txt { text-align: right; }
+.v-c .half.flip .pts { text-align: left; }
+.v-c .srow .gut {
+  align-self: stretch;
+  display: grid; place-items: center;
+  border-left: 1px solid var(--hairline);
+  border-right: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--paper-sunken) 55%, transparent);
+}
+.v-c .srow .gut .s {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2);
+}
+
+/* ============================================================
+   D · MASTHEAD — header + tally in one full-bleed band
+   ============================================================ */
+.v-d { padding: 0; overflow: hidden; }
+.v-d .band {
+  background: var(--paper-sunken);
+  border-bottom: 1px solid var(--hairline-strong);
+  padding: 16px 20px 18px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.v-d .card-head { margin-bottom: 0; }
+.v-d .card-head h3 {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3);
+}
+.v-d .tally { gap: 40px; }
+.v-d .side .team { font-size: 15px; font-weight: 600; }
+.v-d .board { margin: 0; padding: 18px 20px 20px; }
+
+/* ============================================================
+   E · MASTHEAD SPINE — D's band, C's axis, one continuous channel
+   ============================================================ */
+.v-e { padding: 0; overflow: hidden; }
+.v-e .band { background: var(--paper-sunken); }
+.v-e .card-head { margin: 0; padding: 15px 20px 12px; }
+.v-e .card-head h3 {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3);
+}
+.v-e .tally {
+  grid-template-columns: minmax(0,1fr) 56px minmax(0,1fr);
+  gap: 0;
+  align-items: end;
+}
+.v-e .side { padding: 0 20px 16px; }
+.v-e .side .team { font-size: 15px; font-weight: 600; margin-bottom: 1px; }
+.v-e .live { font-size: 32px; }
+.v-e .chan {
+  align-self: stretch;
+  display: grid; place-items: center;
+  padding-bottom: 16px;
+}
+.v-e .chan .vs {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3);
+}
+.v-e .spine { list-style: none; margin: 0; padding: 0; }
+.v-e .srow {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 56px minmax(0,1fr);
+  align-items: stretch;
+  min-height: 68px;
+  border-top: 1px solid var(--hairline);
+}
+.v-e .srow:first-child { border-top-color: var(--hairline-strong); }
+.v-e .half { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 20px; }
+.v-e .half.flip { flex-direction: row-reverse; }
+.v-e .half.flip .who { flex-direction: row-reverse; }
+.v-e .half.flip .txt { text-align: right; }
+.v-e .half.flip .pts { text-align: left; }
+.v-e .srow .chan {
+  padding: 0;
+  border-left: 1px solid var(--hairline);
+  border-right: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--paper-sunken) 45%, transparent);
+}
+.v-e .srow .chan .s {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2);
+}
+
+/* ---- live state: same board, mid-game ---- */
+.v-e .meta .now { color: var(--alarm); }
+.v-e .pts .g { display: block; font-size: 10px; color: var(--brand-strong); letter-spacing: 0; text-transform: none; }
+.v-e .pts .hold, .v-e .stat.hold, .v-e .proj.hold { visibility: hidden; }
+.v-e .half.lit { background: color-mix(in srgb, var(--highlight) 15%, transparent); }
+.v-e .stat {
+  display: block; margin-top: 2px;
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.v-e .team .g { margin-left: 8px; font-family: var(--font-mono); font-size: 12px; font-weight: 500; color: var(--brand-strong); }
+.side.flip .team .g { margin: 0 8px 0 0; }
+
+/* ---- combine note ---- */
+.note {
+  border-top: 1px solid var(--hairline);
+  padding-top: 22px;
+  display: flex; flex-direction: column; gap: 12px;
+  max-width: 70ch;
+}
+.note h2 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.03em; }
+.note p { margin: 0; font-size: 14px; line-height: 1.65; color: var(--ink-2); text-wrap: pretty; }
+.note code {
+  font-family: var(--font-mono); font-size: 12px;
+  background: var(--paper-sunken); padding: 1px 5px; border-radius: 6px; color: var(--ink);
+}
+
+@media (max-width: 640px) {
+  .wrap { padding: 36px 16px 64px; gap: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+</style>
+
+<div class="wrap">
+
+  <section class="intro">
+    <span class="kicker">Hum · matchup card</span>
+    <h1>Four ways to end the header and start the roster</h1>
+    <p class="lede">
+      The card is structurally right — two rosters, paired by slot, with the tally on top. What it lacks is
+      a seam. Below are four studies, all built from tokens already in <code style="font-family:var(--font-mono);font-size:13px">src/styles.css</code>.
+      Nothing new is invented; only the arrangement changes.
+    </p>
+    <ul class="faults">
+      <li><span class="n">01</span><span><b>Three rhythms, no rule.</b> The title spans the card, the team names span a column, the rows span a column again. Nothing marks the change.</span></li>
+      <li><span class="n">02</span><span><b>The seam is the same size as a row gap.</b> <code style="font-family:var(--font-mono);font-size:12px">mt-3</code> under the tally against <code style="font-family:var(--font-mono);font-size:12px">space-y-1.5</code> between rows — so the score line reads as row zero.</span></li>
+      <li><span class="n">03</span><span><b>The projections collide in the gutter.</b> 108.3 and 98.0 sit adjacent with no axis between them, while the two live totals are pinned to opposite outer edges.</span></li>
+      <li><span class="n">04</span><span><b>A 40px gutter holding nothing.</b> The columns sit beside each other rather than against each other.</span></li>
+      <li><span class="n">05</span><span><b>The slot label and the meta line are the same grey.</b> Structure and incidental detail read at identical weight.</span></li>
+    </ul>
+  </section>
+
+  <section class="study" id="now">
+    <div class="study-head">
+      <span class="tag" style="color: var(--ink-3)"><span class="dot"></span>Now</span>
+      <h2>The card as it ships</h2>
+      <p class="why">For comparison. Read the seam between <em>108.3 proj</em> and <em>Dak Prescott</em> — there isn't one.</p>
+    </div>
+    <div class="stage"><div class="card v-now" data-card="now"></div></div>
+  </section>
+
+  <section class="study" id="a">
+    <div class="study-head">
+      <span class="tag"><span class="dot"></span>Study A</span>
+      <h2>Scorebar</h2>
+      <p class="why">
+        The tally lifts off the paper and becomes an inset tile on <code style="font-family:var(--font-mono);font-size:12px">--paper-sunken</code>,
+        with a hairline axis running between the two sides. Separation by surface, not by line — the rosters then
+        sit on plain paper below, unmistakably a different kind of thing. The centre rule also fixes fault 03:
+        each projection now belongs to a side.
+      </p>
+      <p class="cost"><b>Cost:</b> one wrapper div, one background token, one 1px column. No data change.</p>
+    </div>
+    <div class="stage"><div class="card v-a" data-card="a"></div></div>
+  </section>
+
+  <section class="study" id="b">
+    <div class="study-head">
+      <span class="tag"><span class="dot"></span>Study B</span>
+      <h2>Ledger</h2>
+      <p class="why">
+        Stays flat and does it with rules instead. A full-bleed hairline crosses the whole card under the tally,
+        then a micro-caps strip labels what the columns actually hold — <em>slot / player / proj</em>. The strip does
+        double duty: it names the columns and it is a second, lighter division. Rows get hairlines, so the roster
+        reads as a table rather than a stack. Most literally "Ledger", which is what the stylesheet already calls itself.
+      </p>
+      <p class="cost"><b>Cost:</b> a bleed rule (<code style="font-family:var(--font-mono);font-size:12px">-mx-5</code>), a header strip, <code style="font-family:var(--font-mono);font-size:12px">divide-y</code> on the list.</p>
+    </div>
+    <div class="stage"><div class="card v-b" data-card="b"></div></div>
+  </section>
+
+  <section class="study" id="c">
+    <div class="study-head">
+      <span class="tag"><span class="dot"></span>Study C</span>
+      <h2>Spine</h2>
+      <p class="why">
+        The dead gutter becomes the structure. One shared axis runs the height of the board, and the slot labels
+        move into it — so <em>QB</em> appears once, between the two quarterbacks, instead of twice at the outer edges.
+        The seam is simply where the spine begins. This is the arrangement <code style="font-family:var(--font-mono);font-size:12px">MatchupSpine</code>
+        already uses on the phone, so the desktop and mobile views would finally be the same idea at two sizes.
+      </p>
+      <p class="cost"><b>Cost:</b> the largest change — the two <code style="font-family:var(--font-mono);font-size:12px">&lt;ul&gt;</code>s merge into one row list. <code style="font-family:var(--font-mono);font-size:12px">SideCol</code> is no longer the unit.</p>
+    </div>
+    <div class="stage"><div class="card v-c" data-card="c"></div></div>
+  </section>
+
+  <section class="study" id="d">
+    <div class="study-head">
+      <span class="tag"><span class="dot"></span>Study D</span>
+      <h2>Masthead</h2>
+      <p class="why">
+        Title and tally fuse into one full-bleed band across the top of the card, the way a real box score is
+        printed. "Your matchup" demotes to a mono eyebrow inside the band — it is a label, not a headline — and the
+        team names take the weight it gives up. The band's bottom edge is the seam, and it runs the full card width
+        so it cannot be mistaken for a row divider.
+      </p>
+      <p class="cost"><b>Cost:</b> padding moves from the card to its two regions. Strongest read; least like the sibling cards on the page.</p>
+    </div>
+    <div class="stage"><div class="card v-d" data-card="d"></div></div>
+  </section>
+
+  <section class="study" id="e">
+    <div class="study-head">
+      <span class="tag"><span class="dot"></span>Study E &middot; the build</span>
+      <h2>Masthead Spine</h2>
+      <p class="why">
+        D's band with C's axis run through it. Because the band and the rows share one grid, the centre
+        channel is continuous &mdash; <em>vs</em> sits directly above the stack of slot labels without needing rules of its own
+        to say so. The band's lower edge is the seam; the channel's hairlines start where the rosters do, and
+        the channel is what the two sides are measured against. Slot labels appear nine times instead of eighteen.
+      </p>
+      <p class="cost"><b>Cost:</b> <code style="font-family:var(--font-mono);font-size:12px">SideCol</code> is replaced by a paired row list. The card's padding moves onto its two regions.</p>
+    </div>
+    <div class="stage"><div class="card v-e" data-card="e"></div></div>
+  </section>
+
+  <section class="study" id="live">
+    <div class="study-head">
+      <span class="tag"><span class="dot"></span>Study E &middot; live</span>
+      <h2>The same board, mid-game</h2>
+      <p class="why">
+        Every row is the same height whether or not a gain landed on it this poll, because the gain line and the
+        stat line both hold their space. The mark for &ldquo;this just scored&rdquo; is the gain itself, in accent green, over a 15%
+        breath of the highlighter. During a sim most cells score at once, so anything heavier inverts &mdash; the
+        un-lit cells start reading as the exception. It is not &mdash; not the old <code style="font-family:var(--font-mono);font-size:12px">bg-win/10</code>,
+        which resolved to 10% ink and greyed the cell out.
+      </p>
+      <p class="cost" id="probe"><b>Row heights:</b> measuring&hellip;</p>
+    </div>
+    <div class="stage"><div class="card v-e" data-card="live"></div></div>
+  </section>
+
+  <section class="note">
+    <h2>Where this lands</h2>
+    <p>
+      A&ndash;D are the four separate arguments; <strong>E is the one being built</strong> &mdash; D's masthead band with C's
+      axis run through it. The merge is worth more than either half: sharing one grid between the band and
+      the rows turns the centre gutter into a single channel that starts at the scoreboard and ends at the
+      card's edge, so the seam and the axis are the same gesture rather than two competing ones.
+    </p>
+    <p>
+      It also clears all five faults at once &mdash; one horizontal rhythm, a full-bleed seam that cannot read as a
+      row divider, an axis that assigns each projection to a side, a gutter carrying the slot labels, and structure
+      that no longer competes with the meta line for the same grey.
+    </p>
+  </section>
+
+</div>
+
+<script>
+const HOME = { team: "hands", live: "0.00", proj: "108.3", rows: [
+  ["QB",  "Dak Prescott",       "DP", "QB · DAL · @ NYG · 9/13 · 8:20 PM EDT",  "18.0"],
+  ["RB",  "Rico Dowdle",        "RD", "RB · PIT · VS ATL · 9/13 · 1:00 PM EDT", "10.4"],
+  ["RB2", "Tony Pollard",       "TP", "RB · TEN · VS NYJ · 9/13 · 1:00 PM EDT", "9.0"],
+  ["WR",  "Jaxon Smith-Njigba", "JS", "WR · SEA · VS NE · 9/9 · 8:20 PM EDT",   "16.3"],
+  ["WR2", "A.J. Brown",         "AB", "WR · NE · @ SEA · 9/9 · 8:20 PM EDT",    "14.2"],
+  ["WR3", "Tee Higgins",        "TH", "WR · CIN · VS TB · 9/13 · 1:00 PM EDT",  "13.9"],
+  ["TE",  "Brock Bowers",       "BB", "TE · LV · VS MIA · 9/13 · 4:25 PM EDT",  "12.7"],
+  ["K",   "Evan McPherson",     "EM", "K · CIN · VS TB · 9/13 · 1:00 PM EDT",   "7.8"],
+  ["DST", "GB D/ST",            "GB", "DEF · GB · @ MIN · 9/13 · 4:25 PM EDT",  "6.0"],
+]};
+
+const AWAY = { team: "Butterbean", live: "0.00", proj: "98.0", rows: [
+  ["QB",  "Caleb Williams",     "CW", "QB · CHI · @ CAR · 9/13 · 1:00 PM EDT",  "19.4"],
+  ["RB",  "James Cook",         "JC", "RB · BUF · @ HOU · 9/13 · 1:00 PM EDT",  "15.7"],
+  ["RB2", "Rachaad White",      "RW", "RB · WAS · @ PHI · 9/13 · 4:25 PM EDT",  "8.4"],
+  ["WR",  "Courtland Sutton",   "CS", "WR · DEN · @ KC · 9/14 · 8:15 PM EDT",   "8.8"],
+  ["WR2", "Tetairoa McMillan",  "TM", "WR · CAR · VS CHI · 9/13 · 1:00 PM EDT", "11.7"],
+  ["WR3", "Terry McLaurin",     "TM", "WR · WAS · @ PHI · 9/13 · 4:25 PM EDT",  "11.2"],
+  ["TE",  "Dalton Kincaid",     "DK", "TE · BUF · @ HOU · 9/13 · 1:00 PM EDT",  "7.6"],
+  ["K",   "Jake Bates",         "JB", "K · DET · VS NO · 9/13 · 1:00 PM EDT",   "8.1"],
+  ["DST", "DET D/ST",           "DE", "DEF · DET · VS NO · 9/13 · 1:00 PM EDT", "7.1"],
+]};
+
+/** Mirrors baseSlotLabel() in src/lib/data/teams.ts — the ordinal is display noise. */
+const bare = (s) => String(s).replace(/\d+$/, "");
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const who = (ini, name, meta) =>
+  `<span class="who"><span class="ava">${esc(ini)}</span><span class="txt">` +
+  `<span class="name">${esc(name)}</span><span class="meta">${esc(meta)}</span></span></span>`;
+
+const pts = (v) => `<span class="pts">${esc(v)}<span class="l">proj</span></span>`;
+const ptsE = (v) => `<span class="pts">${esc(v)}<span class="g hold">+0.0</span></span>`;
+
+function sideTally(s, flip) {
+  return `<div class="side${flip ? " flip" : ""}">` +
+    `<p class="team">${esc(s.team)}</p>` +
+    `<span class="nums"><span class="live">${esc(s.live)}</span>` +
+    `<span class="proj"><span class="v">${esc(s.proj)}</span><span class="l">proj</span></span></span></div>`;
+}
+
+function column(s, flip) {
+  const rows = s.rows.map(([slot, name, ini, meta, p]) =>
+    `<li class="row"><span class="slot">${esc(bare(slot))}</span>${who(ini, name, meta)}${pts(p)}</li>`
+  ).join("");
+  return `<ul class="col${flip ? " flip" : ""}">${rows}</ul>`;
+}
+
+const head = `<div class="card-head"><h3>Your matchup</h3><a class="boxlink" href="#">Full box score</a></div>`;
+
+const BUILD = {
+  now: () => head +
+    `<div class="tally">${sideTally(HOME, false)}${sideTally(AWAY, true)}</div>` +
+    `<div class="board">${column(HOME, false)}${column(AWAY, true)}</div>`,
+
+  a: () => head +
+    `<div class="tally">${sideTally(HOME, false)}<span class="axis"></span>${sideTally(AWAY, true)}</div>` +
+    `<div class="board">${column(HOME, false)}${column(AWAY, true)}</div>`,
+
+  b: () => head +
+    `<div class="tally">${sideTally(HOME, false)}${sideTally(AWAY, true)}</div>` +
+    `<div class="bleed"></div>` +
+    `<div class="strip"><span class="lbl"><span>Slot · Player</span><span>Proj</span></span>` +
+    `<span class="lbl flip"><span>Player · Slot</span><span>Proj</span></span></div>` +
+    `<div class="board">${column(HOME, false)}${column(AWAY, true)}</div>`,
+
+  c: () => {
+    const rows = HOME.rows.map((h, i) => {
+      const a = AWAY.rows[i];
+      return `<li class="srow">` +
+        `<span class="half">${who(h[2], h[1], h[3])}${pts(h[4])}</span>` +
+        `<span class="gut"><span class="s">${esc(bare(h[0]))}</span></span>` +
+        `<span class="half flip">${who(a[2], a[1], a[3])}${pts(a[4])}</span></li>`;
+    }).join("");
+    return head +
+      `<div class="tally">${sideTally(HOME, false)}<span class="gut"><span>vs</span></span>${sideTally(AWAY, true)}</div>` +
+      `<ul class="spine">${rows}</ul>`;
+  },
+
+  d: () => `<div class="band">${head}` +
+    `<div class="tally">${sideTally(HOME, false)}${sideTally(AWAY, true)}</div></div>` +
+    `<div class="board">${column(HOME, false)}${column(AWAY, true)}</div>`,
+
+  e: () => {
+    const rows = HOME.rows.map((h, i) => {
+      const a = AWAY.rows[i];
+      return `<li class="srow">` +
+        `<span class="half">${who(h[2], h[1], h[3])}${ptsE(h[4])}</span>` +
+        `<span class="chan"><span class="s">${esc(bare(h[0]))}</span></span>` +
+        `<span class="half flip">${who(a[2], a[1], a[3])}${ptsE(a[4])}</span></li>`;
+    }).join("");
+    return `<div class="band">${head}` +
+      `<div class="tally">${sideTally(HOME, false)}` +
+      `<span class="chan"><span class="vs">vs</span></span>` +
+      `${sideTally(AWAY, true)}</div></div>` +
+      `<ul class="spine">${rows}</ul>`;
+  },
+};
+
+const LIVE_HOME = { team: "hands", live: "22.80", gain: "+3.7", proj: null, rows: [
+  ["QB",  "Dak Prescott",       "DP", "QB · DAL · @ NYG",  "Q2 9:51", "3.8", "+1.9", "11/18, 94 yds · 2 rush"],
+  ["RB",  "Rico Dowdle",        "RD", "RB · PIT · VS ATL", "Q2 9:51", "0.7", "+0.1", "1 car, 4 yds · 1 rec, 1 yds"],
+  ["RB2", "Tony Pollard",       "TP", "RB · TEN · VS NYJ", "Q2 9:51", "2.8", "+0.5", "7 car, 24 yds · 0 rec, 12 yds"],
+  ["WR",  "Jaxon Smith-Njigba", "JS", "WR · SEA · VS NE",  "Q2 9:51", "4.1", "",     "3 rec, 37 yds"],
+  ["WR2", "A.J. Brown",         "AB", "WR · NE · @ SEA",   "Q2 9:51", "0.7", "+0.1", "1 rec, 4 yds"],
+  ["WR3", "Tee Higgins",        "TH", "WR · CIN · VS TB",  "Q2 9:51", "1.5", "+0.4", "1 rec, 10 yds"],
+  ["TE",  "Brock Bowers",       "BB", "TE · LV · VS MIA",  "Q2 9:51", "4.4", "+0.7", "2 rec, 31 yds"],
+  ["K",   "Evan McPherson",     "EM", "K · CIN · VS TB",   "Q2 9:51", "1.6", "",     "1 XP"],
+]};
+
+const LIVE_AWAY = { team: "Butterbean", live: "49.50", gain: "+15.2", proj: null, rows: [
+  ["QB",  "Caleb Williams",    "CW", "QB · CHI · @ CAR",  "Q2 9:51", "18.0", "+5.8", "15/25, 147 yds · 1 TD · 41 rush · 1 rush TD"],
+  ["RB",  "James Cook",        "JC", "RB · BUF · @ HOU",  "Q2 9:51", "15.9", "+5.5", "12 car, 40 yds · 1 TD · 5 rec, 52 yds"],
+  ["RB2", "Rachaad White",     "RW", "RB · WAS · @ PHI",  "Q2 9:51", "1.1",  "+0.5", "1 car, 7 yds · 1 rec, 1 yds"],
+  ["WR",  "Courtland Sutton",  "CS", "WR · DEN · @ KC",   "Q2 9:51", "6.0",  "+1.9", "2 rec, 24 yds"],
+  ["WR2", "Tetairoa McMillan", "TM", "WR · CAR · VS CHI", "Q2 9:51", "0.6",  "",     "1 rec, 7 yds"],
+  ["WR3", "Terry McLaurin",    "TM", "WR · WAS · @ PHI",  "Q2 9:51", "2.2",  "+1.1", "1 rec, 16 yds"],
+  ["TE",  "Dalton Kincaid",    "DK", "TE · BUF · @ HOU",  "Q2 9:51", "3.6",  "+0.4", "1 rec, 14 yds"],
+  ["K",   "Jake Bates",        "JB", "K · DET · VS NO",   "Q2 9:51", "2.1",  "",     "1 FG"],
+]};
+
+function liveHalf(r, flip) {
+  const [, name, ini, meta, clock, pt, gain, stat] = r;
+  const who =
+    `<span class="who"><span class="ava">${esc(ini)}</span><span class="txt">` +
+    `<span class="name">${esc(name)}</span>` +
+    `<span class="meta">${esc(meta)} · <span class="now">${esc(clock)}</span></span>` +
+    `<span class="stat${stat ? "" : " hold"}">${esc(stat || "—")}</span>` +
+    `</span></span>`;
+  const pts =
+    `<span class="pts">${esc(pt)}` +
+    `<span class="g${gain ? "" : " hold"}">${esc(gain || "+0.0")}</span></span>`;
+  return `<span class="half${flip ? " flip" : ""}${gain ? " lit" : ""}">${who}${pts}</span>`;
+}
+
+function liveTally(s, flip) {
+  return `<div class="side${flip ? " flip" : ""}">` +
+    `<p class="team">${esc(s.team)}<span class="g">${esc(s.gain)}</span></p>` +
+    `<span class="nums"><span class="live">${esc(s.live)}</span>` +
+    `<span class="proj hold"><span class="v">&nbsp;</span><span class="l">proj</span></span>` +
+    `</span></div>`;
+}
+
+BUILD.live = () => {
+  const rows = LIVE_HOME.rows.map((h, i) =>
+    `<li class="srow">${liveHalf(h, false)}` +
+    `<span class="chan"><span class="s">${esc(bare(h[0]))}</span></span>` +
+    `${liveHalf(LIVE_AWAY.rows[i], true)}</li>`
+  ).join("");
+  return `<div class="band">${head}` +
+    `<div class="tally">${liveTally(LIVE_HOME, false)}` +
+    `<span class="chan"><span class="vs">vs</span></span>` +
+    `${liveTally(LIVE_AWAY, true)}</div></div>` +
+    `<ul class="spine">${rows}</ul>`;
+};
+
+for (const el of document.querySelectorAll("[data-card]")) {
+  el.innerHTML = BUILD[el.dataset.card]();
+}
+
+// The whole claim of this study is that a row does not change height when a gain
+// lands on it. Measure it rather than assert it.
+{
+  // Two separate claims: every row is the same height as every other row across
+  // both states, and so is every half. Comparing the two sets together would
+  // always differ by the 1px top rule, which is a border, not a shift.
+  const h = (sel) => [...document.querySelectorAll(sel)].map((r) => +r.getBoundingClientRect().height.toFixed(2));
+  const rows = [...new Set([...h("#e .srow"), ...h("#live .srow")])];
+  const halves = [...new Set([...h("#e .half"), ...h("#live .half")])];
+  const n = h("#e .srow").length + h("#live .srow").length;
+  const bands = [...new Set([...h("#e .band"), ...h("#live .band")])];
+  const lit = document.querySelectorAll("#live .half.lit").length;
+  const probe = document.getElementById("probe");
+  probe.innerHTML = rows.length === 1 && halves.length === 1 && bands.length === 1
+    ? `<b>Measured:</b> band ${bands[0]}px in both states; ${n} rows, every one ${rows[0]}px, every half ${halves[0]}px. ` +
+      `${lit} halves carry a gain this poll. Nothing on this card moves except the numbers.`
+    : `<b>Measured:</b> MISMATCH — band ${bands.join(", ")}px · rows ${rows.join(", ")}px · halves ${halves.join(", ")}px`;
+}
+</script>

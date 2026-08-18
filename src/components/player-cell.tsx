@@ -1,5 +1,5 @@
 import { Avatar } from "@/components/avatar";
-import { playerHeadshot, teamLogo } from "@/lib/data/teams";
+import { canonTeam, playerHeadshot, teamLogo } from "@/lib/data/teams";
 import type { GameChip, SlimPlayer } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
 
@@ -25,8 +25,7 @@ export function PlayerCell({
   const src = isDef
     ? teamLogo(player.team ?? player.player_id)
     : playerHeadshot(player.player_id, player.espn_id);
-  const name =
-    isDef && player.team ? `${player.team} D/ST` : player.full_name;
+  const name = isDef && player.team ? `${player.team} D/ST` : player.full_name;
   const meta = [player.position, player.team].filter(Boolean).join(" · ");
 
   return (
@@ -50,7 +49,7 @@ export function PlayerCell({
         <span className="block truncate text-sm font-medium text-fg">{name}</span>
         <span className="block truncate font-mono text-[11px] uppercase tracking-wide text-faint">
           {meta}
-          {gameLabel(game)}
+          {gameLabel(game, player.team)}
         </span>
         {line ? (
           <span className="mt-0.5 block truncate font-mono text-[11px] text-muted normal-case tracking-normal">
@@ -62,14 +61,25 @@ export function PlayerCell({
   );
 }
 
-function gameLabel(game: GameChip | null) {
+function gameLabel(game: GameChip | null, team?: string | null) {
   if (!game) return null;
   const bits = [game.opp, game.detail].filter(Boolean);
-  if (!bits.length) return null;
+  if (game.state === "in" && game.situation) bits.push(game.situation);
+  if (!bits.length && game.state !== "in") return null;
+  const ball =
+    game.state === "in" &&
+    Boolean(game.possession) &&
+    canonTeam(game.possession) != null &&
+    canonTeam(game.possession) === canonTeam(team);
   return (
     <span className={game.state === "in" ? "text-live" : undefined}>
-      {" · "}
-      {bits.join(" · ")}
+      {bits.length ? ` · ${bits.join(" · ")}` : null}
+      {ball ? (
+        <span className="text-live" title="Has the ball">
+          {" · "}
+          <span className="inline-block size-1.5 translate-y-[-1px] rounded-pill bg-live align-middle" />
+        </span>
+      ) : null}
     </span>
   );
 }

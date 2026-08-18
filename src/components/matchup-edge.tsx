@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getOutlooks } from "@/lib/data/fns";
+import { baseSlotLabel } from "@/lib/data/teams";
 import type { MatchupPair } from "@/lib/data/types";
 import { type PlayerOutlook, winProbability } from "@/lib/league/win-probability";
 import { cn, formatPts } from "@/lib/utils";
@@ -86,7 +87,9 @@ export function MatchupEdge({
             <span className="bg-faint" style={{ width: `${100 - pct}%` }} />
           </div>
           <div className="mt-1.5 flex justify-between font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
-            <span>{a.teamName} {pct}%</span>
+            <span>
+              {a.teamName} {pct}%
+            </span>
             <span>
               proj {formatPts(wp.projected[0], 1)} &ndash; {formatPts(wp.projected[1], 1)}
             </span>
@@ -101,8 +104,13 @@ export function MatchupEdge({
           const even = Math.abs(r.delta) < 0.05;
           const up = r.delta > 0;
           return (
-            <li key={r.slot} className="grid grid-cols-[34px_1fr_62px] items-center gap-3 px-5 py-1.5">
-              <span className="font-mono text-[10px] uppercase text-faint">{r.slot}</span>
+            <li
+              key={r.slot}
+              className="grid grid-cols-[34px_1fr_62px] items-center gap-3 px-5 py-1.5"
+            >
+              <span className="font-mono text-[10px] uppercase text-faint">
+                {baseSlotLabel(r.slot)}
+              </span>
               <span className="relative h-4">
                 <span className="absolute inset-y-0 left-1/2 w-px bg-line-strong" />
                 <span

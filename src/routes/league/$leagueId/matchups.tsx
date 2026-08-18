@@ -1,21 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LinePanel } from "@/components/book-panel";
+import { MatchupBoard } from "@/components/matchup-board";
 import { MatchupEdge } from "@/components/matchup-edge";
 import { MatchupSpine } from "@/components/matchup-spine";
-import { LinePanel } from "@/components/book-panel";
-import { WagerTicket, type TicketTarget } from "@/components/wager-ticket";
-import { getBook, getClaims } from "@/lib/league/fns";
-import { PlayerCell } from "@/components/player-cell";
 import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
-import { PlayerWatch, watchFromLine, type WatchTarget } from "@/components/player-watch";
+import { PlayerWatch, type WatchTarget, watchFromLine } from "@/components/player-watch";
 import { ReplayBar } from "@/components/replay-bar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getLeagueBundle, getMatchups, getWeekStats } from "@/lib/data/fns";
+import { type TicketTarget, WagerTicket } from "@/components/wager-ticket";
 import { fantasyStatKind } from "@/lib/data/calendar";
-import { formatStatLine } from "@/lib/data/statline";
-import type { MatchupSide } from "@/lib/data/types";
+import { getLeagueBundle, getMatchups, getWeekProjections, getWeekStats } from "@/lib/data/fns";
+import { liveStatLine, paintMatchups, pairIsProjected } from "@/lib/data/matchup-view";
+import { getBook, getClaims } from "@/lib/league/fns";
 import {
   applyReplayPairs,
   bookFromLeague,
@@ -24,9 +23,11 @@ import {
   pairingIsLive,
   REPLAY_PHASES,
   REPLAY_TICK_MS,
+  replayStatMap,
   seedPairsForReplay,
 } from "@/lib/replay";
 import { cn, formatPts } from "@/lib/utils";
+import { baseSlotLabel } from "@/lib/data/teams";
 
 type Search = { week?: number; focus?: number };
 
@@ -37,82 +38,6 @@ export const Route = createFileRoute("/league/$leagueId/matchups")({
   }),
   component: MatchupsPage,
 });
-
-function SideCol({
-  side,
-  prev,
-  leagueId,
-  stats,
-  onPlayer,
-}: {
-  side: MatchupSide;
-  prev: MatchupSide | null;
-  leagueId: string;
-  stats: Record<string, Record<string, number>>;
-  onPlayer: (t: WatchTarget | null) => void;
-}) {
-  const teamDelta = prev ? side.points - prev.points : 0;
-  return (
-    <div className="min-w-0">
-      <Link
-        to="/league/$leagueId/team/$rosterId"
-        params={{ leagueId, rosterId: String(side.rosterId) }}
-        className="block"
-      >
-        <p className="truncate text-sm">{side.teamName}</p>
-        <p className="flex items-baseline gap-2 font-display text-3xl tabular-nums tracking-tight">
-          {formatPts(side.points, 2)}
-          {teamDelta > 0.04 ? (
-            <span className="font-mono text-sm text-win">+{formatPts(teamDelta, 1)}</span>
-          ) : null}
-        </p>
-      </Link>
-      <ul className="mt-3 space-y-1.5">
-        {side.starters.map((line, i) => {
-          const before = prev?.starters[i]?.points ?? 0;
-          const now = line.points ?? 0;
-          const bump = now - before;
-          const bag = line.stats ?? (line.playerId ? stats[line.playerId] : undefined);
-          return (
-            <li
-              key={`${i}-${line.slot}-${line.playerId ?? "e"}`}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-1 py-1 transition-colors duration-300",
-                bump > 0.04 && "bg-win/10",
-              )}
-            >
-              <span className="w-8 shrink-0 font-mono text-[10px] text-faint">{line.slot}</span>
-              <button
-                type="button"
-                disabled={!line.player}
-                onClick={() =>
-                  onPlayer(
-                    watchFromLine(line, side.teamName, formatStatLine(line.player?.position, bag), bag),
-                  )
-                }
-                className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:cursor-default"
-              >
-                <PlayerCell
-                  player={line.player}
-                  empty="—"
-                  compact
-                  game={line.game}
-                  line={formatStatLine(line.player?.position, bag)}
-                />
-              </button>
-              <span className="w-16 text-right font-mono text-xs tabular-nums">
-                {formatPts(line.points, 1)}
-                {bump > 0.04 ? (
-                  <span className="block text-[10px] text-win">+{formatPts(bump, 1)}</span>
-                ) : null}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
 
 function MatchupsPage() {
   const { leagueId } = Route.useParams();
@@ -136,15 +61,14 @@ function MatchupsPage() {
         t.gameId || t.gameDetail
           ? { state: t.gameState ?? "pre", detail: t.gameDetail ?? "", opp: null, gameId: t.gameId }
           : null,
-      context: { label: t.club, rows: [["Slot", t.slot]] },
+      context: { label: t.club, rows: [["Slot", baseSlotLabel(t.slot)]] },
     });
   }
 
   const league = useQuery({
     queryKey: ["league", leagueId],
     queryFn: () => getLeagueBundle({ data: { leagueId } }),
-    refetchInterval: (q) =>
-      phase == null && q.state.data?.scoringLive ? LIVE_POLL_MS : false,
+    refetchInterval: (q) => (phase == null && q.state.data?.scoringLive ? LIVE_POLL_MS : false),
   });
   const week = search.week ?? league.data?.currentWeek ?? 1;
   const matchups = useQuery({
@@ -154,9 +78,7 @@ function MatchupsPage() {
       if (phase != null) return false;
       const rows = q.state.data ?? [];
       const live = rows.some((pair) =>
-        [pair.home, pair.away].some((side) =>
-          side?.starters.some((s) => s.game?.state === "in"),
-        ),
+        [pair.home, pair.away].some((side) => side?.starters.some((s) => s.game?.state === "in")),
       );
       return live || league.data?.scoringLive ? LIVE_POLL_MS : false;
     },
@@ -199,6 +121,19 @@ function MatchupsPage() {
   const pendingClaimTotal = (claims.data?.items ?? [])
     .filter((c) => c.mine && c.status === "pending")
     .reduce((t, c) => t + c.bid, 0);
+  const projections = useQuery({
+    queryKey: ["week-projections", leagueId, week],
+    queryFn: () =>
+      getWeekProjections({
+        data: {
+          leagueId,
+          season: String(league.data!.league.season),
+          week,
+        },
+      }),
+    enabled: Boolean(league.data?.league.season),
+    staleTime: 60_000,
+  });
   const liveFinals = weekStats.data ?? {};
   const hasLiveStats = Object.keys(liveFinals).length > 0;
   const book = bookFromLeague(league.data?.league.scoring_settings);
@@ -225,16 +160,27 @@ function MatchupsPage() {
     return () => window.clearTimeout(t);
   }, [running, phase]);
 
-  const shown = useMemo(() => {
+  const rawShown = useMemo(() => {
     if (!seededPairs.length) return [];
     if (phase == null) return matchups.data ?? [];
     return applyReplayPairs(seededPairs, week, phase, finals);
   }, [matchups.data, seededPairs, phase, week, finals]);
 
+  const displayStats = useMemo(() => {
+    if (phase == null) return liveFinals;
+    return replayStatMap(finals, phase, week);
+  }, [phase, liveFinals, finals, week]);
+
+  const shown = useMemo(
+    () => paintMatchups(rawShown, projections.data ?? {}, displayStats),
+    [rawShown, projections.data, displayStats],
+  );
+
   const prevShown = useMemo(() => {
     if (!seededPairs.length || phase == null || phase <= 0) return null;
-    return applyReplayPairs(seededPairs, week, phase - 1, finals);
-  }, [seededPairs, phase, week, finals]);
+    const raw = applyReplayPairs(seededPairs, week, phase - 1, finals);
+    return paintMatchups(raw, projections.data ?? {}, replayStatMap(finals, phase - 1, week));
+  }, [seededPairs, phase, week, finals, projections.data]);
 
   // The page shows one matchup at a time. Yours is the default, but every game
   // in the week is one tap or one arrow key away.
@@ -247,6 +193,10 @@ function MatchupsPage() {
   const [picked, setPicked] = useState<number | null>(null);
   const selected = picked != null && picked < shown.length ? picked : defaultIndex;
   const pair = shown[selected] ?? null;
+
+  useEffect(() => {
+    setPicked(null);
+  }, [week, leagueId]);
 
   function move(delta: number) {
     if (!shown.length) return;
@@ -274,6 +224,12 @@ function MatchupsPage() {
     ro.observe(el);
     return () => ro.disconnect();
   }, [syncEdges, shown.length]);
+
+  useEffect(() => {
+    if (picked != null) return;
+    const on = stripRef.current?.querySelector('[aria-selected="true"]');
+    if (on instanceof HTMLElement) on.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [week, defaultIndex, shown.length, picked]);
 
   function scrollStrip(dir: 1 | -1) {
     const el = stripRef.current;
@@ -328,7 +284,8 @@ function MatchupsPage() {
         </div>
       ) : null}
 
-      {matchups.data == null && (matchups.isPending || matchups.isLoading || !matchups.isFetched) ? (
+      {matchups.data == null &&
+      (matchups.isPending || matchups.isLoading || !matchups.isFetched) ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-64" />
@@ -358,166 +315,204 @@ function MatchupsPage() {
                   <ChevronRight className="size-4" strokeWidth={2} />
                 </button>
               ) : null}
-            <div
-              ref={stripRef}
-              onScroll={syncEdges}
-              role="tablist"
-              aria-label="Matchups this week"
-              onKeyDown={(e) => {
-                if (e.key === "ArrowRight") {
-                  e.preventDefault();
-                  move(1);
-                } else if (e.key === "ArrowLeft") {
-                  e.preventDefault();
-                  move(-1);
-                }
-              }}
-              className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1"
-            >
-              {shown.map((p, i) => {
-                const on = i === selected;
-                const homeLeads = !p.away || p.home.points >= p.away.points;
-                const decided = p.home.points > 0 || (p.away?.points ?? 0) > 0;
-                const yours =
-                  p.home.rosterId === mineRosterId || p.away?.rosterId === mineRosterId;
+              <div
+                ref={stripRef}
+                onScroll={syncEdges}
+                role="tablist"
+                aria-label="Matchups this week"
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowRight") {
+                    e.preventDefault();
+                    move(1);
+                  } else if (e.key === "ArrowLeft") {
+                    e.preventDefault();
+                    move(-1);
+                  }
+                }}
+                className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1"
+              >
+                {shown.map((p, i) => {
+                  const on = i === selected;
+                  const preview = pairIsProjected(p);
+                  const homeLeads = !p.away || p.home.points >= p.away.points;
+                  const decided = !preview && (p.home.points > 0 || (p.away?.points ?? 0) > 0);
+                  const yours =
+                    p.home.rosterId === mineRosterId || p.away?.rosterId === mineRosterId;
+                  return (
+                    <button
+                      key={p.matchupId}
+                      type="button"
+                      role="tab"
+                      aria-selected={on}
+                      tabIndex={on ? 0 : -1}
+                      onClick={() => setPicked(i)}
+                      className={cn(
+                        "w-44 shrink-0 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150",
+                        on
+                          ? "border-line-strong bg-surface shadow-[var(--shadow-lift)]"
+                          : "border-line bg-transparent hover:bg-surface",
+                      )}
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="truncate font-mono text-[9px] uppercase tracking-[0.12em] text-faint">
+                          {yours ? "Your game" : `Game ${i + 1}`}
+                        </span>
+                        {pairingIsLive(p) ? (
+                          <span className="size-1.5 shrink-0 rounded-pill bg-live" />
+                        ) : preview ? (
+                          <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-faint">
+                            Proj
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="mt-1.5 flex items-baseline justify-between gap-2">
+                        <span className="min-w-0 flex-1 truncate text-[13px]">
+                          <span className={homeLeads && decided ? "font-semibold" : "text-muted"}>
+                            {p.home.teamName}
+                          </span>
+                        </span>
+                        <span
+                          className={cn(
+                            "shrink-0 font-mono text-xs tabular-nums",
+                            preview && "text-muted",
+                          )}
+                        >
+                          {formatPts(p.home.points, 1)}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 flex items-baseline justify-between gap-2">
+                        <span className="min-w-0 flex-1 truncate text-[13px]">
+                          <span className={!homeLeads && decided ? "font-semibold" : "text-muted"}>
+                            {p.away?.teamName ?? "Bye"}
+                          </span>
+                        </span>
+                        <span
+                          className={cn(
+                            "shrink-0 font-mono text-xs tabular-nums",
+                            preview && "text-muted",
+                          )}
+                        >
+                          {formatPts(p.away?.points ?? 0, 1)}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {pair
+            ? (() => {
+                const title =
+                  pair.home.rosterId === mineRosterId || pair.away?.rosterId === mineRosterId
+                    ? "Your matchup"
+                    : `${pair.home.teamName} vs ${pair.away?.teamName ?? "Bye"}`;
                 return (
-                  <button
-                    key={p.matchupId}
-                    type="button"
-                    role="tab"
-                    aria-selected={on}
-                    tabIndex={on ? 0 : -1}
-                    onClick={() => setPicked(i)}
-                    className={cn(
-                      "w-44 shrink-0 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150",
-                      on
-                        ? "border-line-strong bg-surface shadow-[var(--shadow-lift)]"
-                        : "border-line bg-transparent hover:bg-surface",
-                    )}
-                  >
-                    <span className="flex items-center justify-between gap-2">
-                      <span className="truncate font-mono text-[9px] uppercase tracking-[0.12em] text-faint">
-                        {yours ? "Your game" : `Game ${i + 1}`}
-                      </span>
-                      {pairingIsLive(p) ? (
-                        <span className="size-1.5 shrink-0 rounded-pill bg-live" />
-                      ) : null}
-                    </span>
-                    <span className="mt-1.5 flex items-baseline justify-between gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[13px]">
-                        <span className={homeLeads && decided ? "font-semibold" : "text-muted"}>
-                          {p.home.teamName}
-                        </span>
-                      </span>
-                      <span className="shrink-0 font-mono text-xs tabular-nums">
-                        {formatPts(p.home.points, 1)}
-                      </span>
-                    </span>
-                    <span className="mt-0.5 flex items-baseline justify-between gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[13px]">
-                        <span className={!homeLeads && decided ? "font-semibold" : "text-muted"}>
-                          {p.away?.teamName ?? "Bye"}
-                        </span>
-                      </span>
-                      <span className="shrink-0 font-mono text-xs tabular-nums">
-                        {formatPts(p.away?.points ?? 0, 1)}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            </div>
-          ) : null}
-
-          {pair ? (
-            <>
-              <article className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)] sm:p-5">
-                {pair.label ? (
-                  <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-live">
-                    {pair.label}
-                  </p>
-                ) : null}
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="font-display text-lg font-bold tracking-[-0.03em]">
-                    {pair.home.rosterId === mineRosterId || pair.away?.rosterId === mineRosterId
-                      ? "Your matchup"
-                      : `${pair.home.teamName} vs ${pair.away?.teamName ?? "Bye"}`}
-                  </h2>
-                  <Link
-                    to="/league/$leagueId/matchup/$week/$matchupId"
-                    params={{ leagueId, week: String(week), matchupId: String(pair.matchupId) }}
-                    className="font-mono text-[11px] uppercase tracking-wide text-accent-strong"
-                  >
-                    Full box score
-                  </Link>
-                </div>
-                {/* Two columns is right the moment there is room for two columns.
+                  <>
+                    <article className="overflow-hidden rounded-xl bg-surface shadow-[var(--shadow-border)]">
+                      {/* Two columns is right the moment there is room for two columns.
                     Under `sm` there is not, and stacking the rosters buries the
-                    comparison — so the phone gets the same data paired by slot. */}
-                {pair.away ? (
-                  <MatchupSpine
-                    home={pair.home}
-                    away={pair.away}
-                    stats={finals}
-                    onPlayer={(line, side) =>
-                      openPlayer(
-                        watchFromLine(
-                          line,
-                          side.teamName,
-                          formatStatLine(
-                            line.player?.position,
-                            line.stats ?? (line.playerId ? finals[line.playerId] : undefined),
-                          ),
-                          line.stats ?? (line.playerId ? finals[line.playerId] : undefined),
-                        ),
-                      )
-                    }
-                  />
-                ) : null}
+                    comparison — so the phone gets the same data paired by slot,
+                    and its own header, since the band would not fit. */}
+                      <div className="p-4 sm:hidden">
+                        {pair.label ? (
+                          <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-live">
+                            {pair.label}
+                          </p>
+                        ) : null}
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                          <h2 className="font-display text-lg font-bold tracking-[-0.03em]">
+                            {title}
+                          </h2>
+                          <Link
+                            to="/league/$leagueId/matchup/$week/$matchupId"
+                            params={{
+                              leagueId,
+                              week: String(week),
+                              matchupId: String(pair.matchupId),
+                            }}
+                            className="font-mono text-[11px] uppercase tracking-wide text-accent-strong"
+                          >
+                            Full box score
+                          </Link>
+                        </div>
+                        {pair.away ? (
+                          <MatchupSpine
+                            home={pair.home}
+                            away={pair.away}
+                            liveHome={rawShown[selected]?.home.points ?? 0}
+                            liveAway={rawShown[selected]?.away?.points ?? 0}
+                            stats={displayStats}
+                            onPlayer={(line, side) =>
+                              openPlayer(
+                                watchFromLine(
+                                  line,
+                                  side.teamName,
+                                  liveStatLine(
+                                    line.player?.position,
+                                    line.game,
+                                    line.stats ??
+                                      (line.playerId ? displayStats[line.playerId] : undefined),
+                                  ),
+                                  line.stats ??
+                                    (line.playerId ? displayStats[line.playerId] : undefined),
+                                ),
+                              )
+                            }
+                          />
+                        ) : (
+                          <p className="text-sm text-muted">Bye week</p>
+                        )}
+                      </div>
 
-                <div className="hidden gap-6 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                  <SideCol
-                    side={pair.home}
-                    prev={prevShown?.[selected]?.home ?? null}
-                    leagueId={leagueId}
-                    stats={finals}
-                    onPlayer={openPlayer}
-                  />
-                  {pair.away ? (
-                    <SideCol
-                      side={pair.away}
-                      prev={prevShown?.[selected]?.away ?? null}
+                      <MatchupBoard
+                        title={title}
+                        label={pair.label}
+                        action={
+                          <Link
+                            to="/league/$leagueId/matchup/$week/$matchupId"
+                            params={{
+                              leagueId,
+                              week: String(week),
+                              matchupId: String(pair.matchupId),
+                            }}
+                            className="font-mono text-[11px] uppercase tracking-wide text-accent-strong"
+                          >
+                            Full box score
+                          </Link>
+                        }
+                        home={pair.home}
+                        away={pair.away ?? null}
+                        prevHome={prevShown?.[selected]?.home ?? null}
+                        prevAway={prevShown?.[selected]?.away ?? null}
+                        liveHome={rawShown[selected]?.home.points ?? 0}
+                        liveAway={rawShown[selected]?.away?.points ?? 0}
+                        leagueId={leagueId}
+                        stats={displayStats}
+                        onPlayer={openPlayer}
+                      />
+                    </article>
+                    {wagerBook.data?.enabled
+                      ? (() => {
+                          const line = wagerBook.data.lines.find(
+                            (l) => l.matchupId === pair.matchupId,
+                          );
+                          return line ? (
+                            <LinePanel className="mt-6" line={line} onPick={setTicket} />
+                          ) : null;
+                        })()
+                      : null}
+                    <MatchupEdge
+                      pair={rawShown[selected] ?? pair}
                       leagueId={leagueId}
-                      stats={finals}
-                      onPlayer={openPlayer}
+                      season={league.data?.league.season ?? ""}
+                      mine={mineRosterId}
                     />
-                  ) : (
-                    <p className="text-sm text-muted">Bye week</p>
-                  )}
-                </div>
-                {!pair.away ? (
-                  <p className="text-sm text-muted sm:hidden">Bye week</p>
-                ) : null}
-              </article>
-              {wagerBook.data?.enabled
-                ? (() => {
-                    const line = wagerBook.data.lines.find(
-                      (l) => l.matchupId === pair.matchupId,
-                    );
-                    return line ? (
-                      <LinePanel className="mt-6" line={line} onPick={setTicket} />
-                    ) : null;
-                  })()
-                : null}
-              <MatchupEdge
-                pair={pair}
-                leagueId={leagueId}
-                season={league.data?.league.season ?? ""}
-                mine={mineRosterId}
-              />
-            </>
-          ) : null}
+                  </>
+                );
+              })()
+            : null}
 
           {matchups.isSuccess && shown.length === 0 ? (
             <p className="text-sm text-muted">No matchups this week.</p>

@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { formatStatLine } from "@/lib/data/statline";
+import { TeamTotal } from "@/components/slot-pts";
+import { liveStatLine, sideIsProjected } from "@/lib/data/matchup-view";
+import { baseSlotLabel } from "@/lib/data/teams";
 import type { MatchupSide, SlimPlayer, StarterLine } from "@/lib/data/types";
 import { cn, formatPts } from "@/lib/utils";
 
@@ -18,11 +20,15 @@ import { cn, formatPts } from "@/lib/utils";
 export function MatchupSpine({
   home,
   away,
+  liveHome = 0,
+  liveAway = 0,
   stats,
   onPlayer,
 }: {
   home: MatchupSide;
   away: MatchupSide;
+  liveHome?: number;
+  liveAway?: number;
   stats: Record<string, Record<string, number>>;
   onPlayer: (line: StarterLine, side: MatchupSide) => void;
 }) {
@@ -35,23 +41,29 @@ export function MatchupSpine({
   }));
   // Bars are relative to the widest gap on this board, so they read as "which
   // slot is deciding the week" rather than as absolute points.
-  const span = Math.max(
-    ...rows.map((r) => Math.abs((r.a.points ?? 0) - (r.b?.points ?? 0))),
-    1,
-  );
-  const lead = home.points - away.points;
+  const span = Math.max(...rows.map((r) => Math.abs((r.a.points ?? 0) - (r.b?.points ?? 0))), 1);
+  const preview = sideIsProjected(home) && sideIsProjected(away);
 
   return (
     <div className="sm:hidden">
       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b border-line pb-3">
-        <Total name={home.teamName} points={home.points} ahead={lead >= 0} />
-        <span className="text-center">
-          <span className="block font-mono text-sm font-bold tabular-nums">
-            {lead >= 0 ? "+" : "−"}
-            {formatPts(Math.abs(lead), 1)}
-          </span>
-        </span>
-        <Total name={away.teamName} points={away.points} ahead={lead < 0} right />
+        <Total
+          name={home.teamName}
+          live={liveHome}
+          projected={home.points}
+          showProjected={sideIsProjected(home)}
+          ahead={!preview && liveHome >= liveAway}
+        />
+        <span className="text-center font-mono text-sm tabular-nums text-faint">–</span>
+        <Total
+          name={away.teamName}
+          live={liveAway}
+          projected={away.points}
+          showProjected={sideIsProjected(away)}
+          ahead={!preview && liveAway > liveHome}
+          flip
+          right
+        />
       </div>
 
       <ul>
@@ -73,7 +85,7 @@ export function MatchupSpine({
               >
                 <Half line={r.a} winning={!even && delta > 0} />
                 <span className="rounded-pill bg-raised py-0.5 text-center font-mono text-[9px] font-semibold uppercase tracking-wide text-faint">
-                  {r.slot}
+                  {baseSlotLabel(r.slot)}
                 </span>
                 <Half line={r.b} winning={!even && delta < 0} right />
               </button>
@@ -113,25 +125,33 @@ export function MatchupSpine({
 
 function Total({
   name,
-  points,
+  live,
+  projected,
+  showProjected,
   ahead,
+  flip,
   right,
 }: {
   name: string;
-  points: number;
+  live: number;
+  projected: number;
+  showProjected: boolean;
   ahead: boolean;
+  flip?: boolean;
   right?: boolean;
 }) {
   return (
     <span className={cn("min-w-0", right && "text-right")}>
       <span className="block truncate text-xs font-semibold text-muted">{name}</span>
-      <span
-        className={cn(
-          "block font-display text-2xl font-bold tabular-nums tracking-tight",
-          ahead && "text-accent-strong",
-        )}
-      >
-        {formatPts(points, 2)}
+      <span className={cn(ahead && "text-accent-strong")}>
+        <TeamTotal
+          live={live}
+          projected={projected}
+          showProjected={showProjected}
+          size="md"
+          flip={flip}
+          reserve
+        />
       </span>
     </span>
   );
@@ -148,21 +168,24 @@ function Half({
 }) {
   // A game that has not kicked off has no score yet, so showing 0.0 as a result
   // reads as a bad afternoon rather than as an afternoon that has not happened.
-  const idle = line?.game?.state === "pre";
+  const idle = Boolean(line?.forecast) || line?.game?.state === "pre";
   const live = line?.game?.state === "in";
-  const status = idle ? (line?.game?.detail ?? "") : live ? (line?.game?.detail ?? "live") : "final";
+  const liveStatus = [line?.game?.detail, line?.game?.situation].filter(Boolean).join(" · ");
+  const status =
+    line?.forecast === "bye" || line?.forecast === "out"
+      ? line.forecast
+      : idle
+        ? (line?.game?.detail ?? "")
+        : live
+          ? liveStatus || "live"
+          : "final";
 
   return (
     <span className={cn("min-w-0", right && "text-right")}>
       <span className={cn("block truncate text-[13px] font-semibold", idle && "text-faint")}>
         {line?.player ? shortName(line.player) : "—"}
       </span>
-      <span
-        className={cn(
-          "mt-px flex items-baseline gap-1.5",
-          right && "flex-row-reverse",
-        )}
-      >
+      <span className={cn("mt-px flex items-baseline gap-1.5", right && "flex-row-reverse")}>
         <span
           className={cn(
             "font-mono text-[15px] font-bold tabular-nums",
@@ -197,7 +220,7 @@ function Detail({
 }) {
   if (!line?.player) return <span />;
   const bag = line.stats ?? (line.playerId ? stats[line.playerId] : undefined);
-  const statLine = formatStatLine(line.player.position, bag);
+  const statLine = liveStatLine(line.player.position, line.game, bag);
   return (
     <button
       type="button"

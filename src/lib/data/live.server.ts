@@ -12,17 +12,27 @@ export function indexGames(games: ScoreGame[]): Map<string, GameChip> {
   for (const g of games) {
     const homeAbbr = canonTeam(g.home.abbr) ?? g.home.abbr.toUpperCase();
     const awayAbbr = canonTeam(g.away.abbr) ?? g.away.abbr.toUpperCase();
+    const live =
+      g.state === "in"
+        ? {
+            possession: g.possession ?? null,
+            situation: g.situation ?? null,
+            redZone: Boolean(g.redZone),
+          }
+        : { possession: null, situation: null, redZone: false };
     const homeChip: GameChip = {
       state: g.state,
       detail: g.detail,
       opp: `vs ${awayAbbr}`,
       gameId: g.id,
+      ...live,
     };
     const awayChip: GameChip = {
       state: g.state,
       detail: g.detail,
       opp: `@ ${homeAbbr}`,
       gameId: g.id,
+      ...live,
     };
     for (const key of teamKeys(g.home.abbr)) out.set(key, homeChip);
     for (const key of teamKeys(g.away.abbr)) out.set(key, awayChip);

@@ -25,8 +25,7 @@ export function formatStatLine(
     if (n("rush_td")) bits.push(`${n("rush_td")} rush TD`);
   } else if (isK) {
     const made =
-      n("fgm") ||
-      n("fgm_0_19") + n("fgm_20_29") + n("fgm_30_39") + n("fgm_40_49") + n("fgm_50p");
+      n("fgm") || n("fgm_0_19") + n("fgm_20_29") + n("fgm_30_39") + n("fgm_40_49") + n("fgm_50p");
     const xp = n("xpm");
     if (made) bits.push(`${made} FG`);
     if (xp) bits.push(`${xp} XP`);
@@ -36,7 +35,9 @@ export function formatStatLine(
     if (n("int")) bits.push(`${n("int")} INT`);
     if (n("fum_rec")) bits.push(`${n("fum_rec")} FR`);
     if (n("def_td")) bits.push(`${n("def_td")} TD`);
-    if (n("pts_allow") || n("pts_allow") === 0) bits.push(`${n("pts_allow")} PA`);
+    // 0 PA at kickoff is not a stat — only print it once something else happened
+    // or they have actually allowed points.
+    if (bits.length || n("pts_allow")) bits.push(`${n("pts_allow")} PA`);
   } else {
     if (n("rush_att") || rushYd) {
       bits.push(`${n("rush_att") || 0} car, ${Math.round(rushYd)} yds`);
