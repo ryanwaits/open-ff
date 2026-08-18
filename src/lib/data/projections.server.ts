@@ -7,12 +7,11 @@ import { isHostedLeague, type Projection } from "./types";
 const WEEKS = 18;
 
 /**
- * A projection, honestly labelled.
+ * A projection under this league's book.
  *
- * There is no projection feed anywhere in this app, so this is not a model: it
- * is last season's points per game, scored with THIS league's book, then zeroed
- * for anyone who cannot play. That is a proxy, and the UI says so. It is enough
- * to rank a bench, which is all the auto-fill needs it for.
+ * Prefer the weekly Sleeper feed (raw components scored here) when it has a
+ * row for the player; otherwise fall back to last season's points per game.
+ * Injury / bye gating zeroes anyone who cannot play.
  */
 
 type StatSeed = Record<string, number> & { player_id: string };
@@ -80,6 +79,37 @@ function round1(n: number): number {
 }
 
 /**
+ * This week's projection under this league's book, or null when the feed has
+ * no row for him. Scored from components for the same reason actual weeks are:
+ * a canned pts_ppr would be wrong in any league that is not full PPR.
+ */
+function feedProjection(
+  book: ScoringBook,
+  playerId: string,
+  feed: Record<string, Record<string, number>>,
+): number | null {
+  const parts = feed[playerId];
+  if (!parts) return null;
+  return round1(applyBook(book, parts));
+}
+
+/** Current week for a hosted league; 1 when unknown (feed will simply miss). */
+async function leagueWeek(leagueId: string): Promise<number> {
+  try {
+    const { getSql } = await import("@/lib/db");
+    const sql = await getSql();
+    const row = (
+      await sql<{ current_week: number }>`
+        select current_week from ff_leagues where id = ${leagueId}
+      `
+    )[0];
+    return row?.current_week ?? 1;
+  } catch {
+    return 1;
+  }
+}
+
+/**
  * Mean and spread for a whole roster at once.
  *
  * The eighteen weekly stat maps are fetched once and reused for every player,
@@ -93,6 +123,7 @@ export async function outlooksFor(input: {
 }): Promise<Record<string, { mean: number; sd: number }>> {
   const book = await scoringBookFor(input.leagueId);
   const live = await import("./live.server");
+  const { projectionsFor } = await import("./projection-feed.server");
 
   const weeks = await Promise.all(
     Array.from({ length: WEEKS }, async (_, i) => {
@@ -103,6 +134,9 @@ export async function outlooksFor(input: {
       }
     }),
   );
+
+  const week = await leagueWeek(input.leagueId);
+  const feed = await projectionsFor(input.season, week, input.playerIds);
 
   // A player who cannot play contributes nothing, however good his history is.
   // Without this the spread counts an IR'd star at his season average, which is
@@ -131,19 +165,21 @@ export async function outlooksFor(input: {
     }
 
     const points: number[] = [];
-    for (const week of weeks) {
-      const line = week[id];
+    for (const weekMap of weeks) {
+      const line = weekMap[id];
       if (line) points.push(applyBook(book, line));
     }
+    const fed = feedProjection(book, id, feed);
     if (points.length >= 4) {
       const mean = points.reduce((t, v) => t + v, 0) / points.length;
       const variance = points.reduce((t, v) => t + (v - mean) ** 2, 0) / (points.length - 1);
-      out[id] = { mean: round1(mean), sd: round1(Math.sqrt(variance)) };
+      // Feed is a point estimate for this week; keep measured sd from history.
+      out[id] = { mean: fed ?? round1(mean), sd: round1(Math.sqrt(variance)) };
       continue;
     }
-    // Too little history to measure. Fall back to the season line and the
-    // league-wide spread ratio rather than pretending to know.
-    const pg = perGameUnder(book, id);
+    // Too little history to measure. Fall back to the feed / season line and
+    // the league-wide spread ratio rather than pretending to know.
+    const pg = fed ?? perGameUnder(book, id);
     out[id] = pg == null ? { mean: 0, sd: 0 } : { mean: pg, sd: round1(pg * SPREAD_RATIO) };
   }
   return out;
@@ -164,6 +200,12 @@ export async function projectPlayers(input: {
 }): Promise<Record<string, Projection>> {
   const book = await scoringBookFor(input.leagueId);
   const byes = await byeWeeks(input.season).catch(() => ({}) as Record<string, number>);
+  const { projectionsFor } = await import("./projection-feed.server");
+  const feed = await projectionsFor(
+    input.season,
+    input.week,
+    input.players.map((p) => p.player_id),
+  );
   const out: Record<string, Projection> = {};
 
   for (const p of input.players) {
@@ -177,8 +219,12 @@ export async function projectPlayers(input: {
       out[p.player_id] = { points: 0, reason: "out" };
       continue;
     }
-    const pg = perGameUnder(book, p.player_id);
-    out[p.player_id] = pg == null ? { points: 0, reason: "no-data" } : { points: pg, reason: null };
+    const fed = feedProjection(book, p.player_id, feed);
+    const pg = fed ?? perGameUnder(book, p.player_id);
+    out[p.player_id] =
+      pg == null
+        ? { points: 0, reason: "no-data" }
+        : { points: pg, reason: fed == null ? "season-avg" : null };
   }
   return out;
 }

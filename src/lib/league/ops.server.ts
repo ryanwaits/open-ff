@@ -1023,6 +1023,19 @@ export async function tickAllLeagues(): Promise<{
   // from current designations.
   const statusChanges = await refreshStatusAndRecord(rows.map((r) => r.id));
 
+  // Weekly projections for every (season, week) still in play. Failure here
+  // must not stop the clock — a stale projection beats a frozen league.
+  const weeksInPlay = await sql<{ season: string; current_week: number }>`
+    select distinct season, current_week from ff_leagues
+    where locked = 0 and status not in (${"pre_draft"}, ${"drafting"})
+  `;
+  try {
+    const { refreshProjections } = await import("@/lib/data/projection-feed.server");
+    for (const key of weeksInPlay) await refreshProjections(key.season, key.current_week);
+  } catch {
+    /* a stale projection is better than a stopped clock */
+  }
+
   let advanced = 0;
   let waivers = 0;
   for (const row of rows) {

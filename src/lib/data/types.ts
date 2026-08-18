@@ -369,8 +369,8 @@ export const DEMO_HOSTED_NAME = "The Backyard";
 
 export type Projection = {
   points: number;
-  /** Why it is zero, when it is. */
-  reason: "bye" | "out" | "no-data" | null;
+  /** Why it is zero — or that the number is a season average, not a weekly feed. */
+  reason: "bye" | "out" | "no-data" | "season-avg" | null;
 };
 
 export function isHostedLeague(id: string): boolean {
