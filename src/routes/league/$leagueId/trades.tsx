@@ -1,10 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
+import { TradeOfferCard } from "@/components/trade-offer-card";
 import { Button } from "@/components/ui/button";
-import { getLeagueBundle, getTeam } from "@/lib/data/fns";
+import { getLeagueBundle, getProjections, getTeam } from "@/lib/data/fns";
+import type { Projection, RosterPlayer, SlimPlayer } from "@/lib/data/types";
 import {
   cancelTradeFn,
   getTradablePicks,
@@ -12,9 +13,17 @@ import {
   proposeTrade,
   voteTrade,
 } from "@/lib/league/fns";
+import { tradeDelta, type TradeDelta } from "@/lib/league/lineup-value";
 import { cn } from "@/lib/utils";
 
+type TradesSearch = { counter?: string };
+
 export const Route = createFileRoute("/league/$leagueId/trades")({
+  validateSearch: (s: Record<string, unknown>): TradesSearch => {
+    const out: TradesSearch = {};
+    if (typeof s.counter === "string") out.counter = s.counter;
+    return out;
+  },
   component: TradesPage,
 });
 
@@ -27,6 +36,7 @@ type PendingSide = {
 
 function TradesPage() {
   const { leagueId } = Route.useParams();
+  const navigate = Route.useNavigate();
   const qc = useQueryClient();
   const league = useQuery({
     queryKey: ["league", leagueId],
@@ -42,11 +52,152 @@ function TradesPage() {
     enabled: Boolean(league.data?.hosted),
   });
   const mineId = league.data?.myRosterId;
+  const week = league.data?.currentWeek ?? 1;
+  const season = league.data?.league.season ?? "";
+  const rosterPositions = league.data?.league.roster_positions ?? [];
   const standings = league.data?.standings ?? [];
   const partners = standings.filter((s) => s.rosterId !== mineId);
   const [partnerId, setPartnerId] = useState<number | null>(null);
   const [thirdId, setThirdId] = useState<number | null>(null);
   const them = partnerId ?? partners[0]?.rosterId ?? null;
+
+  // One getTeam per involved roster, shared across every pending card.
+  const bookRosterIds = useMemo(() => {
+    const ids = new Set<number>();
+    if (mineId != null) ids.add(mineId);
+    for (const t of trades.data ?? []) {
+      if (t.status !== "proposed") continue;
+      if (mineId == null || !t.sides.some((s) => s.rosterId === mineId)) continue;
+      for (const s of t.sides) ids.add(s.rosterId);
+    }
+    return [...ids].sort((a, b) => a - b);
+  }, [trades.data, mineId]);
+
+  const bookRosterQueries = useQueries({
+    queries: bookRosterIds.map((rosterId) => ({
+      queryKey: ["team", leagueId, rosterId, week] as const,
+      queryFn: () => getTeam({ data: { leagueId, rosterId, week } }),
+      enabled: Boolean(league.data && rosterId != null),
+    })),
+  });
+
+  const rosterById = useMemo(() => {
+    const map = new Map<number, RosterPlayer[]>();
+    bookRosterIds.forEach((id, i) => {
+      const players = bookRosterQueries[i]?.data?.players;
+      if (players) map.set(id, players);
+    });
+    return map;
+  }, [bookRosterIds, bookRosterQueries]);
+
+  const playerById = useMemo(() => {
+    const map = new Map<string, SlimPlayer>();
+    for (const players of rosterById.values()) {
+      for (const p of players) map.set(p.player_id, p);
+    }
+    return map;
+  }, [rosterById]);
+
+  const projectionInputs = useMemo(() => {
+    const byId = new Map<
+      string,
+      {
+        player_id: string;
+        team: string | null;
+        injury_status: string | null | undefined;
+        status: string | null | undefined;
+      }
+    >();
+    for (const players of rosterById.values()) {
+      for (const p of players) {
+        byId.set(p.player_id, {
+          player_id: p.player_id,
+          team: p.team,
+          injury_status: p.injury_status,
+          status: p.status,
+        });
+      }
+    }
+    return [...byId.values()];
+  }, [rosterById]);
+
+  const projectionsQ = useQuery({
+    queryKey: ["projections", leagueId, week, projectionInputs.length],
+    queryFn: () =>
+      getProjections({
+        data: {
+          leagueId,
+          season,
+          week,
+          players: projectionInputs,
+        },
+      }),
+    enabled: Boolean(season) && projectionInputs.length > 0,
+    staleTime: 60_000,
+  });
+  const projections = (projectionsQ.data ?? {}) as Record<string, Projection>;
+
+  const bookRostersReady =
+    bookRosterIds.length === 0 ||
+    bookRosterIds.every((_, i) => bookRosterQueries[i]?.data != null);
+  // Empty map while loading is a false 0.0 — wait for the book when we asked for one.
+  const projectionsReady =
+    projectionInputs.length === 0 || projectionsQ.isSuccess || projectionsQ.isError;
+
+  const deltas = useMemo(() => {
+    const out = new Map<string, TradeDelta | null>();
+    if (mineId == null) return out;
+    const minePlayers = rosterById.get(mineId);
+    if (!minePlayers || !bookRostersReady || !projectionsReady || !rosterPositions.length) {
+      for (const t of trades.data ?? []) out.set(t.id, null);
+      return out;
+    }
+    for (const t of trades.data ?? []) {
+      if (t.status !== "proposed" || !t.sides.some((s) => s.rosterId === mineId)) {
+        out.set(t.id, null);
+        continue;
+      }
+      const outgoingIds = t.assets
+        .filter((a) => a.kind === "player" && a.fromRoster === mineId && a.playerId)
+        .map((a) => a.playerId!);
+      const incoming: RosterPlayer[] = [];
+      for (const a of t.assets) {
+        if (a.kind !== "player" || a.toRoster !== mineId || !a.playerId) continue;
+        const fromPlayers = rosterById.get(a.fromRoster);
+        const found = fromPlayers?.find((p) => p.player_id === a.playerId);
+        if (found) incoming.push(found);
+      }
+      // Wait until every counterparty roster used by this trade has loaded.
+      const needed = new Set(
+        t.assets
+          .filter((a) => a.kind === "player" && a.toRoster === mineId)
+          .map((a) => a.fromRoster),
+      );
+      if ([...needed].some((id) => !rosterById.has(id))) {
+        out.set(t.id, null);
+        continue;
+      }
+      out.set(
+        t.id,
+        tradeDelta({
+          players: minePlayers,
+          rosterPositions,
+          projections,
+          outgoingIds,
+          incoming,
+        }),
+      );
+    }
+    return out;
+  }, [
+    trades.data,
+    mineId,
+    rosterById,
+    bookRostersReady,
+    projectionsReady,
+    rosterPositions,
+    projections,
+  ]);
 
   const [minePlayers, setMinePlayers] = useState<string[]>([]);
   const [themPlayers, setThemPlayers] = useState<string[]>([]);
@@ -299,61 +450,93 @@ function TradesPage() {
           <p className="mt-3 text-sm text-muted">No trades yet.</p>
         ) : (
           <ul className="mt-3 space-y-2">
-            {trades.data.map((t) => (
-              <li key={t.id} className="rounded-xl bg-surface px-4 py-3 shadow-[var(--shadow-border)]">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={t.status === "processed" ? "win" : t.status === "proposed" ? "live" : "muted"}>
-                    {t.status}
-                  </Badge>
-                  <span className="text-xs text-faint">{t.sides.map((s) => s.teamName).join(" · ")}</span>
-                </div>
-                <ul className="mt-2 space-y-1 text-sm">
-                  {t.assets.map((a, i) => (
-                    <li key={i} className="text-muted">
-                      <span className="text-fg">{a.fromName}</span> → {a.toName}:{" "}
-                      {a.kind === "player" ? a.playerName : a.pickLabel}
-                      {a.pos ? ` (${a.pos})` : ""}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 font-mono text-[11px] text-faint">
-                  {t.sides.map((s) => `${s.teamName} ${s.accepted ? "in" : "…"}`).join(" · ")}
-                </p>
-                {t.status === "proposed" && (mineId || league.data.isCommish) ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {mineId && t.sides.some((s) => s.rosterId === mineId && !s.accepted) ? (
-                      <>
-                        <Button type="button" onClick={() => vote.mutate({ tradeId: t.id, accept: true })}>
-                          Accept
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => vote.mutate({ tradeId: t.id, accept: false })}
-                        >
-                          Reject
-                        </Button>
-                      </>
-                    ) : null}
-                    {league.data.isCommish && t.sides.some((s) => s.house && !s.accepted) ? (
-                      <Button type="button" variant="outline" onClick={() => vote.mutate({ tradeId: t.id, accept: true })}>
-                        Accept for house
-                      </Button>
-                    ) : null}
-                    {t.proposerRoster === mineId ? (
-                      <Button type="button" variant="ghost" onClick={() => pull.mutate(t.id)}>
-                        Pull offer
-                      </Button>
-                    ) : null}
-                  </div>
-                ) : null}
-              </li>
-            ))}
+            {trades.data.map((t) => {
+              const delta = deltas.get(t.id) ?? null;
+              const minePlayers = mineId != null ? rosterById.get(mineId) : undefined;
+              let posBefore: Record<string, number> | undefined;
+              let posAfter: Record<string, number> | undefined;
+              if (delta != null && minePlayers && mineId != null) {
+                const outgoing = new Set(
+                  t.assets
+                    .filter((a) => a.kind === "player" && a.fromRoster === mineId && a.playerId)
+                    .map((a) => a.playerId!),
+                );
+                const incoming = t.assets
+                  .filter((a) => a.kind === "player" && a.toRoster === mineId && a.playerId)
+                  .map((a) => {
+                    const from = rosterById.get(a.fromRoster);
+                    return from?.find((p) => p.player_id === a.playerId) ?? null;
+                  })
+                  .filter((p): p is RosterPlayer => p != null);
+                const afterPlayers = [
+                  ...minePlayers.filter((p) => !outgoing.has(p.player_id)),
+                  ...incoming,
+                ];
+                posBefore = countPositions(minePlayers);
+                posAfter = countPositions(afterPlayers);
+              }
+              const waitingOnMe =
+                Boolean(mineId) &&
+                t.status === "proposed" &&
+                t.sides.some((s) => s.rosterId === mineId && !s.accepted);
+              return (
+                <TradeOfferCard
+                  key={t.id}
+                  trade={t}
+                  myRosterId={mineId ?? null}
+                  delta={delta}
+                  projections={projections}
+                  playerById={playerById}
+                  posBefore={posBefore}
+                  posAfter={posAfter}
+                  busy={vote.isPending || pull.isPending}
+                  onAccept={
+                    waitingOnMe
+                      ? () => vote.mutate({ tradeId: t.id, accept: true })
+                      : undefined
+                  }
+                  onDecline={
+                    waitingOnMe
+                      ? () => vote.mutate({ tradeId: t.id, accept: false })
+                      : undefined
+                  }
+                  onCounter={
+                    waitingOnMe
+                      ? () =>
+                          void navigate({
+                            search: (prev) => ({ ...prev, counter: t.id }),
+                          })
+                      : undefined
+                  }
+                  onAcceptHouse={
+                    league.data.isCommish &&
+                    t.status === "proposed" &&
+                    t.sides.some((s) => s.house && !s.accepted)
+                      ? () => vote.mutate({ tradeId: t.id, accept: true })
+                      : undefined
+                  }
+                  onPull={
+                    t.status === "proposed" && t.proposerRoster === mineId
+                      ? () => pull.mutate(t.id)
+                      : undefined
+                  }
+                />
+              );
+            })}
           </ul>
         )}
       </section>
     </div>
   );
+}
+
+function countPositions(players: Array<{ position: string | null }>): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const p of players) {
+    const pos = p.position?.trim() || "?";
+    counts[pos] = (counts[pos] ?? 0) + 1;
+  }
+  return counts;
 }
 
 function AssetCol({

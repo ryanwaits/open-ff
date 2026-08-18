@@ -791,6 +791,7 @@ export async function listTrades(leagueId: string) {
         pos: a.player_id ? (getPlayer(a.player_id)?.position ?? null) : null,
         pickNo: a.pick_no,
         pickLabel: a.pick_no ? pickLabelSync(a.pick_no, rosters.length) : null,
+        amount: a.amount,
       })),
     });
   }

@@ -1,0 +1,337 @@
+import { formatDistanceToNow } from "date-fns";
+import { PlayerStatRow, type PlayerStatRowData } from "@/components/player-stat-row";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import type { Projection, SlimPlayer } from "@/lib/data/types";
+import type { TradeDelta } from "@/lib/league/lineup-value";
+import { cn } from "@/lib/utils";
+
+/**
+ * An offer, with the facts needed to answer it.
+ *
+ * Deciding used to be two lines of text and two buttons, which is the least
+ * information of any screen in the app despite being the most common trade
+ * action. What you get comes first because that is what you opened it for;
+ * what it costs is a column, not a footnote; and the position depth before and
+ * after is the fact that actually decides it.
+ */
+
+export type TradeOfferAsset = {
+  fromRoster: number;
+  toRoster: number;
+  fromName: string;
+  toName: string;
+  kind: string;
+  playerId: string | null;
+  playerName: string | null;
+  pos: string | null;
+  pickNo: number | null;
+  pickLabel: string | null;
+  amount?: number | null;
+};
+
+export type TradeOffer = {
+  id: string;
+  week: number;
+  status: string;
+  proposerRoster: number;
+  created: number;
+  sides: Array<{
+    rosterId: number;
+    teamName: string;
+    accepted: boolean;
+    house: boolean;
+  }>;
+  assets: TradeOfferAsset[];
+};
+
+export function TradeOfferCard({
+  trade,
+  myRosterId,
+  delta,
+  projections,
+  playerById,
+  posBefore,
+  posAfter,
+  onAccept,
+  onDecline,
+  onCounter,
+  onPull,
+  onAcceptHouse,
+  busy = false,
+}: {
+  trade: TradeOffer;
+  myRosterId: number | null;
+  delta: TradeDelta | null;
+  projections?: Record<string, Projection>;
+  /** Roster players keyed by id — used to fill PlayerStatRow. */
+  playerById?: Map<string, SlimPlayer>;
+  /** Position depth counts on your roster before / after the swap. */
+  posBefore?: Record<string, number>;
+  posAfter?: Record<string, number>;
+  onAccept?: () => void;
+  onDecline?: () => void;
+  onCounter?: () => void;
+  onPull?: () => void;
+  onAcceptHouse?: () => void;
+  busy?: boolean;
+}) {
+  const proposer =
+    trade.sides.find((s) => s.rosterId === trade.proposerRoster)?.teamName ??
+    `Team ${trade.proposerRoster}`;
+  const mySide = myRosterId != null ? trade.sides.find((s) => s.rosterId === myRosterId) : undefined;
+  const waitingOnMe =
+    trade.status === "proposed" && Boolean(mySide && !mySide.accepted);
+  const waitingNames = trade.sides
+    .filter((s) => !s.accepted)
+    .map((s) => s.teamName);
+  const involved = Boolean(mySide);
+
+  const incoming = involved
+    ? trade.assets.filter((a) => a.toRoster === myRosterId)
+    : trade.assets;
+  const outgoing = involved
+    ? trade.assets.filter((a) => a.fromRoster === myRosterId)
+    : [];
+
+  const showDecide = waitingOnMe && onAccept && onDecline;
+  const showHouse = Boolean(onAcceptHouse);
+  const showPull = Boolean(onPull);
+  const showActions = trade.status === "proposed" && (showDecide || showHouse || showPull || onCounter);
+
+  return (
+    <li className="rounded-xl bg-surface px-4 py-3 shadow-[var(--shadow-border)]">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm text-fg">
+            <span className="font-semibold">{proposer}</span> wants to trade
+          </p>
+          <p className="mt-0.5 font-mono text-[11px] text-faint">
+            {Number.isFinite(trade.created)
+              ? formatDistanceToNow(trade.created, { addSuffix: true })
+              : ""}
+            {waitingOnMe
+              ? " · waiting on you"
+              : waitingNames.length
+                ? ` · waiting on ${waitingNames.join(", ")}`
+                : ""}
+          </p>
+        </div>
+        <Badge
+          tone={
+            trade.status === "processed"
+              ? "win"
+              : trade.status === "proposed"
+                ? "live"
+                : "muted"
+          }
+        >
+          {trade.status}
+        </Badge>
+      </div>
+
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <AssetColumn
+          title={involved ? "You get" : "Assets"}
+          assets={incoming}
+          projections={projections}
+          playerById={playerById}
+          empty="Nothing coming in"
+        />
+        {involved ? (
+          <AssetColumn
+            title="You give"
+            assets={outgoing}
+            projections={projections}
+            playerById={playerById}
+            empty="Nothing going out"
+          />
+        ) : null}
+      </div>
+
+      {delta != null && posBefore && posAfter ? (
+        <div className="mt-4 space-y-2 border-t border-line pt-3">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+            Your roster after
+          </p>
+          <PositionBars before={posBefore} after={posAfter} />
+          <p className="text-sm text-muted">{consequenceLine(delta)}</p>
+        </div>
+      ) : null}
+
+      <p className="mt-3 font-mono text-[11px] text-faint">
+        {trade.sides.map((s) => `${s.teamName} ${s.accepted ? "in" : "…"}`).join(" · ")}
+      </p>
+
+      {showActions ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {showDecide ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="text-loss"
+                disabled={busy}
+                onClick={onDecline}
+              >
+                Decline
+              </Button>
+              {onCounter ? (
+                <Button type="button" variant="outline" disabled={busy} onClick={onCounter}>
+                  Counter
+                </Button>
+              ) : null}
+              <Button type="button" disabled={busy} onClick={onAccept}>
+                Accept
+              </Button>
+            </>
+          ) : null}
+          {showHouse ? (
+            <Button type="button" variant="outline" disabled={busy} onClick={onAcceptHouse}>
+              Accept for house
+            </Button>
+          ) : null}
+          {showPull ? (
+            <Button type="button" variant="ghost" disabled={busy} onClick={onPull}>
+              Pull offer
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+function AssetColumn({
+  title,
+  assets,
+  projections,
+  playerById,
+  empty,
+}: {
+  title: string;
+  assets: TradeOfferAsset[];
+  projections?: Record<string, Projection>;
+  playerById?: Map<string, SlimPlayer>;
+  empty: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">{title}</p>
+      <ul className="mt-1.5 space-y-1">
+        {assets.length === 0 ? (
+          <li className="px-2 py-1.5 text-xs text-faint">{empty}</li>
+        ) : (
+          assets.map((a, i) => (
+            <li key={`${a.kind}-${a.playerId ?? a.pickNo ?? a.amount}-${i}`}>
+              <AssetRow asset={a} projections={projections} playerById={playerById} />
+            </li>
+          ))
+        )}
+      </ul>
+    </div>
+  );
+}
+
+function AssetRow({
+  asset,
+  projections,
+  playerById,
+}: {
+  asset: TradeOfferAsset;
+  projections?: Record<string, Projection>;
+  playerById?: Map<string, SlimPlayer>;
+}) {
+  if (asset.kind === "pick") {
+    return (
+      <span className="inline-flex min-h-9 items-center rounded-sm bg-raised px-2 py-1 font-mono text-xs text-fg">
+        Pick {asset.pickLabel ?? asset.pickNo}
+      </span>
+    );
+  }
+  if (asset.kind === "faab") {
+    return (
+      <span className="inline-flex min-h-9 items-center rounded-sm bg-raised px-2 py-1 font-mono text-xs text-fg">
+        ${asset.amount ?? 0} FAAB
+      </span>
+    );
+  }
+
+  const id = asset.playerId;
+  const known = id ? playerById?.get(id) : undefined;
+  const player: SlimPlayer = known ?? {
+    player_id: id ?? "unknown",
+    full_name: asset.playerName ?? "Player",
+    position: asset.pos,
+    team: null,
+  };
+  const proj = id ? projections?.[id] : undefined;
+  const data: PlayerStatRowData = {
+    player,
+    projection: proj?.points ?? null,
+    projectionIsAverage: proj?.reason === "season-avg",
+  };
+  return <PlayerStatRow data={data} dense />;
+}
+
+function PositionBars({
+  before,
+  after,
+}: {
+  before: Record<string, number>;
+  after: Record<string, number>;
+}) {
+  const positions = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
+  if (!positions.length) return null;
+  const max = Math.max(1, ...positions.map((p) => Math.max(before[p] ?? 0, after[p] ?? 0)));
+
+  return (
+    <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+      {positions.map((pos) => {
+        const b = before[pos] ?? 0;
+        const a = after[pos] ?? 0;
+        const thin = a <= 2;
+        return (
+          <li key={pos} className="flex items-center gap-2 text-xs">
+            <span className="w-7 shrink-0 font-mono text-[11px] text-muted">{pos}</span>
+            <span className="flex min-w-0 flex-1 items-center gap-1">
+              <span
+                className="h-2 rounded-xs bg-line-strong"
+                style={{ width: `${Math.max(8, (b / max) * 100)}%` }}
+                title={`now ${b}`}
+              />
+              <span
+                className={cn("h-2 rounded-xs", thin ? "bg-loss" : "bg-accent-strong")}
+                style={{ width: `${Math.max(8, (a / max) * 100)}%` }}
+                title={`after ${a}`}
+              />
+            </span>
+            <span
+              className={cn(
+                "w-8 shrink-0 text-right font-mono tabular-nums",
+                thin ? "text-loss" : "text-muted",
+              )}
+            >
+              {b}→{a}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Single descriptive line — plan 021 replaces this. */
+export function consequenceLine(delta: TradeDelta): string {
+  if (delta.changed.length === 0) return "No change to who starts";
+  const top = delta.changed.reduce((best, row) =>
+    Math.abs(row.delta) > Math.abs(best.delta) ? row : best,
+  );
+  const pts =
+    delta.change === 0
+      ? "Lineup shifts"
+      : `${delta.change > 0 ? "+" : ""}${delta.change.toFixed(1)} projected this week`;
+  const into = top.to?.full_name ?? "open";
+  const out = top.from?.full_name ?? "open";
+  return `${pts} · ${top.slot}: ${into} for ${out}`;
+}
