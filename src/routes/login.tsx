@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
+import { LOCAL_SEED } from "@/lib/auth/local-seed";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -19,9 +20,9 @@ function Login() {
   const navigate = useNavigate();
   const dest = redirect && redirect.startsWith("/") ? redirect : "/";
   const [mode, setMode] = useState<"in" | "up">("in");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
+  const [email, setEmail] = useState<string>(LOCAL_SEED.email);
+  const [password, setPassword] = useState<string>(LOCAL_SEED.password);
+  const [name, setName] = useState<string>(LOCAL_SEED.name);
   const [busy, setBusy] = useState(false);
 
   async function onEmail(e: FormEvent) {
@@ -54,9 +55,9 @@ function Login() {
           here with nothing else to set up. Google and X use the same login.
         </p>
         <p className="mt-2 text-xs text-faint">
-          This preview keeps your session while it's running. A restart
-          starts clean. When you host Ledger with a real database, the same
-          login keeps the league.
+          Local seed is {LOCAL_SEED.email} / {LOCAL_SEED.password}. Restart
+          wipes the in-memory DB and reseeds that account. A hosted database
+          keeps whatever you create.
         </p>
         <div className="mt-8 space-y-2">
           {authEnabled ? (
