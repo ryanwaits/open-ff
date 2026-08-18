@@ -1,8 +1,10 @@
+import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation } from "@tanstack/react-query";
 import { X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PlayerStatRow, type PlayerStatRowData } from "@/components/player-stat-row";
+import { TradeRosterAfter } from "@/components/trade-offer-card";
 import { Button } from "@/components/ui/button";
 import type { Projection, RosterPlayer } from "@/lib/data/types";
 import { proposeTrade } from "@/lib/league/fns";
@@ -11,11 +13,11 @@ import { readTrade } from "@/lib/league/trade-read";
 import { cn } from "@/lib/utils";
 
 /**
- * Three columns, and the deal is the middle one.
+ * The proposed card is the compose object.
  *
- * Two-team: your roster | deal | theirs. Three-team: one tabbed roster column
- * (you can only read one list at this density) | deal with a leg per sender
- * and a destination pill on every chip.
+ * You get / You give (faces, picks, FAAB) sits first so the deal you are
+ * building is the same object you will see in the book. Rosters underneath
+ * are pickers. Three-team keeps dest pills and a tabbed picker.
  */
 
 export type TradeComposerPick = {
@@ -135,6 +137,7 @@ export function TradeComposer({
   const [thirdFaabErr, setThirdFaabErr] = useState<string | null>(null);
 
   const [rosterTab, setRosterTab] = useState<RosterTab>("them");
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   function defaultDest(from: number): number {
     const others = involvedIds.filter((id) => id !== from);
@@ -291,15 +294,11 @@ export function TradeComposer({
       setMinePlayers((list) =>
         list.map((a) => ({ ...a, to: a.to === prev ? theirRosterId : a.to })),
       );
-      setThemPlayers((list) =>
-        list.map((a) => ({ ...a, to: a.to === prev ? myRosterId : a.to })),
-      );
+      setThemPlayers((list) => list.map((a) => ({ ...a, to: a.to === prev ? myRosterId : a.to })));
       setMinePicksSel((list) =>
         list.map((a) => ({ ...a, to: a.to === prev ? theirRosterId : a.to })),
       );
-      setThemPicksSel((list) =>
-        list.map((a) => ({ ...a, to: a.to === prev ? myRosterId : a.to })),
-      );
+      setThemPicksSel((list) => list.map((a) => ({ ...a, to: a.to === prev ? myRosterId : a.to })));
       setMineFaab((f) => (f && f.to === prev ? { ...f, to: theirRosterId } : f));
       setThemFaab((f) => (f && f.to === prev ? { ...f, to: myRosterId } : f));
       setRosterTab("third");
@@ -389,10 +388,7 @@ export function TradeComposer({
       outgoing = new Set(sendPlayers);
       incoming = theirRoster.filter((p) => getPlayers.includes(p.player_id));
     }
-    return countPositions([
-      ...myRoster.filter((p) => !outgoing.has(p.player_id)),
-      ...incoming,
-    ]);
+    return countPositions([...myRoster.filter((p) => !outgoing.has(p.player_id)), ...incoming]);
   }, [
     three,
     myRoster,
@@ -492,14 +488,7 @@ export function TradeComposer({
           throw new Error(`You only have $${myFaabFree} unstaked.`);
         }
         pushDirected(myRosterId, minePlayers, minePicksSel, mineFaab, myFaabFree, "You");
-        pushDirected(
-          theirRosterId,
-          themPlayers,
-          themPicksSel,
-          themFaab,
-          theirFaabFree,
-          themName,
-        );
+        pushDirected(theirRosterId, themPlayers, themPicksSel, themFaab, theirFaabFree, themName);
         pushDirected(
           thirdRosterId,
           thirdPlayers,
@@ -568,6 +557,7 @@ export function TradeComposer({
     },
     onSuccess: () => {
       toast("Trade proposed.");
+      setConfirmOpen(false);
       clearTwoTeam();
       clearThreeTeam();
       onProposed?.();
@@ -577,13 +567,9 @@ export function TradeComposer({
 
   function toggleTwoPlayer(side: "send" | "get", id: string) {
     if (side === "send") {
-      setSendPlayers((list) =>
-        list.includes(id) ? list.filter((x) => x !== id) : [...list, id],
-      );
+      setSendPlayers((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
     } else {
-      setGetPlayers((list) =>
-        list.includes(id) ? list.filter((x) => x !== id) : [...list, id],
-      );
+      setGetPlayers((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
     }
   }
 
@@ -711,6 +697,61 @@ export function TradeComposer({
       .filter((p): p is TradeComposerPick & { to: number } => p != null);
   }
 
+  const minePlayerRows = resolvePlayers(minePlayers, myRoster);
+  const themPlayerRows = resolvePlayers(themPlayers, theirRoster);
+  const thirdPlayerRows = resolvePlayers(thirdPlayers, thirdRoster);
+  const minePickRows = resolvePicks(minePicksSel, myPicks);
+  const themPickRows = resolvePicks(themPicksSel, theirPicks);
+  const thirdPickRows = resolvePicks(thirdPicksSel, thirdPicks);
+
+  const youGetPlayers = three
+    ? [
+        ...themPlayerRows.filter((p) => p.to === myRosterId),
+        ...thirdPlayerRows.filter((p) => p.to === myRosterId),
+      ]
+    : getPlayerRows;
+  const youGivePlayers = three ? minePlayerRows : sendPlayerRows;
+  const youGetPicks = three
+    ? [
+        ...themPickRows.filter((p) => p.to === myRosterId),
+        ...thirdPickRows.filter((p) => p.to === myRosterId),
+      ]
+    : getPickRows;
+  const youGivePicks = three ? minePickRows : sendPickRows;
+  const youGetFaab = three
+    ? themFaab?.to === myRosterId
+      ? themFaab
+      : thirdFaab?.to === myRosterId
+        ? thirdFaab
+        : null
+    : getFaab != null && getFaab > 0
+      ? { amount: getFaab }
+      : null;
+  const youGiveFaab = three
+    ? mineFaab
+    : sendFaab != null && sendFaab > 0
+      ? { amount: sendFaab }
+      : null;
+
+  const alsoPlayers = three
+    ? [
+        ...themPlayerRows.filter((p) => p.to !== myRosterId),
+        ...thirdPlayerRows.filter((p) => p.to !== myRosterId),
+      ]
+    : [];
+  const alsoPicks = three
+    ? [
+        ...themPickRows.filter((p) => p.to !== myRosterId),
+        ...thirdPickRows.filter((p) => p.to !== myRosterId),
+      ]
+    : [];
+  const alsoFaab = three
+    ? [themFaab, thirdFaab].filter(
+        (f): f is DirectedFaab => f != null && f.amount > 0 && f.to !== myRosterId,
+      )
+    : [];
+  const hasAlso = alsoPlayers.length > 0 || alsoPicks.length > 0 || alsoFaab.length > 0;
+
   const activeRoster =
     rosterTab === "mine"
       ? {
@@ -721,8 +762,24 @@ export function TradeComposer({
           selectedPicks: minePicksSel.map((a) => a.pickNo),
           onPlayer: (id: string) =>
             toggleDirectedPlayer(minePlayers, setMinePlayers, myRosterId, id),
-          onPick: (n: number) =>
-            toggleDirectedPick(minePicksSel, setMinePicksSel, myRosterId, n),
+          onPick: (n: number) => toggleDirectedPick(minePicksSel, setMinePicksSel, myRosterId, n),
+          faab: mineFaab?.amount ?? null,
+          faabErr: mineFaabErr,
+          faabFree: myFaabFree,
+          faabLabel: "Your unstaked",
+          faabDest: mineFaab ? nameOf(mineFaab.to) : null,
+          onFaab: (raw: string) =>
+            setDirectedFaab(
+              myRosterId,
+              myFaabFree,
+              "You only have",
+              mineFaab,
+              setMineFaab,
+              setMineFaabErr,
+              raw,
+            ),
+          onCycleFaab: () =>
+            setMineFaab((f) => (f ? { ...f, to: cycleDest(myRosterId, f.to) } : f)),
         }
       : rosterTab === "them"
         ? {
@@ -735,6 +792,23 @@ export function TradeComposer({
               toggleDirectedPlayer(themPlayers, setThemPlayers, theirRosterId, id),
             onPick: (n: number) =>
               toggleDirectedPick(themPicksSel, setThemPicksSel, theirRosterId, n),
+            faab: themFaab?.amount ?? null,
+            faabErr: themFaabErr,
+            faabFree: theirFaabFree,
+            faabLabel: "Their FAAB",
+            faabDest: themFaab ? nameOf(themFaab.to) : null,
+            onFaab: (raw: string) =>
+              setDirectedFaab(
+                theirRosterId,
+                theirFaabFree,
+                "They only have",
+                themFaab,
+                setThemFaab,
+                setThemFaabErr,
+                raw,
+              ),
+            onCycleFaab: () =>
+              setThemFaab((f) => (f ? { ...f, to: cycleDest(theirRosterId, f.to) } : f)),
           }
         : {
             title: thirdName,
@@ -746,77 +820,391 @@ export function TradeComposer({
               toggleDirectedPlayer(thirdPlayers, setThirdPlayers, thirdRosterId!, id),
             onPick: (n: number) =>
               toggleDirectedPick(thirdPicksSel, setThirdPicksSel, thirdRosterId!, n),
+            faab: thirdFaab?.amount ?? null,
+            faabErr: thirdFaabErr,
+            faabFree: thirdFaabFree,
+            faabLabel: "Their FAAB",
+            faabDest: thirdFaab ? nameOf(thirdFaab.to) : null,
+            onFaab: (raw: string) =>
+              setDirectedFaab(
+                thirdRosterId!,
+                thirdFaabFree,
+                "They only have",
+                thirdFaab,
+                setThirdFaab,
+                setThirdFaabErr,
+                raw,
+              ),
+            onCycleFaab: () =>
+              setThirdFaab((f) => (f ? { ...f, to: cycleDest(thirdRosterId!, f.to) } : f)),
           };
 
-  const balanceBlock = (
-    <div className="mt-4 space-y-2 border-t border-line pt-3">
-      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Balance</p>
-      {delta ? (
-        <>
-          <p className="text-sm text-muted">{read}</p>
-          {delta.changed.length > 0 ? (
-            <ul className="space-y-1">
-              {delta.changed.map((row) => (
-                <li
-                  key={row.slot}
-                  className="flex items-baseline justify-between gap-2 font-mono text-[11px] text-faint"
-                >
-                  <span>
-                    {row.slot}: {row.from?.full_name ?? "open"} → {row.to?.full_name ?? "open"}
-                  </span>
-                  <span className="tabular-nums">
-                    {row.delta > 0 ? "+" : ""}
-                    {row.delta.toFixed(1)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <p className="font-mono text-[11px] text-faint">
-            Starters {delta.before.total.toFixed(1)} → {delta.after.total.toFixed(1)}
-            {delta.change !== 0
-              ? ` (${delta.change > 0 ? "+" : ""}${delta.change.toFixed(1)})`
-              : ""}
+  function removeIncomingPlayer(id: string) {
+    if (!three) {
+      setGetPlayers((l) => l.filter((x) => x !== id));
+      return;
+    }
+    setThemPlayers((l) => l.filter((a) => a.id !== id));
+    setThirdPlayers((l) => l.filter((a) => a.id !== id));
+  }
+  function removeOutgoingPlayer(id: string) {
+    if (!three) {
+      setSendPlayers((l) => l.filter((x) => x !== id));
+      return;
+    }
+    setMinePlayers((l) => l.filter((a) => a.id !== id));
+  }
+  function removeIncomingPick(n: number) {
+    if (!three) {
+      setGetPicks((l) => l.filter((x) => x !== n));
+      return;
+    }
+    setThemPicksSel((l) => l.filter((a) => a.pickNo !== n));
+    setThirdPicksSel((l) => l.filter((a) => a.pickNo !== n));
+  }
+  function removeOutgoingPick(n: number) {
+    if (!three) {
+      setSendPicks((l) => l.filter((x) => x !== n));
+      return;
+    }
+    setMinePicksSel((l) => l.filter((a) => a.pickNo !== n));
+  }
+  function removeIncomingFaab() {
+    if (!three) {
+      setGetFaab(null);
+      setGetFaabErr(null);
+      return;
+    }
+    if (themFaab?.to === myRosterId) {
+      setThemFaab(null);
+      setThemFaabErr(null);
+    }
+    if (thirdFaab?.to === myRosterId) {
+      setThirdFaab(null);
+      setThirdFaabErr(null);
+    }
+  }
+  function removeOutgoingFaab() {
+    if (!three) {
+      setSendFaab(null);
+      setSendFaabErr(null);
+      return;
+    }
+    setMineFaab(null);
+    setMineFaabErr(null);
+  }
+  function cycleIncomingPlayer(id: string) {
+    const fromThem = themPlayers.some((a) => a.id === id);
+    if (fromThem) {
+      setThemPlayers((l) =>
+        l.map((a) => (a.id === id ? { ...a, to: cycleDest(theirRosterId, a.to) } : a)),
+      );
+    } else {
+      setThirdPlayers((l) =>
+        l.map((a) => (a.id === id ? { ...a, to: cycleDest(thirdRosterId!, a.to) } : a)),
+      );
+    }
+  }
+  function cycleIncomingPick(n: number) {
+    const fromThem = themPicksSel.some((a) => a.pickNo === n);
+    if (fromThem) {
+      setThemPicksSel((l) =>
+        l.map((a) => (a.pickNo === n ? { ...a, to: cycleDest(theirRosterId, a.to) } : a)),
+      );
+    } else {
+      setThirdPicksSel((l) =>
+        l.map((a) => (a.pickNo === n ? { ...a, to: cycleDest(thirdRosterId!, a.to) } : a)),
+      );
+    }
+  }
+  function cycleIncomingFaab() {
+    if (themFaab?.to === myRosterId) {
+      setThemFaab((f) => (f ? { ...f, to: cycleDest(theirRosterId, f.to) } : f));
+    } else if (thirdFaab?.to === myRosterId) {
+      setThirdFaab((f) => (f ? { ...f, to: cycleDest(thirdRosterId!, f.to) } : f));
+    }
+  }
+
+  const dealCard = (
+    <div className="rounded-xl bg-surface px-4 py-3 shadow-[var(--shadow-border)]">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <ComposeColumn
+          title="You get"
+          empty={`Tap someone on ${themName}`}
+          players={youGetPlayers}
+          picks={youGetPicks}
+          faab={youGetFaab}
+          projections={projections}
+          destName={three ? nameOf : undefined}
+          onRemovePlayer={removeIncomingPlayer}
+          onRemovePick={removeIncomingPick}
+          onRemoveFaab={removeIncomingFaab}
+          onCyclePlayer={three ? cycleIncomingPlayer : undefined}
+          onCyclePick={three ? cycleIncomingPick : undefined}
+          onCycleFaab={three ? cycleIncomingFaab : undefined}
+        />
+        <ComposeColumn
+          title="You give"
+          empty="Tap someone on your roster"
+          players={youGivePlayers}
+          picks={youGivePicks}
+          faab={youGiveFaab}
+          projections={projections}
+          destName={three ? nameOf : undefined}
+          onRemovePlayer={removeOutgoingPlayer}
+          onRemovePick={removeOutgoingPick}
+          onRemoveFaab={removeOutgoingFaab}
+          onCyclePlayer={
+            three
+              ? (id) =>
+                  setMinePlayers((l) =>
+                    l.map((a) => (a.id === id ? { ...a, to: cycleDest(myRosterId, a.to) } : a)),
+                  )
+              : undefined
+          }
+          onCyclePick={
+            three
+              ? (n) =>
+                  setMinePicksSel((l) =>
+                    l.map((a) => (a.pickNo === n ? { ...a, to: cycleDest(myRosterId, a.to) } : a)),
+                  )
+              : undefined
+          }
+          onCycleFaab={
+            three
+              ? () => setMineFaab((f) => (f ? { ...f, to: cycleDest(myRosterId, f.to) } : f))
+              : undefined
+          }
+        />
+      </div>
+
+      {hasAlso ? (
+        <div className="mt-4">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+            Also moving
           </p>
+          <ul className="mt-1.5 space-y-1">
+            {alsoPlayers.map((p) => (
+              <li key={p.player_id}>
+                <Removable
+                  label={`Remove ${p.full_name}`}
+                  onRemove={() => removeIncomingPlayer(p.player_id)}
+                  extra={
+                    <DestPill
+                      label={nameOf(p.to)}
+                      onCycle={() => cycleIncomingPlayer(p.player_id)}
+                    />
+                  }
+                >
+                  <PlayerStatRow
+                    data={{
+                      player: p,
+                      projection: projections[p.player_id]?.points ?? null,
+                      projectionIsAverage: projections[p.player_id]?.reason === "season-avg",
+                    }}
+                    dense
+                  />
+                </Removable>
+              </li>
+            ))}
+            {alsoPicks.map((p) => (
+              <li key={p.pickNo}>
+                <Chip onRemove={() => removeIncomingPick(p.pickNo)}>
+                  Pick {p.label}
+                  <DestPill label={nameOf(p.to)} onCycle={() => cycleIncomingPick(p.pickNo)} />
+                </Chip>
+              </li>
+            ))}
+            {alsoFaab.map((f, i) => (
+              <li key={`also-faab-${i}`}>
+                <Chip
+                  onRemove={() => {
+                    if (themFaab === f) {
+                      setThemFaab(null);
+                      setThemFaabErr(null);
+                    } else {
+                      setThirdFaab(null);
+                      setThirdFaabErr(null);
+                    }
+                  }}
+                >
+                  ${f.amount} FAAB
+                  <DestPill
+                    label={nameOf(f.to)}
+                    onCycle={() => {
+                      if (themFaab === f) {
+                        setThemFaab((cur) =>
+                          cur ? { ...cur, to: cycleDest(theirRosterId, cur.to) } : cur,
+                        );
+                      } else {
+                        setThirdFaab((cur) =>
+                          cur ? { ...cur, to: cycleDest(thirdRosterId!, cur.to) } : cur,
+                        );
+                      }
+                    }}
+                  />
+                </Chip>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {hasAsset ? (
+        <>
+          <TradeRosterAfter before={posBefore} after={posAfter} read={read} />
+          {faabNet !== 0 ? (
+            <p className="mt-2 font-mono text-[11px] text-faint">
+              FAAB {faabNet > 0 ? "+" : "−"}${Math.abs(faabNet)}
+            </p>
+          ) : null}
         </>
-      ) : (
-        <p className="text-sm text-faint">Add players to see the lineup shift.</p>
-      )}
-      <PositionShift before={posBefore} after={posAfter} />
-      {faabNet !== 0 ? (
-        <p className="font-mono text-[11px] text-faint">
-          FAAB {faabNet > 0 ? "+" : "−"}${Math.abs(faabNet)}
-        </p>
       ) : null}
     </div>
   );
 
-  const submitBtn = (
-    <>
-      <Button
-        className="mt-4 w-full"
-        type="button"
-        disabled={!hasAsset || faabBlocked || send.isPending}
-        onClick={() => send.mutate()}
-      >
-        {send.isPending ? "Sending…" : "Propose trade"}
-      </Button>
-      {three ? (
-        <p className="mt-2 text-xs text-muted">
-          All three teams must accept — nothing moves if one declines.
-        </p>
-      ) : null}
-    </>
+  const giveBits = [
+    ...youGivePlayers.map(lastNameOf),
+    ...youGivePicks.map((p) => `Pick ${p.label}`),
+    ...(youGiveFaab != null && youGiveFaab.amount > 0 ? [`$${youGiveFaab.amount} FAAB`] : []),
+  ];
+  const getBits = [
+    ...youGetPlayers.map(lastNameOf),
+    ...youGetPicks.map((p) => `Pick ${p.label}`),
+    ...(youGetFaab != null && youGetFaab.amount > 0 ? [`$${youGetFaab.amount} FAAB`] : []),
+  ];
+  const railLine = !hasAsset
+    ? "Tap a player to add."
+    : getBits.length && giveBits.length
+      ? `${joinBits(giveBits)} for ${joinBits(getBits)}`
+      : getBits.length
+        ? `Getting ${joinBits(getBits)}`
+        : `Sending ${joinBits(giveBits)}`;
+  const railDelta =
+    hasAsset && delta && delta.change !== 0
+      ? ` · ${delta.change > 0 ? "+" : ""}${delta.change.toFixed(1)} starters`
+      : "";
+
+  const rail = (
+    <div className="pointer-events-none fixed inset-x-0 bottom-16 z-20 md:bottom-0">
+      <div className="pointer-events-auto border-t border-line bg-bg/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+          <p className="min-w-0 truncate text-sm text-muted">
+            <span className="text-fg">{railLine}</span>
+            {railDelta}
+            {three ? (
+              <span className="hidden sm:inline"> · All three must accept.</span>
+            ) : null}
+          </p>
+          <Button
+            type="button"
+            disabled={!hasAsset || faabBlocked || send.isPending}
+            onClick={() => setConfirmOpen(true)}
+          >
+            Propose trade
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const confirm = (
+    <Dialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-bg/60 backdrop-blur-[2px] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[92vh] w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-surface shadow-[var(--shadow-lift)] outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95">
+          <header className="flex items-start justify-between gap-3 border-b border-line px-5 pt-5 pb-4">
+            <div className="min-w-0">
+              <Dialog.Title asChild>
+                <span className="block font-display text-base font-bold tracking-[-0.02em]">
+                  Send this to {themName}?
+                </span>
+              </Dialog.Title>
+              <Dialog.Description asChild>
+                <span className="mt-0.5 block text-sm text-muted">
+                  {three
+                    ? "All three teams have to accept. Nothing moves if one declines."
+                    : "They have to accept before anything moves."}
+                </span>
+              </Dialog.Description>
+            </div>
+            <Dialog.Close asChild>
+              <Button variant="ghost" size="sm" aria-label="Close">
+                Esc
+              </Button>
+            </Dialog.Close>
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ComposeColumn
+                title="You get"
+                empty="Nothing coming in"
+                players={youGetPlayers}
+                picks={youGetPicks}
+                faab={youGetFaab}
+                projections={projections}
+                destName={three ? nameOf : undefined}
+                readOnly
+              />
+              <ComposeColumn
+                title="You give"
+                empty="Nothing going out"
+                players={youGivePlayers}
+                picks={youGivePicks}
+                faab={youGiveFaab}
+                projections={projections}
+                destName={three ? nameOf : undefined}
+                readOnly
+              />
+            </div>
+            {hasAlso ? (
+              <p className="mt-3 text-xs text-muted">
+                Also moving:{" "}
+                {[
+                  ...alsoPlayers.map((p) => `${lastNameOf(p)} → ${nameOf(p.to)}`),
+                  ...alsoPicks.map((p) => `Pick ${p.label} → ${nameOf(p.to)}`),
+                  ...alsoFaab.map((f) => `$${f.amount} FAAB → ${nameOf(f.to)}`),
+                ].join(" · ")}
+              </p>
+            ) : null}
+            {hasAsset ? (
+              <>
+                <TradeRosterAfter before={posBefore} after={posAfter} read={read} />
+                {faabNet !== 0 ? (
+                  <p className="mt-2 font-mono text-[11px] text-faint">
+                    FAAB {faabNet > 0 ? "+" : "−"}${Math.abs(faabNet)}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+
+          <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-5 pt-4 pb-5">
+            <Button type="button" variant="ghost" onClick={() => setConfirmOpen(false)}>
+              Back
+            </Button>
+            <Button
+              type="button"
+              disabled={!hasAsset || faabBlocked || send.isPending}
+              onClick={() => send.mutate()}
+            >
+              {send.isPending ? "Sending…" : "Propose trade"}
+            </Button>
+          </footer>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 
   if (!three) {
     return (
-      <div className="mt-5 space-y-4">
-        {countering ? (
-          <p className="text-xs text-muted">Countering an existing offer.</p>
-        ) : null}
+      <div className="mt-5 space-y-5 pb-24 md:pb-20">
+        {countering ? <p className="text-xs text-muted">Countering an existing offer.</p> : null}
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1fr)]">
+        {dealCard}
+
+        <div className="grid gap-6 sm:grid-cols-2">
           <RosterPanel
             title="Your roster"
             players={myRoster}
@@ -826,43 +1214,12 @@ export function TradeComposer({
             projections={projections}
             onPlayer={(id) => toggleTwoPlayer("send", id)}
             onPick={(n) => toggleTwoPick("send", n)}
+            faab={sendFaab}
+            faabErr={sendFaabErr}
+            faabFree={myFaabFree}
+            faabLabel="Your unstaked"
+            onFaab={(raw) => setTwoFaab("send", raw)}
           />
-
-          <div className="rounded-lg bg-raised/60 p-3 shadow-[var(--shadow-border)]">
-            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">The deal</p>
-
-            <DealSide
-              title="You send"
-              players={sendPlayerRows}
-              picks={sendPickRows}
-              faab={sendFaab}
-              faabErr={sendFaabErr}
-              faabFree={myFaabFree}
-              faabLabel="Your unstaked"
-              projections={projections}
-              onRemovePlayer={(id) => setSendPlayers((l) => l.filter((x) => x !== id))}
-              onRemovePick={(n) => setSendPicks((l) => l.filter((x) => x !== n))}
-              onFaab={(raw) => setTwoFaab("send", raw)}
-            />
-
-            <DealSide
-              title={`You get · ${themName}`}
-              players={getPlayerRows}
-              picks={getPickRows}
-              faab={getFaab}
-              faabErr={getFaabErr}
-              faabFree={theirFaabFree}
-              faabLabel="Their FAAB"
-              projections={projections}
-              onRemovePlayer={(id) => setGetPlayers((l) => l.filter((x) => x !== id))}
-              onRemovePick={(n) => setGetPicks((l) => l.filter((x) => x !== n))}
-              onFaab={(raw) => setTwoFaab("get", raw)}
-            />
-
-            {balanceBlock}
-            {submitBtn}
-          </div>
-
           <RosterPanel
             title={themName}
             players={theirRoster}
@@ -872,230 +1229,100 @@ export function TradeComposer({
             projections={projections}
             onPlayer={(id) => toggleTwoPlayer("get", id)}
             onPick={(n) => toggleTwoPick("get", n)}
+            faab={getFaab}
+            faabErr={getFaabErr}
+            faabFree={theirFaabFree}
+            faabLabel="Their FAAB"
+            onFaab={(raw) => setTwoFaab("get", raw)}
           />
         </div>
+        {rail}
+        {confirm}
       </div>
     );
   }
 
-  // --- Three-team layout ---
   return (
-    <div className="mt-5 space-y-4">
-      {countering ? (
-        <p className="text-xs text-muted">Countering an existing offer.</p>
-      ) : null}
+    <div className="mt-5 space-y-5 pb-24 md:pb-20">
+      {countering ? <p className="text-xs text-muted">Countering an existing offer.</p> : null}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-1">
-            {(
-              [
-                { id: "mine" as const, label: "You" },
-                { id: "them" as const, label: themName },
-                { id: "third" as const, label: thirdName },
-              ] as const
-            ).map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setRosterTab(t.id)}
-                className={cn(
-                  "h-9 rounded-sm px-3 text-sm",
-                  rosterTab === t.id ? "bg-accent text-accent-fg" : "bg-raised text-muted",
-                )}
+      {dealCard}
+
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-1">
+          {(
+            [
+              { id: "mine" as const, label: "You" },
+              { id: "them" as const, label: themName },
+              { id: "third" as const, label: thirdName },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setRosterTab(t.id)}
+              className={cn(
+                "h-9 rounded-sm px-3 text-sm",
+                rosterTab === t.id ? "bg-accent text-accent-fg" : "bg-raised text-muted",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+          {onThirdChange && availableThirds.length > 0 ? (
+            <div className="relative ml-1">
+              <label className="sr-only" htmlFor="third-team-pick">
+                Third team
+              </label>
+              <select
+                id="third-team-pick"
+                className="h-9 max-w-[9rem] rounded-sm bg-raised px-2 text-sm text-muted"
+                value={thirdRosterId ?? ""}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (Number.isFinite(v)) onThirdChange(v);
+                }}
               >
-                {t.label}
-              </button>
-            ))}
-            {onThirdChange && availableThirds.length > 0 ? (
-              <div className="relative ml-1">
-                <label className="sr-only" htmlFor="third-team-pick">
-                  Third team
-                </label>
-                <select
-                  id="third-team-pick"
-                  className="h-9 max-w-[9rem] rounded-sm bg-raised px-2 text-sm text-muted"
-                  value={thirdRosterId ?? ""}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    if (Number.isFinite(v)) onThirdChange(v);
-                  }}
-                >
-                  {availableThirds.map((p) => (
-                    <option key={p.rosterId} value={p.rosterId}>
-                      {p.teamName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-            {onThirdChange ? (
-              <button
-                type="button"
-                className="ml-1 font-mono text-[11px] uppercase text-muted hover:text-fg"
-                onClick={() => onThirdChange(null)}
-              >
-                Remove
-              </button>
-            ) : null}
-          </div>
-          <div className="mt-2">
-            <RosterPanel
-              title={activeRoster.title}
-              players={activeRoster.players}
-              picks={activeRoster.picks}
-              selectedPlayers={activeRoster.selectedPlayers}
-              selectedPicks={activeRoster.selectedPicks}
-              projections={projections}
-              onPlayer={activeRoster.onPlayer}
-              onPick={activeRoster.onPick}
-            />
-          </div>
+                {availableThirds.map((p) => (
+                  <option key={p.rosterId} value={p.rosterId}>
+                    {p.teamName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          {onThirdChange ? (
+            <button
+              type="button"
+              className="ml-1 font-mono text-[11px] uppercase text-muted hover:text-fg"
+              onClick={() => onThirdChange(null)}
+            >
+              Remove
+            </button>
+          ) : null}
         </div>
-
-        <div className="rounded-lg bg-raised/60 p-3 shadow-[var(--shadow-border)]">
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">The deal</p>
-
-          <DealLeg
-            title="You send"
-            fromRoster={myRosterId}
-            players={resolvePlayers(minePlayers, myRoster)}
-            picks={resolvePicks(minePicksSel, myPicks)}
-            faab={mineFaab}
-            faabErr={mineFaabErr}
-            faabFree={myFaabFree}
-            faabLabel="Your unstaked"
+        <div className="mt-2">
+          <RosterPanel
+            title={activeRoster.title}
+            players={activeRoster.players}
+            picks={activeRoster.picks}
+            selectedPlayers={activeRoster.selectedPlayers}
+            selectedPicks={activeRoster.selectedPicks}
             projections={projections}
-            nameOf={nameOf}
-            showDest
-            onRemovePlayer={(id) => setMinePlayers((l) => l.filter((a) => a.id !== id))}
-            onRemovePick={(n) => setMinePicksSel((l) => l.filter((a) => a.pickNo !== n))}
-            onCyclePlayer={(id) =>
-              setMinePlayers((l) =>
-                l.map((a) => (a.id === id ? { ...a, to: cycleDest(myRosterId, a.to) } : a)),
-              )
-            }
-            onCyclePick={(n) =>
-              setMinePicksSel((l) =>
-                l.map((a) =>
-                  a.pickNo === n ? { ...a, to: cycleDest(myRosterId, a.to) } : a,
-                ),
-              )
-            }
-            onFaab={(raw) =>
-              setDirectedFaab(
-                myRosterId,
-                myFaabFree,
-                `You only have`,
-                mineFaab,
-                setMineFaab,
-                setMineFaabErr,
-                raw,
-              )
-            }
-            onCycleFaab={() =>
-              setMineFaab((f) =>
-                f ? { ...f, to: cycleDest(myRosterId, f.to) } : f,
-              )
-            }
+            onPlayer={activeRoster.onPlayer}
+            onPick={activeRoster.onPick}
+            faab={activeRoster.faab}
+            faabErr={activeRoster.faabErr}
+            faabFree={activeRoster.faabFree}
+            faabLabel={activeRoster.faabLabel}
+            faabDest={activeRoster.faabDest}
+            onFaab={activeRoster.onFaab}
+            onCycleFaab={activeRoster.onCycleFaab}
           />
-
-          <DealLeg
-            title={`${themName} sends`}
-            fromRoster={theirRosterId}
-            players={resolvePlayers(themPlayers, theirRoster)}
-            picks={resolvePicks(themPicksSel, theirPicks)}
-            faab={themFaab}
-            faabErr={themFaabErr}
-            faabFree={theirFaabFree}
-            faabLabel="Their FAAB"
-            projections={projections}
-            nameOf={nameOf}
-            showDest
-            onRemovePlayer={(id) => setThemPlayers((l) => l.filter((a) => a.id !== id))}
-            onRemovePick={(n) => setThemPicksSel((l) => l.filter((a) => a.pickNo !== n))}
-            onCyclePlayer={(id) =>
-              setThemPlayers((l) =>
-                l.map((a) =>
-                  a.id === id ? { ...a, to: cycleDest(theirRosterId, a.to) } : a,
-                ),
-              )
-            }
-            onCyclePick={(n) =>
-              setThemPicksSel((l) =>
-                l.map((a) =>
-                  a.pickNo === n ? { ...a, to: cycleDest(theirRosterId, a.to) } : a,
-                ),
-              )
-            }
-            onFaab={(raw) =>
-              setDirectedFaab(
-                theirRosterId,
-                theirFaabFree,
-                `They only have`,
-                themFaab,
-                setThemFaab,
-                setThemFaabErr,
-                raw,
-              )
-            }
-            onCycleFaab={() =>
-              setThemFaab((f) =>
-                f ? { ...f, to: cycleDest(theirRosterId, f.to) } : f,
-              )
-            }
-          />
-
-          <DealLeg
-            title={`${thirdName} sends`}
-            fromRoster={thirdRosterId!}
-            players={resolvePlayers(thirdPlayers, thirdRoster)}
-            picks={resolvePicks(thirdPicksSel, thirdPicks)}
-            faab={thirdFaab}
-            faabErr={thirdFaabErr}
-            faabFree={thirdFaabFree}
-            faabLabel="Their FAAB"
-            projections={projections}
-            nameOf={nameOf}
-            showDest
-            onRemovePlayer={(id) => setThirdPlayers((l) => l.filter((a) => a.id !== id))}
-            onRemovePick={(n) => setThirdPicksSel((l) => l.filter((a) => a.pickNo !== n))}
-            onCyclePlayer={(id) =>
-              setThirdPlayers((l) =>
-                l.map((a) =>
-                  a.id === id ? { ...a, to: cycleDest(thirdRosterId!, a.to) } : a,
-                ),
-              )
-            }
-            onCyclePick={(n) =>
-              setThirdPicksSel((l) =>
-                l.map((a) =>
-                  a.pickNo === n ? { ...a, to: cycleDest(thirdRosterId!, a.to) } : a,
-                ),
-              )
-            }
-            onFaab={(raw) =>
-              setDirectedFaab(
-                thirdRosterId!,
-                thirdFaabFree,
-                `They only have`,
-                thirdFaab,
-                setThirdFaab,
-                setThirdFaabErr,
-                raw,
-              )
-            }
-            onCycleFaab={() =>
-              setThirdFaab((f) =>
-                f ? { ...f, to: cycleDest(thirdRosterId!, f.to) } : f,
-              )
-            }
-          />
-
-          {balanceBlock}
-          {submitBtn}
         </div>
       </div>
+      {rail}
+      {confirm}
     </div>
   );
 }
@@ -1109,6 +1336,13 @@ function RosterPanel({
   projections,
   onPlayer,
   onPick,
+  faab = null,
+  faabErr = null,
+  faabFree = null,
+  faabLabel,
+  faabDest,
+  onFaab,
+  onCycleFaab,
 }: {
   title: string;
   players: RosterPlayer[];
@@ -1118,6 +1352,13 @@ function RosterPanel({
   projections: Record<string, Projection>;
   onPlayer: (id: string) => void;
   onPick: (n: number) => void;
+  faab?: number | null;
+  faabErr?: string | null;
+  faabFree?: number | null;
+  faabLabel?: string;
+  faabDest?: string | null;
+  onFaab?: (raw: string) => void;
+  onCycleFaab?: () => void;
 }) {
   return (
     <div className="min-w-0">
@@ -1152,183 +1393,217 @@ function RosterPanel({
               )}
             >
               <span>Pick {p.label}</span>
-              {p.via ? (
-                <span className="font-mono text-[11px] opacity-70">via {p.via}</span>
-              ) : null}
+              {p.via ? <span className="font-mono text-[11px] opacity-70">via {p.via}</span> : null}
             </button>
           </li>
         ))}
         {!players.length && !picks.length ? (
           <li className="px-2 py-2 text-xs text-faint">
-            No assets yet — unused picks appear after the board is built.
+            No assets yet. Unused picks appear after the board is built.
           </li>
         ) : null}
       </ul>
+      {onFaab ? (
+        <FaabPicker
+          title={title}
+          faab={faab}
+          faabErr={faabErr}
+          faabFree={faabFree}
+          faabLabel={faabLabel}
+          faabDest={faabDest}
+          onFaab={onFaab}
+          onCycleFaab={onCycleFaab}
+        />
+      ) : null}
     </div>
   );
 }
 
-function DealSide({
+function ComposeColumn({
   title,
+  empty,
   players,
   picks,
   faab,
-  faabErr,
-  faabFree,
-  faabLabel,
   projections,
+  destName,
+  readOnly = false,
   onRemovePlayer,
   onRemovePick,
-  onFaab,
-}: {
-  title: string;
-  players: RosterPlayer[];
-  picks: TradeComposerPick[];
-  faab: number | null;
-  faabErr: string | null;
-  faabFree: number | null;
-  faabLabel: string;
-  projections: Record<string, Projection>;
-  onRemovePlayer: (id: string) => void;
-  onRemovePick: (n: number) => void;
-  onFaab: (raw: string) => void;
-}) {
-  return (
-    <div className="mt-3">
-      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">{title}</p>
-      <ul className="mt-1.5 flex flex-wrap gap-1.5">
-        {players.map((p) => (
-          <li key={p.player_id}>
-            <Chip onRemove={() => onRemovePlayer(p.player_id)}>
-              <span className="truncate">{p.full_name}</span>
-              <span className="font-mono text-[10px] opacity-70">{p.position}</span>
-              {projections[p.player_id] ? (
-                <span className="font-mono text-[10px] tabular-nums opacity-70">
-                  {projections[p.player_id]!.points.toFixed(1)}
-                </span>
-              ) : null}
-            </Chip>
-          </li>
-        ))}
-        {picks.map((p) => (
-          <li key={p.pickNo}>
-            <Chip onRemove={() => onRemovePick(p.pickNo)}>Pick {p.label}</Chip>
-          </li>
-        ))}
-        {!players.length && !picks.length && !(faab != null && faab > 0) ? (
-          <li className="px-1 py-1 text-xs text-faint">Nothing yet — tap a player or pick.</li>
-        ) : null}
-      </ul>
-
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[11px] text-faint">plus FAAB</span>
-        <div
-          className={cn(
-            "flex items-baseline rounded-md bg-surface px-2.5 py-1 shadow-[var(--shadow-border)] focus-within:shadow-[0_0_0_1px_var(--color-accent-deep)]",
-            faabErr && "shadow-[0_0_0_1px_var(--color-loss)]",
-          )}
-        >
-          <span className="font-mono text-sm font-bold text-faint">$</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="0"
-            aria-label={`${title} FAAB`}
-            value={faab == null ? "" : String(faab)}
-            onChange={(e) => onFaab(e.target.value)}
-            className={cn(
-              "w-[3.4ch] bg-transparent font-mono text-base font-bold tabular-nums outline-none placeholder:text-faint/60",
-              faabErr && "text-loss",
-            )}
-          />
-        </div>
-        {faabFree != null ? (
-          <span className="font-mono text-[11px] text-faint">
-            {faabLabel} ${faabFree}
-          </span>
-        ) : null}
-      </div>
-      {faabErr ? <p className="mt-1 text-xs text-loss">{faabErr}</p> : null}
-    </div>
-  );
-}
-
-function DealLeg({
-  title,
-  fromRoster,
-  players,
-  picks,
-  faab,
-  faabErr,
-  faabFree,
-  faabLabel,
-  projections,
-  nameOf,
-  showDest,
-  onRemovePlayer,
-  onRemovePick,
+  onRemoveFaab,
   onCyclePlayer,
   onCyclePick,
+  onCycleFaab,
+}: {
+  title: string;
+  empty: string;
+  players: Array<RosterPlayer & { to?: number }>;
+  picks: Array<TradeComposerPick & { to?: number }>;
+  faab: { amount: number; to?: number } | null;
+  projections: Record<string, Projection>;
+  destName?: (id: number) => string;
+  readOnly?: boolean;
+  onRemovePlayer?: (id: string) => void;
+  onRemovePick?: (n: number) => void;
+  onRemoveFaab?: () => void;
+  onCyclePlayer?: (id: string) => void;
+  onCyclePick?: (n: number) => void;
+  onCycleFaab?: () => void;
+}) {
+  const has = players.length > 0 || picks.length > 0 || (faab != null && faab.amount > 0);
+  return (
+    <div className="min-w-0">
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">{title}</p>
+      <ul className="mt-1.5 space-y-1">
+        {!has ? (
+          <li className="px-2 py-1.5 text-xs text-faint">{empty}</li>
+        ) : (
+          <>
+            {players.map((p) => {
+              const proj = projections[p.player_id];
+              const row = (
+                <PlayerStatRow
+                  data={{
+                    player: p,
+                    projection: proj?.points ?? null,
+                    projectionIsAverage: proj?.reason === "season-avg",
+                  }}
+                  dense
+                />
+              );
+              const dest =
+                destName && p.to != null ? (
+                  onCyclePlayer && !readOnly ? (
+                    <DestPill label={destName(p.to)} onCycle={() => onCyclePlayer(p.player_id)} />
+                  ) : (
+                    <span className="font-mono text-[10px] text-faint">→ {destName(p.to)}</span>
+                  )
+                ) : null;
+              return (
+                <li key={p.player_id}>
+                  {readOnly || !onRemovePlayer ? (
+                    <div className="flex items-center gap-0.5">
+                      <div className="min-w-0 flex-1">{row}</div>
+                      {dest}
+                    </div>
+                  ) : (
+                    <Removable
+                      label={`Remove ${p.full_name}`}
+                      onRemove={() => onRemovePlayer(p.player_id)}
+                      extra={dest}
+                    >
+                      {row}
+                    </Removable>
+                  )}
+                </li>
+              );
+            })}
+            {picks.map((p) => (
+              <li key={p.pickNo}>
+                {readOnly || !onRemovePick ? (
+                  <span className="inline-flex min-h-9 items-center gap-1.5 rounded-sm bg-raised px-2 py-1 font-mono text-xs text-fg">
+                    Pick {p.label}
+                    {destName && p.to != null ? (
+                      <span className="text-faint">→ {destName(p.to)}</span>
+                    ) : null}
+                  </span>
+                ) : (
+                  <Chip onRemove={() => onRemovePick(p.pickNo)}>
+                    Pick {p.label}
+                    {destName && p.to != null && onCyclePick ? (
+                      <DestPill label={destName(p.to)} onCycle={() => onCyclePick(p.pickNo)} />
+                    ) : null}
+                  </Chip>
+                )}
+              </li>
+            ))}
+            {faab != null && faab.amount > 0 ? (
+              <li>
+                {readOnly || !onRemoveFaab ? (
+                  <span className="inline-flex min-h-9 items-center gap-1.5 rounded-sm bg-raised px-2 py-1 font-mono text-xs text-fg">
+                    ${faab.amount} FAAB
+                    {destName && faab.to != null ? (
+                      <span className="text-faint">→ {destName(faab.to)}</span>
+                    ) : null}
+                  </span>
+                ) : (
+                  <Chip onRemove={onRemoveFaab}>
+                    ${faab.amount} FAAB
+                    {destName && faab.to != null && onCycleFaab ? (
+                      <DestPill label={destName(faab.to)} onCycle={onCycleFaab} />
+                    ) : null}
+                  </Chip>
+                )}
+              </li>
+            ) : null}
+          </>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+function Removable({
+  children,
+  onRemove,
+  label,
+  extra,
+}: {
+  children: ReactNode;
+  onRemove: () => void;
+  label: string;
+  extra?: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-0.5">
+      <div className="min-w-0 flex-1">{children}</div>
+      {extra}
+      <button
+        type="button"
+        aria-label={label}
+        onClick={onRemove}
+        className="shrink-0 rounded-pill p-1 text-faint hover:bg-raised hover:text-fg"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function FaabPicker({
+  title,
+  faab,
+  faabErr,
+  faabFree,
+  faabLabel,
+  faabDest,
   onFaab,
   onCycleFaab,
 }: {
   title: string;
-  fromRoster: number;
-  players: Array<RosterPlayer & { to: number }>;
-  picks: Array<TradeComposerPick & { to: number }>;
-  faab: DirectedFaab | null;
+  faab: number | null;
   faabErr: string | null;
   faabFree: number | null;
-  faabLabel: string;
-  projections: Record<string, Projection>;
-  nameOf: (id: number) => string;
-  showDest: boolean;
-  onRemovePlayer: (id: string) => void;
-  onRemovePick: (n: number) => void;
-  onCyclePlayer: (id: string) => void;
-  onCyclePick: (n: number) => void;
+  faabLabel?: string;
+  faabDest?: string | null;
   onFaab: (raw: string) => void;
-  onCycleFaab: () => void;
+  onCycleFaab?: () => void;
 }) {
-  void fromRoster;
+  if (faab == null) {
+    return (
+      <button
+        type="button"
+        className="mt-2 font-mono text-[11px] uppercase text-muted hover:text-fg"
+        onClick={() => onFaab("0")}
+      >
+        + FAAB
+      </button>
+    );
+  }
   return (
-    <div className="mt-3">
-      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">{title}</p>
-      <ul className="mt-1.5 flex flex-wrap gap-1.5">
-        {players.map((p) => (
-          <li key={p.player_id}>
-            <Chip onRemove={() => onRemovePlayer(p.player_id)}>
-              <span className="truncate">{p.full_name}</span>
-              <span className="font-mono text-[10px] opacity-70">{p.position}</span>
-              {projections[p.player_id] ? (
-                <span className="font-mono text-[10px] tabular-nums opacity-70">
-                  {projections[p.player_id]!.points.toFixed(1)}
-                </span>
-              ) : null}
-              {showDest ? (
-                <DestPill label={nameOf(p.to)} onCycle={() => onCyclePlayer(p.player_id)} />
-              ) : null}
-            </Chip>
-          </li>
-        ))}
-        {picks.map((p) => (
-          <li key={p.pickNo}>
-            <Chip onRemove={() => onRemovePick(p.pickNo)}>
-              Pick {p.label}
-              {showDest ? (
-                <DestPill label={nameOf(p.to)} onCycle={() => onCyclePick(p.pickNo)} />
-              ) : null}
-            </Chip>
-          </li>
-        ))}
-        {!players.length && !picks.length && !(faab != null && faab.amount > 0) ? (
-          <li className="px-1 py-1 text-xs text-faint">Nothing yet — tap a player or pick.</li>
-        ) : null}
-      </ul>
-
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[11px] text-faint">plus FAAB</span>
+    <div className="mt-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-[11px] text-faint">FAAB</span>
         <div
           className={cn(
             "flex items-baseline rounded-md bg-surface px-2.5 py-1 shadow-[var(--shadow-border)] focus-within:shadow-[0_0_0_1px_var(--color-accent-deep)]",
@@ -1342,7 +1617,7 @@ function DealLeg({
             autoComplete="off"
             placeholder="0"
             aria-label={`${title} FAAB`}
-            value={faab == null ? "" : String(faab.amount)}
+            value={String(faab)}
             onChange={(e) => onFaab(e.target.value)}
             className={cn(
               "w-[3.4ch] bg-transparent font-mono text-base font-bold tabular-nums outline-none placeholder:text-faint/60",
@@ -1350,8 +1625,8 @@ function DealLeg({
             )}
           />
         </div>
-        {showDest && faab != null && faab.amount > 0 ? (
-          <DestPill label={nameOf(faab.to)} onCycle={onCycleFaab} />
+        {faabDest && onCycleFaab && faab > 0 ? (
+          <DestPill label={faabDest} onCycle={onCycleFaab} />
         ) : null}
         {faabFree != null ? (
           <span className="font-mono text-[11px] text-faint">
@@ -1380,15 +1655,9 @@ function DestPill({ label, onCycle }: { label: string; onCycle: () => void }) {
   );
 }
 
-function Chip({
-  children,
-  onRemove,
-}: {
-  children: ReactNode;
-  onRemove: () => void;
-}) {
+function Chip({ children, onRemove }: { children: ReactNode; onRemove: () => void }) {
   return (
-    <span className="inline-flex max-w-full items-center gap-1.5 rounded-sm bg-surface px-2 py-1 text-xs text-fg shadow-[var(--shadow-border)]">
+    <span className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-sm bg-raised px-2 py-1 font-mono text-xs text-fg">
       {children}
       <button
         type="button"
@@ -1402,28 +1671,6 @@ function Chip({
   );
 }
 
-function PositionShift({
-  before,
-  after,
-}: {
-  before: Record<string, number>;
-  after: Record<string, number>;
-}) {
-  const positions = [...new Set([...Object.keys(before), ...Object.keys(after)])]
-    .filter((pos) => (before[pos] ?? 0) !== (after[pos] ?? 0))
-    .sort();
-  if (!positions.length) return null;
-  return (
-    <ul className="flex flex-wrap gap-x-3 gap-y-1">
-      {positions.map((pos) => (
-        <li key={pos} className="font-mono text-[11px] text-faint">
-          {pos} {before[pos] ?? 0}→{after[pos] ?? 0}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function countPositions(players: Array<{ position: string | null }>): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const p of players) {
@@ -1431,4 +1678,17 @@ function countPositions(players: Array<{ position: string | null }>): Record<str
     counts[pos] = (counts[pos] ?? 0) + 1;
   }
   return counts;
+}
+
+function lastNameOf(p: { last_name?: string | null; full_name: string }): string {
+  const last = p.last_name?.trim();
+  if (last) return last;
+  const parts = p.full_name.trim().split(/\s+/);
+  return parts[parts.length - 1] || p.full_name;
+}
+
+function joinBits(bits: string[]): string {
+  if (bits.length <= 1) return bits[0] ?? "";
+  if (bits.length === 2) return `${bits[0]} + ${bits[1]}`;
+  return `${bits.slice(0, -1).join(", ")} + ${bits[bits.length - 1]}`;
 }

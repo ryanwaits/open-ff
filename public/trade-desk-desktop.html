@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ledger · desktop compose</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --paper: #f7f4ea;
+      --raised: #fffdf7;
+      --sunken: #f0ece0;
+      --ink: #17191d;
+      --muted: #5b5e60;
+      --faint: #8a8b83;
+      --line: #e4dfd1;
+      --line-strong: #d2ccba;
+      --brand: #6fdc93;
+      --brand-deep: #3fa765;
+      --brand-ink: #12251a;
+      --alarm: #c8503a;
+      --sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+      --pill: 999px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); }
+    button { font: inherit; cursor: pointer; }
+    .wrap { max-width: 1320px; margin: 0 auto; padding: 28px 24px 96px; }
+    .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--faint); }
+    h1 { font-size: 32px; letter-spacing: -.03em; margin: 8px 0 0; font-weight: 800; }
+    .lede { max-width: 44rem; color: var(--muted); line-height: 1.5; margin: 12px 0 0; }
+    .bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+    .chip {
+      height: 36px; padding: 0 14px; border-radius: var(--pill);
+      border: 0; background: var(--sunken); color: var(--muted); font-size: 13px; font-weight: 600;
+    }
+    .chip.on { background: var(--ink); color: var(--paper); }
+    .why { margin: 14px 0 0; max-width: 46rem; font-size: 14px; color: var(--muted); line-height: 1.5; }
+    .why strong { color: var(--ink); font-weight: 650; }
+    .stage {
+      margin-top: 20px; background: var(--raised);
+      border-radius: 22px; box-shadow: 0 0 0 1px var(--line);
+      overflow: hidden;
+    }
+    .stage-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 14px 20px; border-bottom: 1px solid var(--line);
+    }
+    .stage-head p { margin: 0; font-size: 13px; color: var(--muted); }
+    .canvas { padding: 22px 22px 28px; min-height: 720px; position: relative; }
+    .hidden { display: none !important; }
+
+    .nav { display: flex; gap: 18px; align-items: baseline; margin-bottom: 18px; }
+    .word { font-weight: 800; letter-spacing: -.03em; font-size: 20px; }
+    .nav span { font-size: 13px; color: var(--faint); }
+    .nav .here { color: var(--ink); font-weight: 650; }
+    h2.lg { font-size: 28px; letter-spacing: -.03em; margin: 0; font-weight: 800; }
+    .invite { margin: 4px 0 0; font-style: italic; color: var(--faint); font-size: 13px; }
+    .blurb { margin: 10px 0 0; max-width: 36rem; font-size: 14px; color: var(--muted); }
+
+    .partners { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .p {
+      height: 36px; padding: 0 12px; border-radius: 8px; border: 0;
+      background: var(--sunken); color: var(--muted); font-size: 13px;
+    }
+    .p.on { background: var(--brand); color: var(--brand-ink); font-weight: 650; }
+
+    .mono { font-family: var(--mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--faint); }
+    .face {
+      width: 36px; height: 36px; border-radius: var(--pill); flex: 0 0 auto;
+      display: grid; place-items: center; font-size: 11px; font-weight: 700;
+      color: var(--raised); background: #3a3f45;
+    }
+    .face.cmc { background: #aa1c24; }
+    .face.poll { background: #4b92db; }
+    .face.ajb { background: #002244; }
+    .face.q { background: #311d00; }
+    .face.bow { background: #a5acaf; color: #111; }
+    .face.dak { background: #041e42; }
+    .name { font-size: 14px; font-weight: 650; }
+    .meta { font-size: 11px; color: var(--faint); }
+    .pts { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 14px; text-align: right; }
+    .pts small { display: block; font-size: 9px; letter-spacing: .08em; color: var(--faint); }
+    .x { border: 0; background: none; color: var(--faint); font-size: 16px; padding: 4px; }
+
+    .player { display: grid; grid-template-columns: 36px 1fr auto; gap: 10px; align-items: center; min-height: 44px; }
+    .player.sel { background: var(--brand); color: var(--brand-ink); border-radius: 8px; padding: 6px 8px; }
+    .player.sel .meta, .player.sel .pts small { color: rgb(18 37 26 / .55); }
+
+    .qpill {
+      display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: var(--pill);
+      background: var(--sunken); font-family: var(--mono); font-size: 9px; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--alarm);
+    }
+
+    .ticket {
+      background: var(--raised); border-radius: 16px;
+      box-shadow: 0 0 0 1px var(--line);
+      padding: 16px 18px 16px;
+    }
+    .sides { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .asset { display: grid; grid-template-columns: 36px 1fr auto 18px; gap: 8px; align-items: center; }
+    .after { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .bars { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 12px; }
+    .barline { height: 8px; border-radius: 2px; }
+    .barline.now { width: 72px; background: var(--line-strong); }
+    .barline.next { width: 56px; background: var(--alarm); }
+    .read { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.4; }
+    .btn {
+      height: 40px; padding: 0 18px; border-radius: var(--pill); border: 0;
+      background: var(--brand); color: var(--brand-ink); font-weight: 700; font-size: 14px;
+    }
+    .btn.wide { width: 100%; height: 48px; }
+    .col-h { font-size: 14px; font-weight: 650; margin: 0 0 8px; }
+
+    .pickers { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+    .plist { display: flex; flex-direction: column; gap: 2px; }
+
+    /* A · desk */
+    .desk { display: grid; grid-template-columns: minmax(380px, 440px) 1fr; gap: 28px; align-items: start; margin-top: 18px; }
+    .desk .ticket-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-top: 14px; }
+    .desk .ticket-foot .read { flex: 1; }
+
+    /* B · tight */
+    .tight { max-width: 720px; margin-top: 18px; }
+    .tight-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; }
+    .tight-foot .read { flex: 1; }
+    .tight + .pickers { margin-top: 22px; }
+
+    /* C · rail */
+    .rail-body { margin-top: 18px; }
+    .rail {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 12px 22px; background: var(--raised);
+      box-shadow: 0 -1px 0 var(--line);
+    }
+    .rail .sum { font-size: 14px; }
+    .rail .sum b { font-weight: 700; }
+    .rail .sum em { font-style: normal; color: var(--faint); }
+    .canvas.c { padding-bottom: 80px; }
+
+    /* now (broken) */
+    .now .ticket { margin-top: 18px; }
+    .now .btn.wide { margin-top: 16px; }
+    .now .pickers { margin-top: 22px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="kicker">Study · not shipped</p>
+    <h1>The button is not the page.</h1>
+    <p class="lede">
+      On a wide desk the compose card stretches and Propose becomes a billboard.
+      Three layouts. Same deal (McCaffrey for Pollard + Brown). Same ticket object.
+      Only the chrome around it changes.
+    </p>
+
+    <div class="bar" id="variants">
+      <button class="chip" data-v="now">Now</button>
+      <button class="chip on" data-v="a">A · Desk</button>
+      <button class="chip" data-v="b">B · Tight ticket</button>
+      <button class="chip" data-v="c">C · Checkout rail</button>
+    </div>
+    <p class="why" id="why">
+      <strong>A · Desk.</strong> Ticket stays ticket-sized on the left. Rosters fill the rest.
+      Propose is a button next to the read, not a full-width slab.
+    </p>
+
+    <div class="stage">
+      <div class="stage-head">
+        <p class="kicker" id="label">A · Desk · 1280</p>
+        <p>WIFFL · week 1 · Hands ↔ 6 Pack Jack</p>
+      </div>
+
+      <!-- NOW -->
+      <div class="canvas now hidden" data-pane="now">
+        <div class="nav"><div class="word">Ledger</div><span>Home</span><span>My Team</span><span class="here">League</span></div>
+        <h2 class="lg">WIFFL</h2>
+        <p class="invite">Invite XF9PTS</p>
+        <p class="blurb">Swap players. Two teams or three. Everyone in the deal has to accept.</p>
+        <div class="partners">
+          <button class="p">Chumheads</button>
+          <button class="p on">6 Pack Jack</button>
+          <button class="p">Butterbean</button>
+          <button class="p">Strigiformes</button>
+        </div>
+        <div class="ticket">
+          <div class="sides">
+            <div>
+              <p class="mono">You get</p>
+              <div class="asset" style="margin-top:8px">
+                <span class="face cmc">CM</span>
+                <span><span class="name">Christian McCaffrey</span><br><span class="meta">RB · SF</span><span class="qpill">Questionable</span></span>
+                <span class="pts">17.2<small>PROJ</small></span>
+                <button class="x">×</button>
+              </div>
+            </div>
+            <div>
+              <p class="mono">You give</p>
+              <div class="asset" style="margin-top:8px">
+                <span class="face poll">TP</span>
+                <span><span class="name">Tony Pollard</span><br><span class="meta">RB · TEN</span></span>
+                <span class="pts">9.0<small>PROJ</small></span>
+                <button class="x">×</button>
+              </div>
+              <div class="asset" style="margin-top:6px">
+                <span class="face ajb">AB</span>
+                <span><span class="name">A.J. Brown</span><br><span class="meta">WR · NE</span></span>
+                <span class="pts">14.2<small>PROJ</small></span>
+                <button class="x">×</button>
+              </div>
+            </div>
+          </div>
+          <div class="after">
+            <p class="mono">Your roster after</p>
+            <div class="bars"><span class="mono" style="letter-spacing:0">WR</span><span class="barline now"></span><span class="barline next"></span><span class="mono" style="color:var(--alarm);letter-spacing:0">5→4</span></div>
+            <p class="read">+3.5 a week to your starters; McCaffrey upgrades RB by 6.8; Addison has to cover WR3, which costs 4.4; McCaffrey is listed Questionable.</p>
+          </div>
+          <button class="btn wide">Propose trade</button>
+        </div>
+        <div class="pickers">
+          <div>
+            <p class="col-h">Your roster</p>
+            <div class="plist">
+              <div class="player"><span class="face bow">BB</span><span><span class="name">Brock Bowers</span><br><span class="meta">TE · LV</span></span><span class="pts">12.7<small>PROJ</small></span></div>
+              <div class="player"><span class="face dak">DP</span><span><span class="name">Dak Prescott</span><br><span class="meta">QB · DAL</span></span><span class="pts">18.0<small>PROJ</small></span></div>
+              <div class="player sel"><span class="face ajb">AB</span><span><span class="name">A.J. Brown</span><br><span class="meta">WR · NE</span></span><span class="pts">14.2<small>PROJ</small></span></div>
+              <div class="player sel"><span class="face poll">TP</span><span><span class="name">Tony Pollard</span><br><span class="meta">RB · TEN</span></span><span class="pts">9.0<small>PROJ</small></span></div>
+            </div>
+          </div>
+          <div>
+            <p class="col-h">6 Pack Jack</p>
+            <div class="plist">
+              <div class="player"><span class="face q">QJ</span><span><span class="name">Quinshon Judkins</span><br><span class="meta">RB · CLE</span></span><span class="pts">10.7<small>PROJ</small></span></div>
+              <div class="player sel"><span class="face cmc">CM</span><span><span class="name">Christian McCaffrey</span><br><span class="meta">RB · SF</span></span><span class="pts">17.2<small>PROJ</small></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- A DESK -->
+      <div class="canvas" data-pane="a">
+        <div class="nav"><div class="word">Ledger</div><span>Home</span><span>My Team</span><span class="here">League</span></div>
+        <h2 class="lg">WIFFL</h2>
+        <p class="invite">Invite XF9PTS</p>
+        <div class="partners">
+          <button class="p">Chumheads</button>
+          <button class="p on">6 Pack Jack</button>
+          <button class="p">Butterbean</button>
+          <button class="p">Strigiformes</button>
+        </div>
+        <div class="desk">
+          <div class="ticket">
+            <div class="sides">
+              <div>
+                <p class="mono">You get</p>
+                <div class="asset" style="margin-top:8px">
+                  <span class="face cmc">CM</span>
+                  <span><span class="name">Christian McCaffrey</span><br><span class="meta">RB · SF</span><span class="qpill">Q</span></span>
+                  <span class="pts">17.2<small>PROJ</small></span>
+                  <button class="x">×</button>
+                </div>
+              </div>
+              <div>
+                <p class="mono">You give</p>
+                <div class="asset" style="margin-top:8px">
+                  <span class="face poll">TP</span>
+                  <span><span class="name">Tony Pollard</span><br><span class="meta">RB · TEN</span></span>
+                  <span class="pts">9.0<small>PROJ</small></span>
+                  <button class="x">×</button>
+                </div>
+                <div class="asset" style="margin-top:6px">
+                  <span class="face ajb">AB</span>
+                  <span><span class="name">A.J. Brown</span><br><span class="meta">WR · NE</span></span>
+                  <span class="pts">14.2<small>PROJ</small></span>
+                  <button class="x">×</button>
+                </div>
+              </div>
+            </div>
+            <div class="after">
+              <p class="mono">Your roster after</p>
+              <div class="bars"><span class="mono" style="letter-spacing:0">WR</span><span class="barline now"></span><span class="barline next"></span><span class="mono" style="color:var(--alarm);letter-spacing:0">5→4</span></div>
+            </div>
+            <div class="ticket-foot">
+              <p class="read">+3.5 to starters. McCaffrey upgrades RB. Listed Questionable.</p>
+              <button class="btn">Propose</button>
+            </div>
+          </div>
+          <div class="pickers">
+            <div>
+              <p class="col-h">Your roster</p>
+              <div class="plist">
+                <div class="player"><span class="face bow">BB</span><span><span class="name">Brock Bowers</span><br><span class="meta">TE · LV</span></span><span class="pts">12.7<small>PROJ</small></span></div>
+                <div class="player"><span class="face dak">DP</span><span><span class="name">Dak Prescott</span><br><span class="meta">QB · DAL</span></span><span class="pts">18.0<small>PROJ</small></span></div>
+                <div class="player sel"><span class="face ajb">AB</span><span><span class="name">A.J. Brown</span><br><span class="meta">WR · NE</span></span><span class="pts">14.2<small>PROJ</small></span></div>
+                <div class="player sel"><span class="face poll">TP</span><span><span class="name">Tony Pollard</span><br><span class="meta">RB · TEN</span></span><span class="pts">9.0<small>PROJ</small></span></div>
+                <div class="player"><span class="face" style="background:#fb4f14">TH</span><span><span class="name">Tee Higgins</span><br><span class="meta">WR · CIN</span></span><span class="pts">13.9<small>PROJ</small></span></div>
+              </div>
+            </div>
+            <div>
+              <p class="col-h">6 Pack Jack</p>
+              <div class="plist">
+                <div class="player"><span class="face q">QJ</span><span><span class="name">Quinshon Judkins</span><br><span class="meta">RB · CLE</span></span><span class="pts">10.7<small>PROJ</small></span></div>
+                <div class="player"><span class="face" style="background:#0b162a">LB</span><span><span class="name">Luther Burden</span><br><span class="meta">WR · CHI</span></span><span class="pts">10.5<small>PROJ</small></span></div>
+                <div class="player sel"><span class="face cmc">CM</span><span><span class="name">Christian McCaffrey</span><br><span class="meta">RB · SF</span></span><span class="pts">17.2<small>PROJ</small></span></div>
+                <div class="player"><span class="face" style="background:#0b2265">WR</span><span><span class="name">Wan'Dale Robinson</span><br><span class="meta">WR · TEN</span></span><span class="pts">8.0<small>PROJ</small></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- B TIGHT -->
+      <div class="canvas hidden" data-pane="b">
+        <div class="nav"><div class="word">Ledger</div><span>Home</span><span>My Team</span><span class="here">League</span></div>
+        <h2 class="lg">WIFFL</h2>
+        <p class="invite">Invite XF9PTS</p>
+        <div class="partners">
+          <button class="p">Chumheads</button>
+          <button class="p on">6 Pack Jack</button>
+          <button class="p">Butterbean</button>
+        </div>
+        <div class="ticket tight">
+          <div class="sides">
+            <div>
+              <p class="mono">You get</p>
+              <div class="asset" style="margin-top:8px">
+                <span class="face cmc">CM</span>
+                <span><span class="name">Christian McCaffrey</span><br><span class="meta">RB · SF</span><span class="qpill">Q</span></span>
+                <span class="pts">17.2<small>PROJ</small></span>
+                <button class="x">×</button>
+              </div>
+            </div>
+            <div>
+              <p class="mono">You give</p>
+              <div class="asset" style="margin-top:8px">
+                <span class="face poll">TP</span>
+                <span><span class="name">Tony Pollard</span><br><span class="meta">RB · TEN</span></span>
+                <span class="pts">9.0<small>PROJ</small></span>
+                <button class="x">×</button>
+              </div>
+              <div class="asset" style="margin-top:6px">
+                <span class="face ajb">AB</span>
+                <span><span class="name">A.J. Brown</span><br><span class="meta">WR · NE</span></span>
+                <span class="pts">14.2<small>PROJ</small></span>
+                <button class="x">×</button>
+              </div>
+            </div>
+          </div>
+          <div class="after">
+            <p class="mono">Your roster after</p>
+            <div class="bars"><span class="mono" style="letter-spacing:0">WR</span><span class="barline now"></span><span class="barline next"></span><span class="mono" style="color:var(--alarm);letter-spacing:0">5→4</span></div>
+          </div>
+          <div class="tight-foot">
+            <p class="read">+3.5 to starters. McCaffrey upgrades RB. Listed Questionable.</p>
+            <button class="btn">Propose</button>
+          </div>
+        </div>
+        <div class="pickers">
+          <div>
+            <p class="col-h">Your roster</p>
+            <div class="plist">
+              <div class="player"><span class="face bow">BB</span><span><span class="name">Brock Bowers</span><br><span class="meta">TE · LV</span></span><span class="pts">12.7<small>PROJ</small></span></div>
+              <div class="player sel"><span class="face ajb">AB</span><span><span class="name">A.J. Brown</span><br><span class="meta">WR · NE</span></span><span class="pts">14.2<small>PROJ</small></span></div>
+              <div class="player sel"><span class="face poll">TP</span><span><span class="name">Tony Pollard</span><br><span class="meta">RB · TEN</span></span><span class="pts">9.0<small>PROJ</small></span></div>
+            </div>
+          </div>
+          <div>
+            <p class="col-h">6 Pack Jack</p>
+            <div class="plist">
+              <div class="player"><span class="face q">QJ</span><span><span class="name">Quinshon Judkins</span><br><span class="meta">RB · CLE</span></span><span class="pts">10.7<small>PROJ</small></span></div>
+              <div class="player sel"><span class="face cmc">CM</span><span><span class="name">Christian McCaffrey</span><br><span class="meta">RB · SF</span></span><span class="pts">17.2<small>PROJ</small></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- C RAIL -->
+      <div class="canvas c hidden" data-pane="c">
+        <div class="nav"><div class="word">Ledger</div><span>Home</span><span>My Team</span><span class="here">League</span></div>
+        <h2 class="lg">WIFFL</h2>
+        <p class="invite">Invite XF9PTS</p>
+        <div class="partners">
+          <button class="p">Chumheads</button>
+          <button class="p on">6 Pack Jack</button>
+          <button class="p">Butterbean</button>
+        </div>
+        <div class="rail-body">
+          <div class="ticket" style="max-width:720px">
+            <div class="sides">
+              <div>
+                <p class="mono">You get</p>
+                <div class="asset" style="margin-top:8px">
+                  <span class="face cmc">CM</span>
+                  <span><span class="name">Christian McCaffrey</span><br><span class="meta">RB · SF</span><span class="qpill">Q</span></span>
+                  <span class="pts">17.2<small>PROJ</small></span>
+                  <button class="x">×</button>
+                </div>
+              </div>
+              <div>
+                <p class="mono">You give</p>
+                <div class="asset" style="margin-top:8px">
+                  <span class="face poll">TP</span>
+                  <span><span class="name">Tony Pollard</span><br><span class="meta">RB · TEN</span></span>
+                  <span class="pts">9.0<small>PROJ</small></span>
+                  <button class="x">×</button>
+                </div>
+                <div class="asset" style="margin-top:6px">
+                  <span class="face ajb">AB</span>
+                  <span><span class="name">A.J. Brown</span><br><span class="meta">WR · NE</span></span>
+                  <span class="pts">14.2<small>PROJ</small></span>
+                  <button class="x">×</button>
+                </div>
+              </div>
+            </div>
+            <div class="after">
+              <p class="mono">Your roster after</p>
+              <div class="bars"><span class="mono" style="letter-spacing:0">WR</span><span class="barline now"></span><span class="barline next"></span><span class="mono" style="color:var(--alarm);letter-spacing:0">5→4</span></div>
+              <p class="read">+3.5 to starters. McCaffrey upgrades RB. Listed Questionable.</p>
+            </div>
+          </div>
+          <div class="pickers" style="margin-top:22px">
+            <div>
+              <p class="col-h">Your roster</p>
+              <div class="plist">
+                <div class="player"><span class="face bow">BB</span><span><span class="name">Brock Bowers</span><br><span class="meta">TE · LV</span></span><span class="pts">12.7<small>PROJ</small></span></div>
+                <div class="player sel"><span class="face ajb">AB</span><span><span class="name">A.J. Brown</span><br><span class="meta">WR · NE</span></span><span class="pts">14.2<small>PROJ</small></span></div>
+                <div class="player sel"><span class="face poll">TP</span><span><span class="name">Tony Pollard</span><br><span class="meta">RB · TEN</span></span><span class="pts">9.0<small>PROJ</small></span></div>
+              </div>
+            </div>
+            <div>
+              <p class="col-h">6 Pack Jack</p>
+              <div class="plist">
+                <div class="player"><span class="face q">QJ</span><span><span class="name">Quinshon Judkins</span><br><span class="meta">RB · CLE</span></span><span class="pts">10.7<small>PROJ</small></span></div>
+                <div class="player sel"><span class="face cmc">CM</span><span><span class="name">Christian McCaffrey</span><br><span class="meta">RB · SF</span></span><span class="pts">17.2<small>PROJ</small></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="rail">
+          <p class="sum"><b>Pollard + Brown</b> <em>for</em> <b>McCaffrey</b> <em>· +3.5 starters</em></p>
+          <button class="btn">Propose</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const copy = {
+      now: ["Now · current ship", "<strong>Now.</strong> The ticket spans the whole desk. Propose inherits that width and becomes a banner. Rosters sit underneath, a full scroll away from the deal."],
+      a: ["A · Desk · 1280", "<strong>A · Desk.</strong> Ticket stays ticket-sized on the left. Rosters fill the rest of the row. Propose is a button next to the read, not a full-width slab."],
+      b: ["B · Tight ticket · 1280", "<strong>B · Tight ticket.</strong> Same stack as today, but the card stops at ~720px. Propose sits on the read line. Smallest change. Rosters still below."],
+      c: ["C · Checkout rail · 1280", "<strong>C · Checkout rail.</strong> Propose leaves the card. A slim bar at the bottom of the desk holds the sentence and the button. Rosters can run long without losing the send control."],
+    };
+    const chips = document.querySelectorAll("#variants .chip");
+    const panes = document.querySelectorAll("[data-pane]");
+    const label = document.getElementById("label");
+    const why = document.getElementById("why");
+    chips.forEach((c) => c.addEventListener("click", () => {
+      chips.forEach((x) => x.classList.toggle("on", x === c));
+      const v = c.dataset.v;
+      panes.forEach((p) => p.classList.toggle("hidden", p.dataset.pane !== v));
+      label.textContent = copy[v][0];
+      why.innerHTML = copy[v][1];
+    }));
+  </script>
+</body>
+</html>

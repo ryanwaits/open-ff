@@ -18,12 +18,15 @@ import {
 import { tradeDelta, type TradeDelta } from "@/lib/league/lineup-value";
 import { cn } from "@/lib/utils";
 
-type TradesSearch = { counter?: string };
+type TradesSearch = { counter?: string; want?: string; with?: number };
 
 export const Route = createFileRoute("/league/$leagueId/trades")({
   validateSearch: (s: Record<string, unknown>): TradesSearch => {
     const out: TradesSearch = {};
     if (typeof s.counter === "string") out.counter = s.counter;
+    if (typeof s.want === "string") out.want = s.want;
+    if (typeof s.with === "number" && Number.isFinite(s.with)) out.with = Math.floor(s.with);
+    else if (typeof s.with === "string" && /^\d+$/.test(s.with)) out.with = Number(s.with);
     return out;
   },
   component: TradesPage,
@@ -42,10 +45,12 @@ function TradesPage() {
     queryKey: ["trades", leagueId],
     queryFn: () => getTrades({ data: { leagueId } }),
   });
+  const picksOpen =
+    league.data?.draftStatus === "pending" || league.data?.draftStatus === "live";
   const picks = useQuery({
     queryKey: ["picks", leagueId],
     queryFn: () => getTradablePicks({ data: { leagueId } }),
-    enabled: Boolean(league.data?.hosted),
+    enabled: Boolean(league.data?.hosted && picksOpen),
   });
   const mineId = league.data?.myRosterId;
   const week = league.data?.currentWeek ?? 1;
@@ -63,14 +68,28 @@ function TradesPage() {
   }, [search.counter, trades.data]);
 
   // Counter: pick the other seat so the composer opens against the right roster.
+  // A player-page handoff (`?want=&with=`) does the same against the owner.
   useEffect(() => {
-    if (!counterTrade || mineId == null) return;
-    const other = counterTrade.sides.find((s) => s.rosterId !== mineId);
-    if (other) setPartnerId(other.rosterId);
-  }, [counterTrade, mineId]);
+    if (counterTrade && mineId != null) {
+      const other = counterTrade.sides.find((s) => s.rosterId !== mineId);
+      if (other) setPartnerId(other.rosterId);
+      return;
+    }
+    if (search.with != null) setPartnerId(search.with);
+  }, [counterTrade, mineId, search.with]);
 
   const composerInitial = useMemo((): TradeComposerInitial | null => {
-    if (!counterTrade || mineId == null) return null;
+    if (!counterTrade || mineId == null) {
+      if (!search.want) return null;
+      return {
+        sendPlayerIds: [],
+        sendPickNos: [],
+        sendFaab: null,
+        getPlayerIds: [search.want],
+        getPickNos: [],
+        getFaab: null,
+      };
+    }
     const sendPlayerIds: string[] = [];
     const getPlayerIds: string[] = [];
     const sendPickNos: number[] = [];
@@ -97,7 +116,7 @@ function TradesPage() {
       getPickNos,
       getFaab,
     };
-  }, [counterTrade, mineId]);
+  }, [counterTrade, mineId, search.want]);
 
   // One getTeam per involved roster, shared across every pending card.
   const bookRosterIds = useMemo(() => {
@@ -180,8 +199,14 @@ function TradesPage() {
     return [...byId.values()];
   }, [rosterById, mineTeam.data?.players, themTeam.data?.players, thirdTeam.data?.players]);
 
+  // Key on the actual ids. Length alone collides when you switch partners
+  // with the same roster size, and the new side renders as "—".
+  const projectionKey = useMemo(
+    () => projectionInputs.map((p) => p.player_id).sort().join(","),
+    [projectionInputs],
+  );
   const projectionsQ = useQuery({
-    queryKey: ["projections", leagueId, week, projectionInputs.length],
+    queryKey: ["projections", leagueId, week, projectionKey],
     queryFn: () =>
       getProjections({
         data: {
@@ -291,26 +316,37 @@ function TradesPage() {
     onError: (e) => toast(e instanceof Error ? e.message : "Could not cancel"),
   });
 
+  // Pulled or declined deals are finished. Keep proposed + processed only.
+  const book = useMemo(
+    () => (trades.data ?? []).filter((t) => t.status !== "cancelled" && t.status !== "rejected"),
+    [trades.data],
+  );
+
   if (!league.data?.hosted) {
     return <p className="text-sm text-muted">Trades live on hosted Ledger leagues.</p>;
   }
 
-  const preDraft = league.data.draftStatus === "pending" || league.data.draftStatus === "live";
+  const preDraft = picksOpen;
 
   return (
     <div className="space-y-8">
       <p className="max-w-xl text-sm text-muted">
         {preDraft
           ? "Draft hasn't happened yet — trade unused picks now. Your first for their first and second, dump a last-rounder, three-teamers. Ownership moves on the board immediately once everyone accepts."
-          : "Swap players and unused draft picks. Two teams or three. Everyone in the deal has to accept."}{" "}
+          : "Swap players. Two teams or three. Everyone in the deal has to accept."}{" "}
         Deadline week {league.data.ops?.tradeDeadlineWeek ?? 11}.
       </p>
 
       {mineId && !league.data.locked ? (
-        <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+        <section className="space-y-3">
           <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Propose</p>
-          <p className="mt-2 text-xs text-muted">Partner</p>
-          <div className="mt-2 flex flex-wrap gap-2">
+          {search.want && !counterTrade ? (
+            <p className="text-xs text-muted">
+              Player is on their roster. Partner is set — add what you want to send.
+            </p>
+          ) : null}
+          <p className="text-xs text-muted">Partner</p>
+          <div className="flex flex-wrap gap-2">
             {partners.map((p) => (
               <button
                 key={p.rosterId}
@@ -339,9 +375,9 @@ function TradesPage() {
               myRoster={mineTeam.data?.players ?? []}
               theirRoster={themTeam.data?.players ?? []}
               thirdRoster={thirdTeam.data?.players ?? []}
-              myPicks={myPicks}
-              theirPicks={theirPicks}
-              thirdPicks={thirdPickList}
+              myPicks={picksOpen ? myPicks : []}
+              theirPicks={picksOpen ? theirPicks : []}
+              thirdPicks={picksOpen ? thirdPickList : []}
               projections={projections}
               rosterPositions={rosterPositions}
               myFaabFree={Math.max(
@@ -355,11 +391,13 @@ function TradesPage() {
               countering={Boolean(counterTrade)}
               onProposed={() => {
                 invalidate();
-                if (search.counter) {
+                if (search.counter || search.want) {
                   void navigate({
                     search: (prev) => {
                       const next = { ...prev };
                       delete next.counter;
+                      delete next.want;
+                      delete next.with;
                       return next;
                     },
                   });
@@ -369,17 +407,15 @@ function TradesPage() {
           ) : null}
 
           {!thirdId ? (
-            <div className="mt-4">
-              <button
-                type="button"
-                className="font-mono text-[11px] uppercase text-muted hover:text-fg"
-                onClick={() =>
-                  setThirdId(partners.find((p) => p.rosterId !== them)?.rosterId ?? null)
-                }
-              >
-                + Team
-              </button>
-            </div>
+            <button
+              type="button"
+              className="font-mono text-[11px] uppercase text-muted hover:text-fg"
+              onClick={() =>
+                setThirdId(partners.find((p) => p.rosterId !== them)?.rosterId ?? null)
+              }
+            >
+              + Team
+            </button>
           ) : null}
         </section>
       ) : (
@@ -390,11 +426,11 @@ function TradesPage() {
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Book</p>
         {trades.isLoading ? (
           <p className="mt-3 text-sm text-muted">Loading…</p>
-        ) : !trades.data?.length ? (
+        ) : !book.length ? (
           <p className="mt-3 text-sm text-muted">No trades yet.</p>
         ) : (
           <ul className="mt-3 space-y-2">
-            {trades.data.map((t) => {
+            {book.map((t) => {
               const delta = deltas.get(t.id) ?? null;
               const minePlayers = mineId != null ? rosterById.get(mineId) : undefined;
               let posBefore: Record<string, number> | undefined;

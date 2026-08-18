@@ -83,20 +83,14 @@ export function TradeOfferCard({
   const proposer =
     trade.sides.find((s) => s.rosterId === trade.proposerRoster)?.teamName ??
     `Team ${trade.proposerRoster}`;
-  const mySide = myRosterId != null ? trade.sides.find((s) => s.rosterId === myRosterId) : undefined;
-  const waitingOnMe =
-    trade.status === "proposed" && Boolean(mySide && !mySide.accepted);
-  const waitingNames = trade.sides
-    .filter((s) => !s.accepted)
-    .map((s) => s.teamName);
+  const mySide =
+    myRosterId != null ? trade.sides.find((s) => s.rosterId === myRosterId) : undefined;
+  const waitingOnMe = trade.status === "proposed" && Boolean(mySide && !mySide.accepted);
+  const waitingNames = trade.sides.filter((s) => !s.accepted).map((s) => s.teamName);
   const involved = Boolean(mySide);
 
-  const incoming = involved
-    ? trade.assets.filter((a) => a.toRoster === myRosterId)
-    : trade.assets;
-  const outgoing = involved
-    ? trade.assets.filter((a) => a.fromRoster === myRosterId)
-    : [];
+  const incoming = involved ? trade.assets.filter((a) => a.toRoster === myRosterId) : trade.assets;
+  const outgoing = involved ? trade.assets.filter((a) => a.fromRoster === myRosterId) : [];
 
   const incomingPlayers = assetsToPlayers(incoming, playerById);
   const outgoingPlayers = assetsToPlayers(outgoing, playerById);
@@ -114,7 +108,8 @@ export function TradeOfferCard({
   const showDecide = waitingOnMe && onAccept && onDecline;
   const showHouse = Boolean(onAcceptHouse);
   const showPull = Boolean(onPull);
-  const showActions = trade.status === "proposed" && (showDecide || showHouse || showPull || onCounter);
+  const showActions =
+    trade.status === "proposed" && (showDecide || showHouse || showPull || onCounter);
 
   return (
     <li className="rounded-xl bg-surface px-4 py-3 shadow-[var(--shadow-border)]">
@@ -136,11 +131,7 @@ export function TradeOfferCard({
         </div>
         <Badge
           tone={
-            trade.status === "processed"
-              ? "win"
-              : trade.status === "proposed"
-                ? "live"
-                : "muted"
+            trade.status === "processed" ? "win" : trade.status === "proposed" ? "live" : "muted"
           }
         >
           {trade.status}
@@ -166,15 +157,7 @@ export function TradeOfferCard({
         ) : null}
       </div>
 
-      {delta != null && posBefore && posAfter ? (
-        <div className="mt-4 space-y-2 border-t border-line pt-3">
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-            Your roster after
-          </p>
-          <PositionBars before={posBefore} after={posAfter} />
-          {read ? <p className="text-sm text-muted">{read}</p> : null}
-        </div>
-      ) : null}
+      <TradeRosterAfter before={posBefore} after={posAfter} read={read} />
 
       <p className="mt-3 font-mono text-[11px] text-faint">
         {trade.sides.map((s) => `${s.teamName} ${s.accepted ? "in" : "…"}`).join(" · ")}
@@ -291,15 +274,47 @@ function AssetRow({
   return <PlayerStatRow data={data} dense />;
 }
 
+/** Depth that actually moved. Unchanged slots (1→1) are noise. */
+export function TradeRosterAfter({
+  before,
+  after,
+  read,
+}: {
+  before?: Record<string, number>;
+  after?: Record<string, number>;
+  read?: string | null;
+}) {
+  const moved =
+    before && after
+      ? [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(
+          (pos) => (before[pos] ?? 0) !== (after[pos] ?? 0),
+        )
+      : [];
+  if (!moved.length && !read) return null;
+  return (
+    <div className="mt-4 space-y-2 border-t border-line pt-3">
+      {before && after && moved.length > 0 ? (
+        <>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+            Your roster after
+          </p>
+          <PositionBars before={before} after={after} positions={moved} />
+        </>
+      ) : null}
+      {read ? <p className="text-sm text-muted">{read}</p> : null}
+    </div>
+  );
+}
+
 function PositionBars({
   before,
   after,
+  positions,
 }: {
   before: Record<string, number>;
   after: Record<string, number>;
+  positions: string[];
 }) {
-  const positions = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
-  if (!positions.length) return null;
   const max = Math.max(1, ...positions.map((p) => Math.max(before[p] ?? 0, after[p] ?? 0)));
 
   return (
@@ -307,7 +322,7 @@ function PositionBars({
       {positions.map((pos) => {
         const b = before[pos] ?? 0;
         const a = after[pos] ?? 0;
-        const thin = a <= 2;
+        const lost = a < b;
         return (
           <li key={pos} className="flex items-center gap-2 text-xs">
             <span className="w-7 shrink-0 font-mono text-[11px] text-muted">{pos}</span>
@@ -318,7 +333,7 @@ function PositionBars({
                 title={`now ${b}`}
               />
               <span
-                className={cn("h-2 rounded-xs", thin ? "bg-loss" : "bg-accent-strong")}
+                className={cn("h-2 rounded-xs", lost ? "bg-loss" : "bg-accent-strong")}
                 style={{ width: `${Math.max(8, (a / max) * 100)}%` }}
                 title={`after ${a}`}
               />
@@ -326,7 +341,7 @@ function PositionBars({
             <span
               className={cn(
                 "w-8 shrink-0 text-right font-mono tabular-nums",
-                thin ? "text-loss" : "text-muted",
+                lost ? "text-loss" : "text-muted",
               )}
             >
               {b}→{a}
