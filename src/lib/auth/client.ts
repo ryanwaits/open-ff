@@ -1,5 +1,6 @@
 import { genericOAuthClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
+import { getQueryClient } from "@/lib/query-client";
 import { GROK_PROVIDERS } from "./providers";
 
 /**
@@ -206,6 +207,7 @@ export async function signOut(redirectTo = "/"): Promise<void> {
     await authClient.signOut();
   } finally {
     setBearerToken(null);
+    getQueryClient().clear();
   }
   window.location.href = redirectTo;
 }
