@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import { DraftBoard } from "@/components/draft-board";
 import { PlayerCell } from "@/components/player-cell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,148 +71,164 @@ function DraftPage() {
   const d = draft.data;
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
-      <section>
-        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-          {d ? `${d.status} · pick ${Math.min(d.pickNo, d.total || 1)} / ${d.total || "—"}` : "Draft"}
-        </p>
-        <h2 className="mt-1 font-display text-3xl tracking-tight">
-          {d?.status === "complete"
-            ? "Board is closed"
-            : d?.onClockName
-              ? `${d.onClockName} is on the clock`
-              : "Waiting to open"}
-        </h2>
-        {d?.isMyPick ? (
-          <p className="mt-2 text-sm text-live">Your pick. Take someone.</p>
-        ) : null}
+    <div className="space-y-8">
+      {d == null ? (
+        <Skeleton className="h-64 rounded-xl" />
+      ) : (
+        <DraftBoard
+          board={d.board}
+          seats={d.seats}
+          onClockPickNo={d.pickNo}
+          myRosterId={league.data?.myRosterId ?? null}
+        />
+      )}
+      <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+        <section>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+            {d
+              ? `${d.status} · pick ${Math.min(d.pickNo, d.total || 1)} / ${d.total || "—"}`
+              : "Draft"}
+          </p>
+          <h2 className="mt-1 font-display text-3xl tracking-tight">
+            {d?.status === "complete"
+              ? "Board is closed"
+              : d?.onClockName
+                ? `${d.onClockName} is on the clock`
+                : "Waiting to open"}
+          </h2>
+          {d?.isMyPick ? <p className="mt-2 text-sm text-live">Your pick. Take someone.</p> : null}
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          {d?.status === "pending" && d.isCommish ? (
-            <Button onClick={() => start.mutate()} disabled={start.isPending}>
-              {start.isPending ? "Opening…" : "Open the draft"}
-            </Button>
-          ) : null}
-          {d?.status === "live" && d.isCommish ? (
-            <Button variant="outline" onClick={() => fill.mutate()} disabled={fill.isPending}>
-              {fill.isPending ? "Filling…" : "Autodraft the rest"}
-            </Button>
-          ) : null}
-          {d?.status === "complete" ? (
-            <Button asChild variant="outline">
-              <Link to="/league/$leagueId" params={{ leagueId }}>
-                Standings
-              </Link>
-            </Button>
-          ) : null}
-        </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {d?.status === "pending" && d.isCommish ? (
+              <Button onClick={() => start.mutate()} disabled={start.isPending}>
+                {start.isPending ? "Opening…" : "Open the draft"}
+              </Button>
+            ) : null}
+            {d?.status === "live" && d.isCommish ? (
+              <Button variant="outline" onClick={() => fill.mutate()} disabled={fill.isPending}>
+                {fill.isPending ? "Filling…" : "Autodraft the rest"}
+              </Button>
+            ) : null}
+            {d?.status === "complete" ? (
+              <Button asChild variant="outline">
+                <Link to="/league/$leagueId" params={{ leagueId }}>
+                  Standings
+                </Link>
+              </Button>
+            ) : null}
+          </div>
 
-        <ol className="mt-6 space-y-2">
-          {d == null
-            ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12" />)
-            : d.recent.map((p) => (
-                <li
-                  key={p.pick}
-                  className="flex items-center gap-3 rounded-lg bg-surface px-3 py-2 shadow-[var(--shadow-border)]"
-                >
-                  <span className="w-10 font-mono text-[11px] text-faint">
-                    {p.round}.{p.pick}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <PlayerCell player={p.player} compact />
-                  </div>
-                  <span className="truncate text-xs text-muted">{p.teamName}</span>
-                </li>
-              ))}
-          {d && d.recent.length === 0 ? (
-            <p className="text-sm text-muted">No picks yet. Unused picks can be traded before you open the board.</p>
-          ) : null}
-        </ol>
-
-        {d && d.stock.some((p) => !p.used) ? (
-          <div className="mt-8">
-            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Pick stock</p>
-            <ul className="mt-2 max-h-72 space-y-1 overflow-y-auto">
-              {d.stock
-                .filter((p) => !p.used)
-                .slice(0, 40)
-                .map((p) => (
+          <ol className="mt-6 space-y-2">
+            {d == null
+              ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12" />)
+              : d.recent.map((p) => (
                   <li
-                    key={p.pickNo}
-                    className="flex items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-sm"
+                    key={p.pick}
+                    className="flex items-center gap-3 rounded-lg bg-surface px-3 py-2 shadow-[var(--shadow-border)]"
                   >
-                    <span className="font-mono text-xs text-faint">{p.label}</span>
-                    <span className="min-w-0 truncate text-muted">
-                      {p.ownerName}
-                      {p.via ? <span className="text-faint"> · via {p.via}</span> : null}
+                    <span className="w-10 font-mono text-[11px] text-faint">
+                      {p.round}.{p.pick}
                     </span>
+                    <div className="min-w-0 flex-1">
+                      <PlayerCell player={p.player} compact />
+                    </div>
+                    <span className="truncate text-xs text-muted">{p.teamName}</span>
                   </li>
                 ))}
-            </ul>
-          </div>
-        ) : null}
-      </section>
+            {d && d.recent.length === 0 ? (
+              <p className="text-sm text-muted">
+                No picks yet. Unused picks can be traded before you open the board.
+              </p>
+            ) : null}
+          </ol>
 
-      <section>
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search the pool"
-            className="sm:max-w-xs"
-          />
-          <div className="flex flex-wrap gap-1">
-            {POS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPos(p)}
-                className={cn(
-                  "h-9 rounded-sm px-3 font-mono text-xs",
-                  pos === p ? "bg-accent text-accent-fg" : "bg-raised text-muted",
-                )}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
-        <ul className="mt-4 divide-y divide-line rounded-xl bg-surface shadow-[var(--shadow-border)]">
-          {d == null
-            ? Array.from({ length: 8 }).map((_, i) => (
-                <li key={i} className="p-3">
-                  <Skeleton className="h-8" />
-                </li>
-              ))
-            : available.map((p) => (
-                <li key={p.player_id} className="flex items-center gap-3 px-3 py-2">
-                  <div className="min-w-0 flex-1">
-                    <PlayerCell player={p} compact />
-                  </div>
-                  <span className="font-mono text-xs tabular-nums text-muted">
-                    {formatPts(p.pts, 1)}
-                  </span>
-                  {d.status === "live" && (d.isMyPick || d.isCommish) ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={pick.isPending}
-                      onClick={() => pick.mutate(p.player_id)}
+          {d && d.stock.some((p) => !p.used) ? (
+            <div className="mt-8">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+                Pick stock
+              </p>
+              <ul className="mt-2 max-h-72 space-y-1 overflow-y-auto">
+                {d.stock
+                  .filter((p) => !p.used)
+                  .slice(0, 40)
+                  .map((p) => (
+                    <li
+                      key={p.pickNo}
+                      className="flex items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-sm"
                     >
-                      Draft
-                    </Button>
-                  ) : (
-                    <Badge tone="muted">Pool</Badge>
+                      <span className="font-mono text-xs text-faint">{p.label}</span>
+                      <span className="min-w-0 truncate text-muted">
+                        {p.ownerName}
+                        {p.via ? <span className="text-faint"> · via {p.via}</span> : null}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          ) : null}
+        </section>
+
+        <section>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search the pool"
+              className="sm:max-w-xs"
+            />
+            <div className="flex flex-wrap gap-1">
+              {POS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPos(p)}
+                  className={cn(
+                    "h-9 rounded-sm px-3 font-mono text-xs",
+                    pos === p ? "bg-accent text-accent-fg" : "bg-raised text-muted",
                   )}
-                </li>
+                >
+                  {p}
+                </button>
               ))}
-        </ul>
-        {d != null && available.length === 0 ? (
-          <p className="mt-4 text-sm text-muted">
-            {needle ? "No one matches" : "No players left in the pool."}
-          </p>
-        ) : null}
-      </section>
+            </div>
+          </div>
+          <ul className="mt-4 divide-y divide-line rounded-xl bg-surface shadow-[var(--shadow-border)]">
+            {d == null
+              ? Array.from({ length: 8 }).map((_, i) => (
+                  <li key={i} className="p-3">
+                    <Skeleton className="h-8" />
+                  </li>
+                ))
+              : available.map((p) => (
+                  <li key={p.player_id} className="flex items-center gap-3 px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <PlayerCell player={p} compact />
+                    </div>
+                    <span className="font-mono text-xs tabular-nums text-muted">
+                      {formatPts(p.pts, 1)}
+                    </span>
+                    {d.status === "live" && (d.isMyPick || d.isCommish) ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={pick.isPending}
+                        onClick={() => pick.mutate(p.player_id)}
+                      >
+                        Draft
+                      </Button>
+                    ) : (
+                      <Badge tone="muted">Pool</Badge>
+                    )}
+                  </li>
+                ))}
+          </ul>
+          {d != null && available.length === 0 ? (
+            <p className="mt-4 text-sm text-muted">
+              {needle ? "No one matches" : "No players left in the pool."}
+            </p>
+          ) : null}
+        </section>
+      </div>
     </div>
   );
 }

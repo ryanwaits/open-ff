@@ -874,6 +874,20 @@ export async function loadDraft(
     via: string | null;
     used: boolean;
   }[];
+  board: {
+    pickNo: number;
+    round: number;
+    /** 1-based position within the round, after the snake is applied. */
+    slot: number;
+    label: string;
+    rosterId: number;
+    teamName: string;
+    /** The seat this pick started with, when it was traded. */
+    via: string | null;
+    player: { name: string; position: string | null } | null;
+  }[];
+  /** Seats in board order, so the grid can render columns without a second source. */
+  seats: { rosterId: number; teamName: string }[];
 }> {
 	await ensureDemo();
 	const league = await getLeague(leagueId);
@@ -921,6 +935,22 @@ export async function loadDraft(
 			used: Boolean(p.player_id)
 		};
 	});
+	const board = picks.map((p) => {
+		const orig = p.original_roster ?? p.roster_id;
+		const slot = (p.pick_no - 1) % nTeams + 1;
+		const player = p.player_id ? getPlayer(p.player_id) : null;
+		return {
+			pickNo: p.pick_no,
+			round: p.round,
+			slot,
+			label: `${p.round}.${String(slot).padStart(2, "0")}`,
+			rosterId: p.roster_id,
+			teamName: names.get(p.roster_id) ?? `Team ${p.roster_id}`,
+			via: orig !== p.roster_id ? names.get(orig) ?? null : null,
+			player: player ? { name: player.full_name, position: player.position } : null,
+		};
+	});
+	const seats = rosters.map((r) => ({ rosterId: r.roster_id, teamName: r.team_name }));
 	return {
 		status: draft?.status ?? "pending",
 		pickNo: draft?.pick_no ?? 1,
@@ -932,7 +962,9 @@ export async function loadDraft(
 		locked: league.locked === 1,
 		recent,
 		available,
-		stock
+		stock,
+		board,
+		seats,
 	};
 }
 export async function makePick(userId: string, leagueId: string, playerId: string): Promise<void> {
