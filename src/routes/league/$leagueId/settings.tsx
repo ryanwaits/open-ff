@@ -201,7 +201,9 @@ function SettingsPage() {
             />
           </label>
         </div>
-        <p className="mt-3 font-mono text-xs text-faint">Invite {q.data.inviteCode}</p>
+        {q.data.inviteCode ? (
+          <p className="mt-3 font-mono text-xs text-faint">Invite {q.data.inviteCode}</p>
+        ) : null}
       </section>
 
       <section>

@@ -155,7 +155,7 @@ function WirePage() {
               <span>
                 {c.mine ? "Your" : "A"} claim · +{c.add.name}
                 {c.drop ? ` / −${c.drop.name}` : ""}
-                {c.bid > 0 ? ` · $${c.bid}` : ""} · {c.status}
+                {c.bid != null && c.bid > 0 ? ` · $${c.bid}` : ""} · {c.status}
               </span>
               {c.mine ? (
                 <Button

@@ -529,7 +529,7 @@ export async function loadLeagueBundle(leagueId: string, userId: string | null, 
 		hosted: true,
 		myRosterId: mine,
 		isCommish: Boolean(userId && row.commish_id === userId),
-		inviteCode: row.invite_code,
+		inviteCode: userId && row.commish_id === userId ? row.invite_code : null,
 		draftStatus,
 		locked: row.locked === 1,
 		scoringLive,
@@ -1920,7 +1920,7 @@ export async function loadSettings(leagueId: string, userId: string | null): Pro
   leagueId: string;
   name: string;
   season: string;
-  inviteCode: string;
+  inviteCode: string | null;
   isCommish: boolean;
   locked: boolean;
   scoring: "ppr" | "half" | "std";
@@ -1957,7 +1957,7 @@ export async function loadSettings(leagueId: string, userId: string | null): Pro
 		leagueId: row.id,
 		name: row.name,
 		season: row.season,
-		inviteCode: row.invite_code,
+		inviteCode: userId && row.commish_id === userId ? row.invite_code : null,
 		isCommish: Boolean(userId && row.commish_id === userId),
 		locked: row.locked === 1,
 		scoring: presetOf(bookOf(row)),

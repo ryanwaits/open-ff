@@ -73,7 +73,7 @@ export function useClaim(leagueId: string) {
     /** Sum of your live claim bids, for the wager ticket's collision warning. */
     pendingClaimTotal: (claims.data?.items ?? [])
       .filter((c) => c.mine && c.status === "pending")
-      .reduce((t, c) => t + c.bid, 0),
+      .reduce((t, c) => t + (c.bid ?? 0), 0),
     mustDrop: rosterAtCap(bundle, team.data),
     droppable: droppableFrom(team.data),
     /** How full the roster is, so the dialog can explain rather than just demand. */
@@ -94,7 +94,7 @@ export function useClaim(leagueId: string) {
       return decide({
         bundle,
         mine: Boolean(team.data?.players.some((p) => p.player_id === playerId)),
-        pending: pending ? { id: pending.id, bid: pending.bid } : null,
+        pending: pending ? { id: pending.id, bid: pending.bid ?? 0 } : null,
         ownedBy: ownedBy ?? null,
         waiversOpen,
         money: waiverType === "faab",

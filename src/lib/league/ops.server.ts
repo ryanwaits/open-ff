@@ -484,17 +484,16 @@ export async function listClaims(leagueId: string, rosterId: number | null) {
     waiverType: league.waiver_type ?? "faab",
     items: rows
       .filter((r) => r.status === "pending" || r.roster_id === rosterId)
-      .map((r) => ({
-        id: r.id,
-        rosterId: r.roster_id,
-        mine: r.roster_id === rosterId,
-        add: { id: r.add_player_id, name: playerName(r.add_player_id), pos: getPlayer(r.add_player_id)?.position ?? null },
-        drop: r.drop_player_id
+      .map((r) => {
+        const mine = r.roster_id === rosterId;
+        const add = { id: r.add_player_id, name: playerName(r.add_player_id), pos: getPlayer(r.add_player_id)?.position ?? null };
+        const drop = r.drop_player_id
           ? { id: r.drop_player_id, name: playerName(r.drop_player_id), pos: getPlayer(r.drop_player_id)?.position ?? null }
-          : null,
-        bid: r.bid,
-        status: r.status,
-      })),
+          : null;
+        return mine
+          ? { id: r.id, rosterId: r.roster_id, mine: true as const, add, drop, bid: r.bid, status: r.status }
+          : { id: r.id, rosterId: r.roster_id, mine: false as const, add, drop, bid: null, status: r.status };
+      }),
   };
 }
 

@@ -120,7 +120,7 @@ function MatchupsPage() {
   // it would leave them unfunded on Wednesday.
   const pendingClaimTotal = (claims.data?.items ?? [])
     .filter((c) => c.mine && c.status === "pending")
-    .reduce((t, c) => t + c.bid, 0);
+    .reduce((t, c) => t + (c.bid ?? 0), 0);
   const projections = useQuery({
     queryKey: ["week-projections", leagueId, week],
     queryFn: () =>
