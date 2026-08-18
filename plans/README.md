@@ -1,0 +1,235 @@
+# Implementation Plans
+
+Two slices live here. Read the one you are executing from.
+
+- **001–005 — Desk performance** (improve skill, 2026-08-17, commit `1abb347`).
+  Goal: league desk feels like a spreadsheet — last-known numbers stay painted,
+  tabs do not reload, hard refresh restores the workbook, live scores still tick.
+  **All five are DONE.**
+- **006–014 — Draft room and league memory** (improve skill, 2026-08-17, commit
+  `9948a37`). Goal: a draft worth sitting in — a board, a 90-second clock,
+  sticky autodraft, a queue, mid-draft trading of picks/players/FAAB, and a mock
+  mode — then the second half of the context engine, so the weekly desk write-up
+  remembers a season instead of a week.
+- **015–021 — Projections and the trade desk** (improve skill, 2026-08-17,
+  commit `304cfb7`). Goal: a projection that moves during the season, a trade
+  priced by what your lineup actually scores, and a desk built from player rows
+  that carry their numbers instead of names that carry nothing.
+
+Execute in the order below. Each executor: read the plan fully, honor STOP
+conditions, update your row when done.
+
+## Decisions locked in
+
+### Desk performance (001–005)
+
+- **Hard refresh = persist first**, not SSR dehydrate. `myRosterId` is auth-personalized; a public HTML cache would lie. Persist the workbook keys in localStorage; keep live scores memory-only. Dehydrate is a later pass if first *anonymous* visit matters.
+- **Do not keep sheets mounted with `<Activity>` in this slice.** After 001, a remount reads the React Query cache and should paint instantly. Persist matchup `focus` in the URL (already on `/matchups`). Revisit Activity only if replay/scroll position still feels like a remount after 001–003 — and only if hidden trees pause their `refetchInterval`.
+
+### Draft room (006–012)
+
+- **90 seconds a pick.**
+- **A missed clock turns autodraft on and leaves it on** until the manager turns
+  it off — not a one-off autopick. Someone away for one pick is usually away for
+  the next, and a 90-second stall every round is worse for the nine people who
+  are present than an autopick is for the one who is not. Consequence: the queue
+  stops being a convenience and becomes the thing that drafts your team, which
+  is why 010 is a companion to 009 rather than optional.
+- **Expiry is checked on read, not only on cron.** There is no socket layer and
+  `/api/league/tick` is hourly, so a deadline nobody acts on would let a board
+  sit dead for up to 59 minutes. `loadDraft` advances a stalled board, so
+  whoever is looking keeps it moving. Every advance is a **conditional write** so
+  two clients cannot double-advance. This is the single most important decision
+  in the slice — see 008.
+- **The pick on the clock cannot be traded.** Otherwise the new owner either
+  inherits a half-spent clock or gets a fresh one, and a fresh one turns "trade
+  the pick you are on" into an unlimited stall button. Every future pick, every
+  drafted player and any FAAB stays tradeable.
+- **No future-season picks.** This year's board only.
+- **The mock uses the league's scoring book**, has no clock, and its history is
+  **ephemeral** — in memory while the page is open, gone on reload.
+
+### League memory (013–014)
+
+- **The ledger was written before anything read it** and is already
+  accumulating. 013 is the rollup half; 014 is the consumer.
+- **Facts are threshold-gated.** A fact that fires in week 1 is noise, and noise
+  is what makes generated writing feel generated. An empty fact list is a correct
+  answer.
+- **At most two facts per desk edition.** The cap is the feature; raising it
+  turns the desk into a trivia column.
+
+### Projections and the trade desk (015–021)
+
+- **Projections come from Sleeper's weekly feed, scored under each league's own
+  book.** Verified live: `/projections/nfl/{season}/{week}` answers 200 and
+  returns 26 QB / 78 RB / 124 WR / 73 TE with real numbers for week 8 of 2025.
+  Crucially it returns **raw components** (`pass_yd`, `rush_yd`, `rec`, …), not
+  just `pts_ppr` — so it goes through `applyBook()` exactly like an actual week
+  and a half-PPR league sees a half-PPR number. Storing or showing `pts_ppr`
+  directly is the bug this avoids.
+- **`perGameUnder` stays as the fallback**, and a projection sourced from it is
+  labelled `season-avg` rather than passed off as a forecast.
+- **A trade is priced by replacement value, never by summing the assets.** Fill
+  the starting lineup best-first before and after, and diff the totals. Trading
+  a QB1 while holding a QB2 costs the gap, not the score; trading a bench player
+  costs nothing. This is the single most important idea in the slice.
+- **No trade grades.** The app states what changes (`+2.1 projected`) and never
+  whether it is a good deal — the projection cannot support that claim. Plan 021
+  enforces it with a test that fails on evaluative words.
+- **The read line is deterministic, not a model call.** One short sentence over
+  numeric inputs; a model would add latency and a chance of inventing a figure.
+  The richer, model-written voice lives in the desk (013/014), where facts are
+  already threshold-gated.
+- **Rest-of-season projections are deferred.** A weekly number is not a season
+  value, and blending them silently would be dishonest. Its own plan when wanted.
+
+## Execution order & status
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| 001  | League tabs are in-app Links; router preloads on intent | P1 | S | — | DONE `e79cfbc` (not pushed) |
+| 002  | Never unmount last-known data; never lie about empty | P1 | S | — | DONE `ae6e12d` (not pushed) |
+| 003  | Shared QueryClient + loaders warm the next sheet | P1 | M | 001 | DONE `2f203be` (not pushed) |
+| 004  | Persist the workbook across refresh | P1 | M | 003 | DONE `9948a37` (not pushed) |
+| 005  | Cheap GETs: no tick-on-read, no extra bundle | P2 | M | — | DONE `deab224` (not pushed; step 4 slim week-stats skipped) |
+| 006  | Draft schema — clock deadline, sticky autodraft, pick queue | P1 | S | — | DONE `32fc696` (not pushed) |
+| 007  | Draft board grid — every pick visible at once | P1 | M | — | DONE `304cfb7` (not pushed) |
+| 008  | Draft clock — 90s a pick, advanced by whoever is looking | P1 | M | 006 | DONE `6ef392e` (not pushed; live expiry race not exercised — no unlocked draft) |
+| 009  | Sticky autodraft after a missed pick | P1 | S | 006, 008 | DONE `7cfd24c` (not pushed; live toggle tests skipped) |
+| 010  | Draft queue — the list that drafts for you | P1 | M | 006, 009 | DONE `ee66f0a` (not pushed) |
+| 011  | Mid-draft trading — picks, drafted players, FAAB | P2 | M | 007 | DONE `cf6fa91` (not pushed; live trade tests skipped — no signed-in mid-draft league) |
+| 012  | Mock draft — the same room with the writes turned off | P3 | M | 007, 010 | DONE `81b0c4c` (not pushed) |
+| 013  | Derived league facts — roll the ledger into standing facts | P2 | M | — | DONE `5009378` (not pushed; `832ba4e` locked-only, `ce31848` format) |
+| 014  | The desk remembers — feed facts into the weekly write-up | P2 | S | 013 | TODO |
+| 015  | Live weekly projections — a number that moves | P1 | M | — | TODO |
+| 016  | Replacement value — price a trade by the lineup it produces | P1 | S | — | TODO |
+| 017  | The player stat row — avatar, projection, rank, shape | P1 | M | — | TODO |
+| 018  | The offer card — decide with the facts in front of you | P1 | M | 016, 017 | TODO |
+| 019  | The composer — a readable deal, and FAAB you can send | P2 | L | 016, 017, 018 | TODO |
+| 020  | Three-team trades — every asset says where it lands | P3 | M | 019 | TODO |
+| 021  | The read line — one sentence that arranges the numbers | P3 | S | 016, 018/019 | TODO |
+
+Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED
+
+## Dependency notes
+
+### 001–005
+
+- 001 and 002 can run in parallel. Prefer 001 first — it is the largest perceived win and unblocks hover-preload.
+- 003 depends on 001 (`defaultPreload` only helps if tabs are `<Link>`). It also introduces `src/lib/query-client.ts`, which 004 extends.
+- 004 depends on 003 so persist attaches to the *router* QueryClient, not a second client created in `__root.tsx`.
+- 005 is independent of the client plans. Can ship anytime; cheapest after 003 so loaders are not amplifying expensive GETs.
+
+### 006–014
+
+- **006 blocks 008, 009 and 010** — they read columns it adds. It is 30 minutes
+  and changes nothing user-visible, so do it first regardless of what else is
+  planned.
+- **007 is independent of 006.** It reads no new columns and adds no writes,
+  which makes it the safest thing to ship first if you want visible progress.
+- **008 → 009 → 010 is a hard chain.** 009 modifies the `stampDeadline` and
+  `expireDraftPicks` that 008 creates; 010 modifies the `autopickFor` that 008
+  extracts.
+- **011 is parallelisable** with 008–010. It only needs 007 for the board to
+  render a traded pick, and touches `ops.server.ts` rather than the draft engine.
+- **012 needs 007 and 010** because it reuses `DraftBoard` and the queue panel
+  unchanged. If it cannot reuse them, that is a signal 007 built the board too
+  specifically — treat it as a STOP, not a fork.
+- **013 and 014 are independent of the whole draft slice.** They can run at any
+  time by a second executor. 014 needs 013.
+
+### 015–021
+
+- **015 is independent and highest leverage.** Six surfaces read through
+  `projectPlayers` / `outlooksFor` — the lineup board, the matchup spread, win
+  probability, the waiver dialog, and the whole trade desk — so it upgrades all
+  of them at once. Everything in 016–021 is *correct* without it but works off a
+  flat season average until it lands.
+- **016 and 017 are independent of each other** and both independent of 015.
+  Two executors can take one each.
+- **018 needs 016 and 017.** It is the highest-value trade surface and the
+  cheapest: no new state, no new mutation, a better rendering of data the page
+  already fetches.
+- **019 needs 018** only for the `?counter=` param it consumes; the rest is
+  independent. It is the largest plan in the slice.
+- **020 extends 019** and finishes removing `AssetCol`. 019 is explicitly told
+  to leave the existing three-team code path working rather than redesign it.
+- **021 needs 016** plus whichever of 018/019 exists.
+- **Relationship to 011 (in-draft trading):** separate work, no dependency in
+  either direction. 011 built `src/components/draft-trade-drawer.tsx` for
+  trading *during a draft*; 015–021 rebuild the season-long trade desk. Both
+  could share `PlayerStatRow` from 017 as a follow-up — worth doing so the two
+  trade surfaces look alike, but neither blocks the other and 017 is told not to
+  touch the drawer.
+
+## Known repo hazards (read before executing 006–014)
+
+- **`src/lib/league/engine.server.ts` is `// @ts-nocheck`.** `npm run typecheck`
+  will not check anything inside it, though exported signatures still bind
+  consumers. The trap: add a field to a declared return type, forget it in the
+  returned object, and typecheck passes while the field is `undefined` at
+  runtime. Plans 007–010 each restate this; verify engine return fields in the
+  browser Network tab, not with typecheck.
+- **`npm test` runs `node --test 'scripts/**/*.test.mjs'`** — build scripts
+  only. There is no engine, DB or component test harness, and none of these
+  plans stands one up. Verification is typecheck + build + a scripted
+  `npx vite-node` call + manual steps.
+- **There is no `biome.json`.** `npx biome check --write` therefore applies
+  Biome's default **tab** indentation to a 2-space codebase and will silently
+  reformat whole files. Use `biome check` to read findings; do not use `--write`
+  until a config pinning `indentStyle: "space"` exists.
+
+## Findings considered and rejected
+
+- **React `<Activity>` keep-alive of all five tabs (this slice):** remount + RQ cache is enough once Links exist. Hidden trees would keep 12–15s polls alive. Revisit after 001–003.
+- **SSR dehydrate / HydrationBoundary (this slice):** persist covers hard refresh for returning users; hosted bundle is per-user. Do not CDN-cache league HTML.
+- **Caching `myRosterId` in zustand/localStorage outside RQ:** auth-wrong after sign-out / seat claim.
+- **lucide barrel / unused recharts / manualChunks:** measure `npm run build` first; not a flicker source.
+- **Google font self-host:** FOUT is real but secondary; do not block 001–005.
+- **Optimistic start/sit (cell edits):** high leverage, separate plan after the workbook cache exists.
+- **Projections keyed by roster length:** fold into the cell-edits plan, not this slice.
+- **WebSockets for the draft clock:** a whole new transport for one screen. Read-path expiry (008) reuses the polling model already in place for live scoring.
+- **Client-side timers firing the pick advance:** ten browsers racing the same write, and a closed laptop stalls the draft. The client displays time; the server advances.
+- **Cron-only clock enforcement:** `/api/league/tick` is hourly, so a board could sit dead for 59 minutes. Kept as the backstop, not the mechanism.
+- **Pausing the draft during trade negotiation:** ten managers can negotiate indefinitely and the draft never finishes. Refusing the on-clock pick costs nothing instead.
+- **Trading future-season picks:** `ff_picks` has no season column; a much larger change and only interesting for dynasty leagues. Explicitly out of scope for 011.
+- **Persisting mock draft results:** ephemeral by decision. If that turns out to be wrong it is a separate plan, not a tweak to 012.
+- **Recency-weighting our own season average** (instead of a real projection feed): considered for 015 and rejected once the Sleeper feed was verified to return raw components. A weighted average of past performance is still backward-looking; a projection accounts for opponent and role.
+- **Using `pts_ppr` from the projections feed directly:** simpler, and wrong in every league that is not full PPR. Score the components with `applyBook()`.
+- **Unifying `applyLineup` (server) and `fillLineup` (client):** would mean either exporting from a `@ts-nocheck` file or making the trade preview server-only. Duplicated deliberately, with a comment in each.
+- **A trade grade or score:** the projection is a season points-per-game proxy under a book; it can compare two players, not judge a deal. Descriptive copy only.
+- **Routing the trade read line through a language model:** one short sentence over numeric inputs. A model adds latency and a chance of inventing a number. The model-written voice belongs in the desk (013/014).
+- **Drag-and-drop in the trade composer:** a new dependency for an interaction that click-to-add already handles.
+- **Four-team trades:** `proposeTrade` permits `sides.size > 2` but nobody has asked, and the tabbed roster column in 020 does not survive it.
+- **Sunday inactives sweep (90-minute pre-kickoff refresh):** the daily player
+  refresh already shipped, and the locked betting rule is that a bet placed
+  before news breaks is fair. That removes the requirement entirely. Not planned.
+
+## Suggested first execution
+
+**Slice 2, if you want visible progress fastest:** `006` (30 min, unblocks
+everything) → `007` (the board, most noticeable) → `011` (trading, independent)
+→ `008` → `009` → `010` → `012`.
+
+**With two executors:** one runs the draft chain `006 → 008 → 009 → 010`; the
+other runs `007`, then `011`, then `013 → 014`. They touch different files —
+the draft chain lives in `engine.server.ts`, while 011 is in `ops.server.ts` and
+013/014 are in `dispatch.ts` and a new module.
+
+## Suggested execution — slice 3
+
+**Single executor:** `015` → `017` → `016` → `018` → `019` → `020` → `021`.
+015 first because every number downstream depends on it; 018 is the first change
+anyone will actually notice.
+
+**Two executors:** one takes `015` (server, projections); the other takes `017`
+then `016` (client, pure). They meet at `018`.
+
+## Not yet verified anywhere
+
+Carried forward so it is not lost: **nothing in the FAAB wagering UI has been
+exercised by a human.** The economics are proven by direct database tests
+(supply conservation, pool-shortfall scaling, fair-odds payouts, the one-balance
+rule), but no one has clicked a price button. That needs a signed-in session and
+is not covered by any plan here.
