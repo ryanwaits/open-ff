@@ -333,7 +333,14 @@ function DraftPage() {
                 ))}
             {d && d.recent.length === 0 ? (
               <p className="text-sm text-muted">
-                No picks yet. Unused picks can be traded before you open the board.
+                No picks yet. Unused picks can be traded before you open the board.{" "}
+                <Link
+                  to="/league/$leagueId/mock"
+                  params={{ leagueId }}
+                  className="text-accent-strong underline-offset-2 hover:underline"
+                >
+                  Try a mock
+                </Link>
               </p>
             ) : null}
           </ol>

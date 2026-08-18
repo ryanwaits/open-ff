@@ -64,6 +64,43 @@ export const getDraft = createServerFn({ method: "GET" })
     return eng.loadDraft(data.leagueId, context.userId, data.position, data.query);
   });
 
+/** ~250 players scored under this league's book — mock draft only; no writes. */
+export const getMockPool = createServerFn({ method: "GET" })
+  .middleware([optionalAuthMiddleware])
+  .validator(z.object({ leagueId: z.string() }))
+  .handler(async ({ data }) => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { scoringBookFor, perGameUnder } = await import("@/lib/data/projections.server");
+    const { getPlayer } = await import("@/lib/data/sleeper.server");
+    const book = await scoringBookFor(data.leagueId);
+    const seed = JSON.parse(
+      readFileSync(join(process.cwd(), "data/stats-2025.json"), "utf8"),
+    ) as { player_id: string }[];
+    const out: {
+      playerId: string;
+      name: string;
+      position: string | null;
+      team: string | null;
+      pts: number;
+    }[] = [];
+    for (const row of seed) {
+      const p = getPlayer(row.player_id);
+      if (!p?.position) continue;
+      const pts = perGameUnder(book, row.player_id);
+      if (pts == null) continue;
+      out.push({
+        playerId: row.player_id,
+        name: p.full_name,
+        position: p.position,
+        team: p.team ?? null,
+        pts,
+      });
+    }
+    out.sort((a, b) => b.pts - a.pts);
+    return out.slice(0, 250);
+  });
+
 export const startDraft = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ leagueId: z.string() }))
