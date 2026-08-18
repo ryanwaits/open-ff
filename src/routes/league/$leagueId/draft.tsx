@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DraftBoard } from "@/components/draft-board";
 import { DraftTradeDrawer } from "@/components/draft-trade-drawer";
@@ -19,6 +19,30 @@ export const Route = createFileRoute("/league/$leagueId/draft")({
   component: DraftPage,
 });
 
+function formatClock(remainingMs: number | null): string {
+  if (remainingMs == null) return "--:--";
+  const total = Math.max(0, Math.ceil(remainingMs / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/** Client-only display of pickDeadline — does not mutate when it hits zero. */
+function usePickClock(pickDeadline: string | null | undefined) {
+  const [remainingMs, setRemainingMs] = useState<number | null>(null);
+  useEffect(() => {
+    if (!pickDeadline) {
+      setRemainingMs(null);
+      return;
+    }
+    const tick = () => setRemainingMs(new Date(pickDeadline).getTime() - Date.now());
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [pickDeadline]);
+  return remainingMs;
+}
+
 function DraftPage() {
   const { leagueId } = Route.useParams();
   const qc = useQueryClient();
@@ -34,6 +58,7 @@ function DraftPage() {
     queryFn: () => getDraft({ data: { leagueId, position: pos, query: "" } }),
     refetchInterval: (query) => (query.state.data?.status === "live" ? 4000 : false),
   });
+  const remainingMs = usePickClock(draft.data?.pickDeadline ?? null);
   const needle = q.trim().toLowerCase();
   const available = (draft.data?.available ?? []).filter((p) => {
     if (!needle) return true;
@@ -77,6 +102,8 @@ function DraftPage() {
     !(league.data?.locked || d?.locked) &&
     d != null &&
     d.status !== "complete";
+  const clockLabel = formatClock(d?.status === "live" ? remainingMs : null);
+  const clockUrgent = d?.status === "live" && remainingMs != null && remainingMs < 20_000;
 
   return (
     <div className="space-y-8">
@@ -98,12 +125,24 @@ function DraftPage() {
               : "Draft"}
           </p>
           <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
-            <h2 className="font-display text-3xl tracking-tight">
-              {d?.status === "complete"
-                ? "Board is closed"
-                : d?.onClockName
-                  ? `${d.onClockName} is on the clock`
-                  : "Waiting to open"}
+            <h2 className="flex flex-wrap items-baseline gap-x-3 font-display text-3xl tracking-tight">
+              <span>
+                {d?.status === "complete"
+                  ? "Board is closed"
+                  : d?.onClockName
+                    ? `${d.onClockName} is on the clock`
+                    : "Waiting to open"}
+              </span>
+              {d?.status === "live" ? (
+                <span
+                  className={cn(
+                    "font-mono text-2xl tabular-nums",
+                    clockUrgent ? "text-loss" : "text-muted",
+                  )}
+                >
+                  {clockLabel}
+                </span>
+              ) : null}
             </h2>
             {canTrade ? (
               <Button variant="outline" size="sm" onClick={() => setTradeOpen(true)}>

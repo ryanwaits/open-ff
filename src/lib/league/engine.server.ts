@@ -838,6 +838,18 @@ export async function joinLeague(userId: string, code: string, teamName: string,
   `;
 	return { leagueId: league.id, season: league.season, name: league.name };
 }
+/**
+ * Seconds a manager gets, from ff_draft.pick_seconds. Falls back to 90 for
+ * rows written before plans/006 landed.
+ */
+async function stampDeadline(leagueId, pickNo) {
+	const sql = await getSql();
+	await sql`
+    update ff_draft
+    set pick_deadline = now() + (coalesce(pick_seconds, 90) || ' seconds')::interval
+    where league_id = ${leagueId} and pick_no = ${pickNo}
+  `;
+}
 export async function startDraft(userId: string, leagueId: string): Promise<void> {
 	const league = await getLeague(leagueId);
 	if (league.commish_id !== userId) throw new Error("Only the commissioner can open the draft.");
@@ -848,6 +860,8 @@ export async function startDraft(userId: string, leagueId: string): Promise<void
 	await sql`update ff_draft set status = ${"live"}, pick_no = ${1} where league_id = ${leagueId}`;
 	await sql`update ff_leagues set status = ${"drafting"} where id = ${leagueId}`;
 	await flushHousePicks(leagueId);
+	const draft = (await sql`select pick_no from ff_draft where league_id = ${leagueId}`)[0];
+	if (draft) await stampDeadline(leagueId, draft.pick_no);
 }
 export async function loadDraft(
   leagueId: string,
@@ -888,9 +902,16 @@ export async function loadDraft(
   }[];
   /** Seats in board order, so the grid can render columns without a second source. */
   seats: { rosterId: number; teamName: string }[];
+  pickDeadline: string | null;
+  pickSeconds: number;
 }> {
 	await ensureDemo();
 	const league = await getLeague(leagueId);
+	try {
+		await expireDraftPicks(leagueId);
+	} catch {
+		// A stuck autopick must not make the draft page unreadable.
+	}
 	const sql = await getSql();
 	const draft = (await sql`select * from ff_draft where league_id = ${leagueId}`)[0];
 	const picks = await sql`select * from ff_picks where league_id = ${leagueId} order by pick_no`;
@@ -967,6 +988,8 @@ export async function loadDraft(
 		stock,
 		board,
 		seats,
+		pickDeadline: draft?.pick_deadline ? new Date(draft.pick_deadline).toISOString() : null,
+		pickSeconds: draft?.pick_seconds ?? 90,
 	};
 }
 export async function makePick(userId: string, leagueId: string, playerId: string): Promise<void> {
@@ -1001,7 +1024,10 @@ async function claimPick(leagueId, pick, playerId) {
       order by pick_no limit 1
     `)[0];
 	if (!next) await finishDraft(leagueId);
-	else await sql`update ff_draft set pick_no = ${next.pick_no} where league_id = ${leagueId}`;
+	else {
+		await sql`update ff_draft set pick_no = ${next.pick_no} where league_id = ${leagueId}`;
+		await stampDeadline(leagueId, next.pick_no);
+	}
 }
 async function finishDraft(leagueId) {
 	const league = await getLeague(leagueId);
@@ -1029,32 +1055,77 @@ async function finishDraft(leagueId) {
         values (${leagueId}, ${m.week}, ${m.id}, ${m.home}, ${m.away}, ${"regular"})
       `;
 	} else await ensureRemainingSchedule(leagueId);
-	await sql`update ff_draft set status = ${"complete"} where league_id = ${leagueId}`;
+	await sql`update ff_draft set status = ${"complete"}, pick_deadline = null where league_id = ${leagueId}`;
 	await sql`update ff_leagues set status = ${"in_season"} where id = ${leagueId}`;
+}
+/** Lookup used by flushHousePicks and expireDraftPicks — taken set, spots map, nextAutopick. */
+async function autopickFor(leagueId, rosterId) {
+	const sql = await getSql();
+	const ranked = rankPool();
+	const taken = new Set((await sql`
+      select player_id from ff_picks where league_id = ${leagueId} and player_id is not null
+    `).map((r) => r.player_id));
+	const spots = await getSpots(leagueId);
+	const byRoster = /* @__PURE__ */ new Map();
+	for (const s of spots) {
+		const arr = byRoster.get(s.roster_id) ?? [];
+		arr.push(s.player_id);
+		byRoster.set(s.roster_id, arr);
+	}
+	return nextAutopick(rosterId, byRoster, ranked, taken);
+}
+/**
+ * Advance the board if the pick on the clock has run out of time.
+ *
+ * Called from loadDraft — so whoever is looking at the draft keeps it moving —
+ * and from tickLeague as the backstop for when nobody is. Both paths are safe
+ * to run concurrently: the write is conditional on the pick number that was
+ * read, so a second caller affects zero rows instead of skipping a pick.
+ *
+ * Returns the number of picks it advanced, for logging and tests.
+ */
+export async function expireDraftPicks(leagueId: string): Promise<number> {
+	const sql = await getSql();
+	let advanced = 0;
+	for (let guard = 0; guard < 50; guard++) {
+		const draft = (await sql`select * from ff_draft where league_id = ${leagueId}`)[0];
+		if (!draft || draft.status !== "live" || !draft.pick_deadline) return advanced;
+		if (new Date(draft.pick_deadline).getTime() > Date.now()) return advanced;
+
+		// Claim the right to act on this pick. If another request got here first,
+		// this affects zero rows and we stop rather than advancing twice.
+		const claimed = await sql`
+      update ff_draft set pick_deadline = null
+      where league_id = ${leagueId} and pick_no = ${draft.pick_no}
+        and pick_deadline is not null
+      returning pick_no
+    `;
+		if (!claimed[0]) return advanced;
+
+		const pick = (await sql`
+      select * from ff_picks where league_id = ${leagueId} and pick_no = ${draft.pick_no}
+    `)[0];
+		if (!pick || pick.player_id) return advanced;
+
+		const player = await autopickFor(leagueId, pick.roster_id);
+		if (!player) return advanced;
+		await claimPick(leagueId, pick, player.player_id);
+		advanced += 1;
+	}
+	return advanced;
 }
 export async function flushHousePicks(leagueId: string): Promise<void> {
 	const league = await getLeague(leagueId);
 	if (league.locked || league.status !== "drafting") return;
 	const sql = await getSql();
 	const rosters = await getRosters(leagueId);
-	const ranked = rankPool();
 	for (let guard = 0; guard < 200; guard++) {
 		const draft = (await sql`select * from ff_draft where league_id = ${leagueId}`)[0];
 		if (!draft || draft.status !== "live") return;
 		const pick = (await sql`select * from ff_picks where league_id = ${leagueId} and pick_no = ${draft.pick_no}`)[0];
 		if (!pick || pick.player_id) return;
 		if (rosters.find((r) => r.roster_id === pick.roster_id)?.owner_id) return;
-		const taken = new Set((await sql`
-        select player_id from ff_picks where league_id = ${leagueId} and player_id is not null
-      `).map((r) => r.player_id));
-		const spots = await getSpots(leagueId);
-		const byRoster = /* @__PURE__ */ new Map();
-		for (const s of spots) {
-			const arr = byRoster.get(s.roster_id) ?? [];
-			arr.push(s.player_id);
-			byRoster.set(s.roster_id, arr);
-		}
-		const player = nextAutopick(pick.roster_id, byRoster, ranked, taken);
+		const player = await autopickFor(leagueId, pick.roster_id);
 		if (!player) return;
 		await claimPick(leagueId, pick, player.player_id);
 	}

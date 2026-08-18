@@ -935,6 +935,12 @@ export async function tickLeague(leagueId: string): Promise<{ advanced: number; 
   await ensureOpsSchema();
   startLeagueClock();
   const league = await leagueOf(leagueId);
+  try {
+    const { expireDraftPicks } = await import("./engine.server");
+    await expireDraftPicks(leagueId);
+  } catch {
+    /* a stuck draft must not stop the week clock */
+  }
   if (league.locked || league.status === "pre_draft" || league.status === "drafting") {
     return { advanced: 0, waivers: 0 };
   }
