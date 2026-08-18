@@ -1,5 +1,5 @@
-import { getSql } from "@/lib/db";
 import { getPlayer, playerName } from "@/lib/data/sleeper.server";
+import { getSql } from "@/lib/db";
 import { readEvents, type StoredEvent } from "./events.server";
 
 /**
@@ -77,10 +77,7 @@ function recordText(wins: number, losses: number, ties: number): string {
  * Score-based facts only use locked `ff_week_results` rows. Missing history
  * yields an empty list — never reconstructed scores from the current roster.
  */
-export async function loadLeagueFacts(
-  leagueId: string,
-  throughWeek: number,
-): Promise<LeagueFacts> {
+export async function loadLeagueFacts(leagueId: string, throughWeek: number): Promise<LeagueFacts> {
   const sql = await getSql();
   const weekCap = Math.max(0, Math.floor(throughWeek));
 
@@ -105,9 +102,7 @@ export async function loadLeagueFacts(
     `,
   ]);
 
-  const events = (await readEvents(leagueId, { limit: 2000 })).filter(
-    (e) => e.week <= weekCap,
-  );
+  const events = (await readEvents(leagueId, { limit: 2000 })).filter((e) => e.week <= weekCap);
 
   const teamName = new Map(rosters.map((r) => [r.roster_id, r.team_name]));
   const nameOf = (id: number) => teamName.get(id) ?? `Roster ${id}`;
@@ -338,9 +333,7 @@ function benchRegretFacts(
     const starterById = new Map(row.starters.map((s) => [s.playerId, s]));
     const starterIds = new Set(starterById.keys());
     const rosterSpots = spotsByRoster.get(rosterId) ?? [];
-    const benchIds = rosterSpots
-      .map((s) => s.player_id)
-      .filter((id) => !starterIds.has(id));
+    const benchIds = rosterSpots.map((s) => s.player_id).filter((id) => !starterIds.has(id));
 
     for (const benchId of benchIds) {
       // Only compare when the bench player already has a locked point.
