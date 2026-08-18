@@ -25,29 +25,27 @@ export const Route = createFileRoute("/league/$leagueId/standings")({
  */
 function LeaguePage() {
   const { leagueId } = Route.useParams();
+  const search = Route.useSearch();
 
   const league = useQuery({
     queryKey: ["league", leagueId],
     queryFn: () => getLeagueBundle({ data: { leagueId } }),
     refetchInterval: (q) => (q.state.data?.scoringLive ? 15_000 : false),
   });
-  const week = league.data?.currentWeek ?? 1;
+  const week = search.week ?? league.data?.currentWeek ?? 1;
 
   const matchups = useQuery({
     queryKey: ["matchups", leagueId, week],
     queryFn: () => getMatchups({ data: { leagueId, week } }),
-    enabled: Boolean(league.data),
     refetchInterval: () => (league.data?.scoringLive ? 15_000 : false),
   });
   const activity = useQuery({
     queryKey: ["activity", leagueId, week],
     queryFn: () => getActivity({ data: { leagueId, week } }),
-    enabled: Boolean(league.data),
   });
   const recap = useQuery({
     queryKey: ["recap", leagueId, week],
     queryFn: () => getRecap({ data: { leagueId, week } }),
-    enabled: Boolean(league.data),
   });
   const trades = useQuery({
     queryKey: ["trades", leagueId],

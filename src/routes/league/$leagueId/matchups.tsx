@@ -150,7 +150,6 @@ function MatchupsPage() {
   const matchups = useQuery({
     queryKey: ["matchups", leagueId, week],
     queryFn: () => getMatchups({ data: { leagueId, week } }),
-    enabled: Boolean(league.data),
     refetchInterval: (q) => {
       if (phase != null) return false;
       const rows = q.state.data ?? [];

@@ -20,6 +20,21 @@ export const Route = createFileRoute("/scores")({
         ? s.kind
         : undefined,
   }),
+  loaderDeps: ({ search }) => search,
+  loader: ({ context, deps }) => {
+    const { week, season, kind } = deps;
+    const seasonType = kind === "pre" ? 1 : kind === "post" ? 3 : 2;
+    return Promise.all([
+      context.queryClient.ensureQueryData({
+        queryKey: ["pulse"],
+        queryFn: () => getPulse(),
+      }),
+      context.queryClient.ensureQueryData({
+        queryKey: ["scores", season, week, seasonType],
+        queryFn: () => getScores({ data: { week, season, seasonType } }),
+      }),
+    ]);
+  },
   component: ScoresPage,
 });
 
@@ -52,7 +67,6 @@ function ScoresPage() {
           seasonType,
         },
       }),
-    enabled: week != null && season != null,
     refetchInterval: (query) => {
       const games = query.state.data?.games ?? [];
       if (games.some((g) => g.state === "in")) return 12_000;
@@ -67,7 +81,6 @@ function ScoresPage() {
       getLiveWire({
         data: { season, week, kind },
       }),
-    enabled: week != null && season != null,
     refetchInterval: (query) => (query.state.data?.live ? 12_000 : 30_000),
   });
 

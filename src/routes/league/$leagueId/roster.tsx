@@ -38,14 +38,15 @@ function MyTeamPage() {
     queryKey: ["league", leagueId],
     queryFn: () => getLeagueBundle({ data: { leagueId } }),
   });
-  const week = league.data?.currentWeek ?? 1;
+  const search = Route.useSearch();
+  const week = search.week ?? league.data?.currentWeek ?? 1;
   const rosterId = league.data?.myRosterId ?? null;
   const season = league.data?.league.season ?? "";
 
   const team = useQuery({
     queryKey: ["team", leagueId, rosterId, week],
     queryFn: () => getTeam({ data: { leagueId, rosterId: Number(rosterId), week } }),
-    enabled: rosterId != null && Boolean(league.data),
+    enabled: rosterId != null,
   });
   const byes = useQuery({
     queryKey: ["byes", season],
@@ -86,7 +87,6 @@ function MyTeamPage() {
   const activity = useQuery({
     queryKey: ["activity", leagueId, week],
     queryFn: () => getActivity({ data: { leagueId, week } }),
-    enabled: Boolean(league.data),
   });
 
   function invalidate() {

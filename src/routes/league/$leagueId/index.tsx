@@ -37,7 +37,8 @@ function MyTeamPage() {
     queryFn: () => getLeagueBundle({ data: { leagueId } }),
     refetchInterval: (q) => (q.state.data?.scoringLive ? 15_000 : false),
   });
-  const week = league.data?.currentWeek ?? 1;
+  const search = Route.useSearch();
+  const week = search.week ?? league.data?.currentWeek ?? 1;
   const rosterId = league.data?.myRosterId ?? null;
 
   const pulse = useQuery({ queryKey: ["pulse"], queryFn: () => getPulse() });
@@ -52,14 +53,13 @@ function MyTeamPage() {
   const team = useQuery({
     queryKey: ["team", leagueId, rosterId, week],
     queryFn: () => getTeam({ data: { leagueId, rosterId: Number(rosterId), week } }),
-    enabled: rosterId != null && Boolean(league.data),
+    enabled: rosterId != null,
     refetchInterval: () => (league.data?.scoringLive ? 15_000 : false),
   });
 
   const matchups = useQuery({
     queryKey: ["matchups", leagueId, week],
     queryFn: () => getMatchups({ data: { leagueId, week } }),
-    enabled: Boolean(league.data),
     refetchInterval: () => (league.data?.scoringLive ? 15_000 : false),
   });
 
@@ -87,13 +87,11 @@ function MyTeamPage() {
   const activity = useQuery({
     queryKey: ["activity", leagueId, week],
     queryFn: () => getActivity({ data: { leagueId, week } }),
-    enabled: Boolean(league.data),
   });
 
   const recap = useQuery({
     queryKey: ["recap", leagueId, week],
     queryFn: () => getRecap({ data: { leagueId, week } }),
-    enabled: Boolean(league.data),
   });
 
   const editable = Boolean(league.data?.hosted && rosterId != null && !league.data?.locked);

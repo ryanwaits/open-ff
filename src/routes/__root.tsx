@@ -1,18 +1,14 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import {
-  keepPreviousData,
-  QueryClient,
-  QueryClientProvider,
-} from "@tanstack/react-query";
-import {
-  createRootRoute,
+  createRootRouteWithContext,
   HeadContent,
   Outlet,
   Scripts,
 } from "@tanstack/react-router";
-import { useState } from "react";
 import { Toaster } from "sonner";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { AuthProvider } from "@/lib/auth/provider";
+import type { RouterContext } from "@/lib/query-client";
 import { NO_FLASH_SCRIPT, useTheme } from "@/lib/theme";
 import appCss from "../styles.css?url";
 
@@ -22,7 +18,7 @@ const ogImage = host
   ? `https://og.grok.me/v1/card.png?host=${encodeURIComponent(host)}&title=${encodeURIComponent(APP_NAME)}`
   : undefined;
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<RouterContext>()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -62,19 +58,7 @@ export const Route = createRootRoute({
 
 function RootDocument() {
   const { resolved } = useTheme();
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 30_000,
-            retry: 1,
-            refetchOnWindowFocus: false,
-            placeholderData: keepPreviousData,
-          },
-        },
-      }),
-  );
+  const { queryClient } = Route.useRouteContext();
 
   return (
     <html lang="en" className="antialiased" suppressHydrationWarning>

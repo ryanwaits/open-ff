@@ -7,12 +7,46 @@ import { Shell } from "@/components/shell";
 import { WeekPicker } from "@/components/week-picker";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getLeagueBundle } from "@/lib/data/fns";
+import { getLeagueBundle, getMatchups, getTeam } from "@/lib/data/fns";
 import { joinLeague } from "@/lib/league/fns";
 import { useLeagueStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
+type LeagueSearch = { week?: number; focus?: number };
+
 export const Route = createFileRoute("/league/$leagueId")({
+  validateSearch: (s: Record<string, unknown>): LeagueSearch => ({
+    week: s.week != null && Number.isFinite(Number(s.week)) ? Number(s.week) : undefined,
+    focus: s.focus != null && Number.isFinite(Number(s.focus)) ? Number(s.focus) : undefined,
+  }),
+  loader: async ({ context, params, location }) => {
+    const bundle = await context.queryClient.ensureQueryData({
+      queryKey: ["league", params.leagueId],
+      queryFn: () => getLeagueBundle({ data: { leagueId: params.leagueId } }),
+    });
+    const search = location.search as LeagueSearch;
+    const week = search.week ?? bundle.currentWeek ?? 1;
+    const jobs: Promise<unknown>[] = [
+      context.queryClient.ensureQueryData({
+        queryKey: ["matchups", params.leagueId, week],
+        queryFn: () => getMatchups({ data: { leagueId: params.leagueId, week } }),
+      }),
+    ];
+    const myRosterId = bundle.myRosterId;
+    if (myRosterId != null) {
+      jobs.push(
+        context.queryClient.ensureQueryData({
+          queryKey: ["team", params.leagueId, myRosterId, week],
+          queryFn: () =>
+            getTeam({
+              data: { leagueId: params.leagueId, rosterId: myRosterId, week },
+            }),
+        }),
+      );
+    }
+    await Promise.all(jobs);
+    return { week };
+  },
   component: LeagueLayout,
 });
 
