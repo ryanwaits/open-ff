@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getLeagueBundle } from "@/lib/data/fns";
-import { autoFillDraft, getDraft, makePick, startDraft } from "@/lib/league/fns";
+import { autoFillDraft, getDraft, makePick, setAutodraft, startDraft } from "@/lib/league/fns";
 import { cn, formatPts } from "@/lib/utils";
 
 const POS = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"] as const;
@@ -86,6 +86,11 @@ function DraftPage() {
     onSuccess: invalidate,
     onError: (e) => toast(e instanceof Error ? e.message : "Pick failed"),
   });
+  const autodraft = useMutation({
+    mutationFn: (on: boolean) => setAutodraft({ data: { leagueId, on } }),
+    onSuccess: invalidate,
+    onError: (e) => toast(e instanceof Error ? e.message : "Could not update autodraft"),
+  });
 
   if (!league.data?.hosted) {
     return (
@@ -151,6 +156,32 @@ function DraftPage() {
             ) : null}
           </div>
           {d?.isMyPick ? <p className="mt-2 text-sm text-live">Your pick. Take someone.</p> : null}
+          {d?.status === "live" && myRosterId != null ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {d.myAutodraft ? (
+                <>
+                  <Badge tone="live">Autodraft on</Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={autodraft.isPending}
+                    onClick={() => autodraft.mutate(false)}
+                  >
+                    {autodraft.isPending ? "Updating…" : "Turn off autodraft"}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={autodraft.isPending}
+                  onClick={() => autodraft.mutate(true)}
+                >
+                  {autodraft.isPending ? "Updating…" : "Autodraft for me"}
+                </Button>
+              )}
+            </div>
+          ) : null}
 
           <div className="mt-4 flex flex-wrap gap-2">
             {d?.status === "pending" && d.isCommish ? (

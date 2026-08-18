@@ -82,6 +82,15 @@ export const makePick = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const setAutodraft = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ leagueId: z.string(), on: z.boolean() }))
+  .handler(async ({ context, data }) => {
+    const eng = await import("./engine.server");
+    await eng.setAutodraft(context.userId, data.leagueId, data.on);
+    return { ok: true };
+  });
+
 export const autoFillDraft = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ leagueId: z.string() }))
