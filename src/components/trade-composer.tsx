@@ -3,11 +3,11 @@ import { X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { PlayerStatRow, type PlayerStatRowData } from "@/components/player-stat-row";
-import { consequenceLine } from "@/components/trade-offer-card";
 import { Button } from "@/components/ui/button";
 import type { Projection, RosterPlayer } from "@/lib/data/types";
 import { proposeTrade } from "@/lib/league/fns";
 import { tradeDelta } from "@/lib/league/lineup-value";
+import { readTrade } from "@/lib/league/trade-read";
 import { cn } from "@/lib/utils";
 
 /**
@@ -308,12 +308,13 @@ export function TradeComposer({
   }, [thirdRosterId]);
 
   // --- Balance: always your roster only ---
-  const delta = useMemo(() => {
-    if (!rosterPositions.length) return null;
+  const tradeSides = useMemo(() => {
     let outgoingIds: string[];
     let incoming: RosterPlayer[];
+    let outgoing: RosterPlayer[];
     if (three) {
       outgoingIds = minePlayers.map((a) => a.id);
+      outgoing = myRoster.filter((p) => outgoingIds.includes(p.player_id));
       incoming = [
         ...theirRoster.filter((p) =>
           themPlayers.some((a) => a.id === p.player_id && a.to === myRosterId),
@@ -324,22 +325,15 @@ export function TradeComposer({
       ];
     } else {
       outgoingIds = sendPlayers;
+      outgoing = myRoster.filter((p) => sendPlayers.includes(p.player_id));
       incoming = theirRoster.filter((p) => getPlayers.includes(p.player_id));
     }
-    return tradeDelta({
-      players: myRoster,
-      rosterPositions,
-      projections,
-      outgoingIds,
-      incoming,
-    });
+    return { outgoingIds, incoming, outgoing };
   }, [
     three,
     myRoster,
     theirRoster,
     thirdRoster,
-    rosterPositions,
-    projections,
     sendPlayers,
     getPlayers,
     minePlayers,
@@ -347,6 +341,26 @@ export function TradeComposer({
     thirdPlayers,
     myRosterId,
   ]);
+
+  const delta = useMemo(() => {
+    if (!rosterPositions.length) return null;
+    return tradeDelta({
+      players: myRoster,
+      rosterPositions,
+      projections,
+      outgoingIds: tradeSides.outgoingIds,
+      incoming: tradeSides.incoming,
+    });
+  }, [myRoster, rosterPositions, projections, tradeSides]);
+
+  const read = useMemo(() => {
+    if (!delta) return null;
+    return readTrade({
+      delta,
+      incoming: tradeSides.incoming,
+      outgoing: tradeSides.outgoing,
+    });
+  }, [delta, tradeSides]);
 
   const faabNet = useMemo(() => {
     if (!three) return (getFaab ?? 0) - (sendFaab ?? 0);
@@ -739,7 +753,7 @@ export function TradeComposer({
       <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Balance</p>
       {delta ? (
         <>
-          <p className="text-sm text-muted">{consequenceLine(delta)}</p>
+          <p className="text-sm text-muted">{read}</p>
           {delta.changed.length > 0 ? (
             <ul className="space-y-1">
               {delta.changed.map((row) => (

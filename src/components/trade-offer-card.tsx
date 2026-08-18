@@ -2,8 +2,9 @@ import { formatDistanceToNow } from "date-fns";
 import { PlayerStatRow, type PlayerStatRowData } from "@/components/player-stat-row";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { Projection, SlimPlayer } from "@/lib/data/types";
+import type { Projection, RosterPlayer, SlimPlayer } from "@/lib/data/types";
 import type { TradeDelta } from "@/lib/league/lineup-value";
+import { readTrade } from "@/lib/league/trade-read";
 import { cn } from "@/lib/utils";
 
 /**
@@ -53,6 +54,7 @@ export function TradeOfferCard({
   playerById,
   posBefore,
   posAfter,
+  byes,
   onAccept,
   onDecline,
   onCounter,
@@ -69,6 +71,8 @@ export function TradeOfferCard({
   /** Position depth counts on your roster before / after the swap. */
   posBefore?: Record<string, number>;
   posAfter?: Record<string, number>;
+  /** Team → bye week; optional caveat for the read line. */
+  byes?: Record<string, number>;
   onAccept?: () => void;
   onDecline?: () => void;
   onCounter?: () => void;
@@ -93,6 +97,19 @@ export function TradeOfferCard({
   const outgoing = involved
     ? trade.assets.filter((a) => a.fromRoster === myRosterId)
     : [];
+
+  const incomingPlayers = assetsToPlayers(incoming, playerById);
+  const outgoingPlayers = assetsToPlayers(outgoing, playerById);
+  const read =
+    delta != null
+      ? readTrade({
+          delta,
+          incoming: incomingPlayers,
+          outgoing: outgoingPlayers,
+          byes,
+          week: trade.week,
+        })
+      : null;
 
   const showDecide = waitingOnMe && onAccept && onDecline;
   const showHouse = Boolean(onAcceptHouse);
@@ -155,7 +172,7 @@ export function TradeOfferCard({
             Your roster after
           </p>
           <PositionBars before={posBefore} after={posAfter} />
-          <p className="text-sm text-muted">{consequenceLine(delta)}</p>
+          {read ? <p className="text-sm text-muted">{read}</p> : null}
         </div>
       ) : null}
 
@@ -321,17 +338,25 @@ function PositionBars({
   );
 }
 
-/** Single descriptive line — plan 021 replaces this. */
-export function consequenceLine(delta: TradeDelta): string {
-  if (delta.changed.length === 0) return "No change to who starts";
-  const top = delta.changed.reduce((best, row) =>
-    Math.abs(row.delta) > Math.abs(best.delta) ? row : best,
-  );
-  const pts =
-    delta.change === 0
-      ? "Lineup shifts"
-      : `${delta.change > 0 ? "+" : ""}${delta.change.toFixed(1)} projected this week`;
-  const into = top.to?.full_name ?? "open";
-  const out = top.from?.full_name ?? "open";
-  return `${pts} · ${top.slot}: ${into} for ${out}`;
+function assetsToPlayers(
+  assets: TradeOfferAsset[],
+  playerById?: Map<string, SlimPlayer>,
+): RosterPlayer[] {
+  const out: RosterPlayer[] = [];
+  for (const a of assets) {
+    if (a.kind !== "player" || !a.playerId) continue;
+    const known = playerById?.get(a.playerId);
+    out.push({
+      player_id: a.playerId,
+      full_name: known?.full_name ?? a.playerName ?? "Player",
+      last_name: known?.last_name,
+      position: known?.position ?? a.pos,
+      team: known?.team ?? null,
+      injury_status: known?.injury_status,
+      status: known?.status,
+      slot: "bench",
+      weekPts: null,
+    });
+  }
+  return out;
 }
