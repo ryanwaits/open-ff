@@ -22,6 +22,7 @@ import { sitPlayer, startPlayer } from "@/lib/league/fns";
 import { planAutoFill } from "@/lib/league/autofill";
 import { lineupHealth, resolvePhase } from "@/lib/league/phase";
 import { cn, fmtRecord, formatPts } from "@/lib/utils";
+import { baseSlotLabel } from "@/lib/data/teams";
 
 export const Route = createFileRoute("/league/$leagueId/")({
   component: MyTeamPage,
@@ -279,7 +280,7 @@ function MyTeamPage() {
                   game: p.game ?? null,
                   context: {
                     label: p.slot === "starter" ? `Starting at ${p.starterSlot}` : "On your bench",
-                    rows: [["Slot", p.starterSlot ?? "Bench"]],
+                    rows: [["Slot", baseSlotLabel(p.starterSlot) || "Bench"]],
                   },
                 })
               }

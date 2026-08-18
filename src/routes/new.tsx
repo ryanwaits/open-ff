@@ -29,8 +29,8 @@ function NewLeague() {
       }),
     onSuccess: (res) => {
       remember({ leagueId: res.leagueId, name, season: res.season });
-      toast(`Invite code ${res.inviteCode}`);
-      void navigate({ to: "/league/$leagueId/draft", params: { leagueId: res.leagueId } });
+      toast(`Invite code ${res.inviteCode}. You're the commissioner.`);
+      void navigate({ to: "/league/$leagueId/settings", params: { leagueId: res.leagueId } });
     },
     onError: (err) => {
       const msg = err instanceof Error ? err.message : "Could not create league.";
@@ -53,6 +53,23 @@ function NewLeague() {
       <p className="mt-2 max-w-xl text-sm text-muted">
         Friends sign in here — not on Sleeper. You get an invite code. Empty
         seats can be house clubs so you can draft tonight.
+      </p>
+
+      <Link
+        to="/import"
+        className="mt-6 flex max-w-lg items-center justify-between gap-3 rounded-xl bg-surface px-4 py-4 text-left shadow-[var(--shadow-border)] hover:shadow-[var(--shadow-border-hover)]"
+      >
+        <span>
+          <span className="block text-sm font-semibold">Import WIFFL or a recap</span>
+          <span className="mt-0.5 block text-xs text-muted">
+            Load the known draft or drop an ESPN PDF. You pick your seat before it becomes a league.
+          </span>
+        </span>
+        <span className="shrink-0 font-mono text-[11px] uppercase text-faint">Import</span>
+      </Link>
+
+      <p className="mt-8 font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+        Or start empty
       </p>
 
       <form

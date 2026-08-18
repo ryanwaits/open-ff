@@ -2,7 +2,8 @@ import type { ActivityItem, MatchupPair, StandingRow } from "@/lib/data/types";
 import { voicePack } from "./desk-voice";
 
 export type DispatchVoice = {
-  nicknames: Record<string, string>;
+  /** One or many names the desk may use. First is the default; call() rotates by week. */
+  nicknames: Record<string, string | string[]>;
   bits: string[];
 };
 
@@ -80,8 +81,17 @@ export function voiceFor(leagueId: string, leagueName: string): DispatchVoice {
   return voicePack(leagueName);
 }
 
-function call(voice: DispatchVoice, team: string): string {
-  return voice.nicknames[team] ?? team;
+function namesOfTeam(voice: DispatchVoice, team: string): string[] {
+  const raw = voice.nicknames[team];
+  if (raw == null) return [team];
+  const list = (Array.isArray(raw) ? raw : [raw]).map((s) => s.trim()).filter(Boolean);
+  return list.length ? list : [team];
+}
+
+/** Pick a nickname. Week rotates the list so consecutive editions do not always say the same one. */
+function call(voice: DispatchVoice, team: string, week = 0): string {
+  const list = namesOfTeam(voice, team);
+  return list[Math.abs(week) % list.length] ?? team;
 }
 
 function studOf(side: MatchupPair["home"]): { name: string; pts: number; slot: string } | null {
@@ -246,7 +256,7 @@ function weaveFacts(body: string[], facts: Array<{ text: string }>): void {
 }
 
 export function composeDesk(ctx: DispatchContext): DeskEdition {
-  const named = (t: string) => call(ctx.voice, t);
+  const named = (t: string) => call(ctx.voice, t, ctx.week);
   const scored = ctx.games.filter((g) => g.homePts > 0 || g.awayPts > 0);
   const edition: "prep" | "recap" = scored.length ? "recap" : "prep";
   const profiles = ctx.rosters.map(construct);

@@ -293,18 +293,18 @@ function ImportPage() {
         Bring a league over
       </p>
       <h1 className="mt-2 font-display text-4xl tracking-tight">
-        {step === "review" ? "Verify the board" : "Rebuild"}
+        {step === "review" ? "Verify the board" : "Import a league"}
       </h1>
       <p className="mt-2 max-w-xl text-sm text-muted">
         {step === "review"
           ? "Names, seats, and matches — edit anything that’s off, then create the league. Nothing is saved until you confirm."
-          : "Paste a recap, drop a PDF or txt, or load a known draft. Confirm every roster before it becomes a league."}
+          : "Load a known draft, drop a PDF, or paste a roster list. Confirm every seat before it becomes a league."}
       </p>
 
       <div className="mt-8 flex flex-wrap gap-1">
         {(
           [
-            ["rebuild", "Recap"],
+            ["rebuild", "Draft"],
             ["sleeper", "Sleeper"],
             ["espn", "ESPN"],
           ] as const
@@ -437,50 +437,42 @@ function ImportPage() {
                       <span className="min-w-0">
                         <span className="block truncate text-sm">{t.teamName}</span>
                         <span className="font-mono text-[11px] text-faint">
-                          {t.manager}
-                          {t.record ? ` · ${t.record}` : ""} · {t.players} matched
+                          {t.record ? `${t.record} · ` : ""}
+                          {t.players} matched
                           {t.unmatched.length ? ` · ${t.unmatched.length} missed` : ""}
+                          {yours ? " · your seat" : ""}
                         </span>
                       </span>
                       <ChevronDown
                         className={cn("size-4 shrink-0 text-faint transition-transform", open && "rotate-180")}
                       />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setClaim(t.rosterId)}
-                      className={cn(
-                        "shrink-0 px-4 font-mono text-[11px] uppercase",
-                        yours ? "text-fg" : "text-faint hover:text-fg",
-                      )}
-                    >
-                      {yours ? "Yours" : "Claim"}
-                    </button>
+                    <div className="flex shrink-0 items-center pr-3">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={yours ? "primary" : "outline"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setClaim(t.rosterId);
+                        }}
+                      >
+                        {yours ? "Your seat" : "Claim"}
+                      </Button>
+                    </div>
                   </div>
                   {open ? (
                     <div className="space-y-3 border-t border-line px-4 py-3">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="block">
-                          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-                            Team
-                          </span>
-                          <Input
-                            className="mt-1.5"
-                            value={t.teamName}
-                            onChange={(e) => updateTeam(t.rosterId, { teamName: e.target.value })}
-                          />
-                        </label>
-                        <label className="block">
-                          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-                            Manager
-                          </span>
-                          <Input
-                            className="mt-1.5"
-                            value={t.manager}
-                            onChange={(e) => updateTeam(t.rosterId, { manager: e.target.value })}
-                          />
-                        </label>
-                      </div>
+                      <label className="block">
+                        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+                          Team
+                        </span>
+                        <Input
+                          className="mt-1.5"
+                          value={t.teamName}
+                          onChange={(e) => updateTeam(t.rosterId, { teamName: e.target.value })}
+                        />
+                      </label>
                       <label className="block">
                         <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
                           Roster · one name per line
@@ -530,13 +522,22 @@ function ImportPage() {
           <div className="sticky bottom-3 mt-6 flex flex-wrap items-center gap-3 rounded-xl bg-bg/90 p-3 shadow-[var(--shadow-border)] backdrop-blur-md">
             <Button
               type="button"
-              onClick={() => run.mutate()}
-              disabled={isPending || run.isPending || draft.length < 2}
+              onClick={() => {
+                if (claim == null) {
+                  toast("Claim your seat first.");
+                  return;
+                }
+                run.mutate();
+              }}
+              disabled={isPending || run.isPending || draft.length < 2 || claim == null}
             >
               {run.isPending ? "Importing…" : "Confirm import"}
             </Button>
             <p className="text-xs text-muted">
-              {draft.length} teams · claim {draft.find((t) => t.rosterId === claim)?.teamName ?? "a seat"}
+              {draft.length} teams
+              {claim == null
+                ? " · claim a seat to continue"
+                : ` · importing as ${draft.find((t) => t.rosterId === claim)?.teamName}`}
             </p>
           </div>
         </section>

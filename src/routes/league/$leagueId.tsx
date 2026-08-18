@@ -181,7 +181,10 @@ function LeagueLayout() {
                 playoffStart={playoffStart}
                 currentWeek={q.data.currentWeek}
                 onPick={(w) =>
-                  void navigate({ to: pathname, search: (prev) => ({ ...prev, week: w }) })
+                  void navigate({
+                    to: pathname,
+                    search: (prev) => ({ ...prev, week: w, focus: undefined }),
+                  })
                 }
               />
             ) : null}

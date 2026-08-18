@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { DEMO_HOSTED_ID, DEMO_HOSTED_NAME } from "@/lib/data/types";
 
 export type SavedLeague = {
   leagueId: string;
@@ -17,9 +16,7 @@ type LeagueStore = {
 export const useLeagueStore = create<LeagueStore>()(
   persist(
     (set, get) => ({
-      recent: [
-        { leagueId: DEMO_HOSTED_ID, name: DEMO_HOSTED_NAME, season: "2025" },
-      ],
+      recent: [],
       hasHydrated: false,
       remember: (league) => {
         const next = [

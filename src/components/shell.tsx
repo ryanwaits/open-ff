@@ -25,6 +25,7 @@ export function Shell({
   children,
   tabs,
   trailing,
+  center = false,
 }: {
   children: React.ReactNode;
   /**
@@ -34,6 +35,8 @@ export function Shell({
   tabs?: ShellTab[];
   /** Extra header control, e.g. the league setup gear. */
   trailing?: React.ReactNode;
+  /** Center the page body in the remaining viewport (home / empty states). */
+  center?: boolean;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const hasHydrated = useLeagueStore((s) => s.hasHydrated);
@@ -123,7 +126,14 @@ export function Shell({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-6 md:pb-12">{children}</main>
+      <main
+        className={cn(
+          "mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 pb-24 pt-6 md:pb-12",
+          center && "items-center justify-center",
+        )}
+      >
+        {children}
+      </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/95 backdrop-blur-md md:hidden">
         {tabs?.length ? (

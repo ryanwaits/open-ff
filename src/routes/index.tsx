@@ -22,21 +22,21 @@ function Home() {
   const seats = mine.data ?? [];
 
   return (
-    <Shell>
-      <section className="max-w-xl pt-6">
+    <Shell center>
+      <section className="w-full max-w-xl text-center">
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
           Hosted here &middot; no other app
         </p>
-        <h1 className="mt-3 font-display text-5xl font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-6xl">
+        <h1 className="mt-3 font-display text-5xl font-extrabold leading-[1.02] tracking-[-0.035em] text-balance sm:text-6xl">
           Your league, <span className="hl">your desk</span>.
         </h1>
-        <p className="mt-5 text-base leading-relaxed text-muted">
+        <p className="mx-auto mt-5 max-w-md text-base leading-relaxed text-muted">
           Sign in, claim a seat, play the week. Commissioners set the book.
         </p>
       </section>
 
       {seats.length > 0 ? (
-        <section className="mt-8">
+        <section className="mt-8 w-full max-w-lg text-center">
           <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
             Your leagues
           </h2>
@@ -63,7 +63,7 @@ function Home() {
               </li>
             ))}
           </ul>
-          <div className="mt-4 flex gap-3 text-sm">
+          <div className="mt-4 flex justify-center gap-3 text-sm">
             <Link to="/join" className="text-muted hover:text-fg">
               Join another
             </Link>
@@ -79,9 +79,9 @@ function Home() {
           </div>
         </section>
       ) : isPending || mine.data == null ? (
-        <div className="mt-8 h-24 animate-pulse rounded-xl bg-surface" />
+        <div className="mt-8 h-24 w-full max-w-sm animate-pulse rounded-xl bg-surface" />
       ) : !user ? (
-        <div className="mt-8 flex flex-col gap-2 sm:max-w-sm">
+        <div className="mt-8 flex w-full max-w-sm flex-col gap-2">
           <Button asChild>
             <Link to="/join">I have an invite</Link>
           </Button>
@@ -93,13 +93,16 @@ function Home() {
           </Link>
         </div>
       ) : (
-        <div className="mt-8 flex flex-col gap-3 sm:max-w-xs">
+        <div className="mt-8 flex w-full max-w-sm flex-col gap-3">
           <Button asChild>
-            <Link to="/join">Claim a seat</Link>
+            <Link to="/import">Import a league</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link to="/new">Start a league</Link>
+            <Link to="/join">Claim a seat</Link>
           </Button>
+          <Link to="/new" className="text-sm text-faint hover:text-muted">
+            Start empty
+          </Link>
         </div>
       )}
     </Shell>
