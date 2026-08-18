@@ -884,7 +884,7 @@ export async function loadDraft(
     teamName: string;
     /** The seat this pick started with, when it was traded. */
     via: string | null;
-    player: { name: string; position: string | null } | null;
+    player: { playerId: string; name: string; position: string | null } | null;
   }[];
   /** Seats in board order, so the grid can render columns without a second source. */
   seats: { rosterId: number; teamName: string }[];
@@ -947,7 +947,9 @@ export async function loadDraft(
 			rosterId: p.roster_id,
 			teamName: names.get(p.roster_id) ?? `Team ${p.roster_id}`,
 			via: orig !== p.roster_id ? names.get(orig) ?? null : null,
-			player: player ? { name: player.full_name, position: player.position } : null,
+			player: player
+				? { playerId: player.player_id, name: player.full_name, position: player.position }
+				: null,
 		};
 	});
 	const seats = rosters.map((r) => ({ rosterId: r.roster_id, teamName: r.team_name }));

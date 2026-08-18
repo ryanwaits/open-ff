@@ -507,6 +507,15 @@ export async function proposeTrade(
       if (!pick[0]) throw new Error("That pick does not exist. Open the draft board first.");
       if (pick[0].player_id) throw new Error("That pick is already used.");
       if (pick[0].roster_id !== a.fromRoster) throw new Error("They don't own that pick.");
+      // The live pick cannot move. Otherwise the new owner either inherits a
+      // half-spent clock or gets a fresh one — and a fresh one turns "trade the
+      // pick you are on" into an unlimited stall button.
+      const draft = (await sql`
+        select pick_no, status from ff_draft where league_id = ${leagueId}
+      `)[0];
+      if (draft?.status === "live" && draft.pick_no === a.pickNo) {
+        throw new Error("That pick is on the clock and cannot be traded.");
+      }
     }
   }
   if (!sides.has(mine.roster_id)) throw new Error("You have to be in the trade.");
@@ -643,6 +652,16 @@ async function executeTrade(leagueId: string, tradeId: string): Promise<void> {
     pick_no: number | null;
     amount: number | null;
   }>`select * from ff_trade_assets where trade_id = ${tradeId}`;
+  // Refuse before any writes. Assets apply in list order — a player/FAAB ahead of
+  // an on-clock pick would otherwise move, then throw, leaving a half-applied trade.
+  const live = (await sql`select pick_no, status from ff_draft where league_id = ${leagueId}`)[0];
+  if (live?.status === "live") {
+    for (const a of assets) {
+      if (a.kind === "pick" && a.pick_no === live.pick_no) {
+        throw new Error("That pick is on the clock and cannot be traded.");
+      }
+    }
+  }
   const league = await leagueOf(leagueId);
   for (const a of assets) {
     if (a.kind === "player" && a.player_id) {
@@ -671,6 +690,14 @@ async function executeTrade(leagueId: string, tradeId: string): Promise<void> {
         where league_id = ${leagueId} and roster_id = ${a.to_roster}
       `;
     } else if (a.kind === "pick" && a.pick_no) {
+      // Same rule as proposeTrade: a deal proposed legally can be accepted after
+      // the board has advanced onto this pick — refuse rather than move the clock.
+      const draft = (await sql`
+        select pick_no, status from ff_draft where league_id = ${leagueId}
+      `)[0];
+      if (draft?.status === "live" && draft.pick_no === a.pick_no) {
+        throw new Error("That pick is on the clock and cannot be traded.");
+      }
       await sql`
         update ff_picks set roster_id = ${a.to_roster}
         where league_id = ${leagueId} and pick_no = ${a.pick_no} and player_id is null

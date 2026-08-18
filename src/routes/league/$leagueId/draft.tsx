@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { DraftBoard } from "@/components/draft-board";
+import { DraftTradeDrawer } from "@/components/draft-trade-drawer";
 import { PlayerCell } from "@/components/player-cell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ function DraftPage() {
   const qc = useQueryClient();
   const [pos, setPos] = useState<(typeof POS)[number]>("ALL");
   const [q, setQ] = useState("");
+  const [tradeOpen, setTradeOpen] = useState(false);
   const league = useQuery({
     queryKey: ["league", leagueId],
     queryFn: () => getLeagueBundle({ data: { leagueId } }),
@@ -69,6 +71,12 @@ function DraftPage() {
   }
 
   const d = draft.data;
+  const myRosterId = league.data?.myRosterId ?? null;
+  const canTrade =
+    myRosterId != null &&
+    !(league.data?.locked || d?.locked) &&
+    d != null &&
+    d.status !== "complete";
 
   return (
     <div className="space-y-8">
@@ -79,7 +87,7 @@ function DraftPage() {
           board={d.board}
           seats={d.seats}
           onClockPickNo={d.pickNo}
-          myRosterId={league.data?.myRosterId ?? null}
+          myRosterId={myRosterId}
         />
       )}
       <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
@@ -89,13 +97,20 @@ function DraftPage() {
               ? `${d.status} · pick ${Math.min(d.pickNo, d.total || 1)} / ${d.total || "—"}`
               : "Draft"}
           </p>
-          <h2 className="mt-1 font-display text-3xl tracking-tight">
-            {d?.status === "complete"
-              ? "Board is closed"
-              : d?.onClockName
-                ? `${d.onClockName} is on the clock`
-                : "Waiting to open"}
-          </h2>
+          <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+            <h2 className="font-display text-3xl tracking-tight">
+              {d?.status === "complete"
+                ? "Board is closed"
+                : d?.onClockName
+                  ? `${d.onClockName} is on the clock`
+                  : "Waiting to open"}
+            </h2>
+            {canTrade ? (
+              <Button variant="outline" size="sm" onClick={() => setTradeOpen(true)}>
+                Propose a trade
+              </Button>
+            ) : null}
+          </div>
           {d?.isMyPick ? <p className="mt-2 text-sm text-live">Your pick. Take someone.</p> : null}
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -117,6 +132,20 @@ function DraftPage() {
               </Button>
             ) : null}
           </div>
+
+          {canTrade && myRosterId != null && d != null ? (
+            <DraftTradeDrawer
+              open={tradeOpen}
+              onOpenChange={setTradeOpen}
+              leagueId={leagueId}
+              myRosterId={myRosterId}
+              seats={d.seats}
+              board={d.board}
+              stock={d.stock}
+              onClockPickNo={d.pickNo}
+              faabRemaining={league.data?.faabRemaining ?? league.data?.ops?.faabBudget ?? 100}
+            />
+          ) : null}
 
           <ol className="mt-6 space-y-2">
             {d == null
