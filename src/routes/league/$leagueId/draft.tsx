@@ -10,7 +10,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getLeagueBundle } from "@/lib/data/fns";
-import { autoFillDraft, getDraft, makePick, setAutodraft, startDraft } from "@/lib/league/fns";
+import {
+  autoFillDraft,
+  getDraft,
+  makePick,
+  queueAdd,
+  queueRemove,
+  queueReorder,
+  setAutodraft,
+  startDraft,
+} from "@/lib/league/fns";
 import { cn, formatPts } from "@/lib/utils";
 
 const POS = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"] as const;
@@ -91,6 +100,21 @@ function DraftPage() {
     onSuccess: invalidate,
     onError: (e) => toast(e instanceof Error ? e.message : "Could not update autodraft"),
   });
+  const addQueue = useMutation({
+    mutationFn: (playerId: string) => queueAdd({ data: { leagueId, playerId } }),
+    onSuccess: invalidate,
+    onError: (e) => toast(e instanceof Error ? e.message : "Could not queue"),
+  });
+  const removeQueue = useMutation({
+    mutationFn: (playerId: string) => queueRemove({ data: { leagueId, playerId } }),
+    onSuccess: invalidate,
+    onError: (e) => toast(e instanceof Error ? e.message : "Could not remove"),
+  });
+  const reorderQueue = useMutation({
+    mutationFn: (playerIds: string[]) => queueReorder({ data: { leagueId, playerIds } }),
+    onSuccess: invalidate,
+    onError: (e) => toast(e instanceof Error ? e.message : "Could not reorder"),
+  });
 
   if (!league.data?.hosted) {
     return (
@@ -109,6 +133,20 @@ function DraftPage() {
     d.status !== "complete";
   const clockLabel = formatClock(d?.status === "live" ? remainingMs : null);
   const clockUrgent = d?.status === "live" && remainingMs != null && remainingMs < 20_000;
+  const queuedIds = new Set((d?.queue ?? []).map((q) => q.playerId));
+  const queueBusy = addQueue.isPending || removeQueue.isPending || reorderQueue.isPending;
+
+  function moveQueue(playerId: string, dir: -1 | 1) {
+    const ids = (d?.queue ?? []).map((q) => q.playerId);
+    const i = ids.indexOf(playerId);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    const next = [...ids];
+    const tmp = next[i]!;
+    next[i] = next[j]!;
+    next[j] = tmp;
+    reorderQueue.mutate(next);
+  }
 
   return (
     <div className="space-y-8">
@@ -217,6 +255,65 @@ function DraftPage() {
             />
           ) : null}
 
+          {myRosterId != null && d != null && d.status !== "complete" ? (
+            <div className="mt-8">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+                Your queue
+              </p>
+              <ul className="mt-2 space-y-1">
+                {(d.queue ?? []).map((q, i) => (
+                  <li
+                    key={q.playerId}
+                    className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 shadow-[var(--shadow-border)]"
+                  >
+                    <span className="w-5 font-mono text-[11px] text-faint">{i + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{q.name}</p>
+                      <p className="font-mono text-[11px] text-muted">
+                        {[q.position, q.team].filter(Boolean).join(" · ") || "—"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={queueBusy || i === 0}
+                        onClick={() => moveQueue(q.playerId, -1)}
+                        aria-label="Move up"
+                      >
+                        ↑
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={queueBusy || i === (d.queue?.length ?? 0) - 1}
+                        onClick={() => moveQueue(q.playerId, 1)}
+                        aria-label="Move down"
+                      >
+                        ↓
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={queueBusy}
+                        onClick={() => removeQueue.mutate(q.playerId)}
+                        aria-label="Remove from queue"
+                      >
+                        ×
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {(d.queue ?? []).length === 0 ? (
+                <p className="mt-2 text-sm text-muted">Empty — autodraft will take best available.</p>
+              ) : null}
+              <p className="mt-2 text-xs text-muted">
+                Autodraft takes the top of this queue first.
+              </p>
+            </div>
+          ) : null}
+
           <ol className="mt-6 space-y-2">
             {d == null
               ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12" />)
@@ -306,18 +403,30 @@ function DraftPage() {
                     <span className="font-mono text-xs tabular-nums text-muted">
                       {formatPts(p.pts, 1)}
                     </span>
-                    {d.status === "live" && (d.isMyPick || d.isCommish) ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={pick.isPending}
-                        onClick={() => pick.mutate(p.player_id)}
-                      >
-                        Draft
-                      </Button>
-                    ) : (
-                      <Badge tone="muted">Pool</Badge>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {myRosterId != null && d.status !== "complete" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={queueBusy || queuedIds.has(p.player_id)}
+                          onClick={() => addQueue.mutate(p.player_id)}
+                        >
+                          {queuedIds.has(p.player_id) ? "Queued" : "Queue"}
+                        </Button>
+                      ) : null}
+                      {d.status === "live" && (d.isMyPick || d.isCommish) ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={pick.isPending}
+                          onClick={() => pick.mutate(p.player_id)}
+                        >
+                          Draft
+                        </Button>
+                      ) : myRosterId == null || d.status === "complete" ? (
+                        <Badge tone="muted">Pool</Badge>
+                      ) : null}
+                    </div>
                   </li>
                 ))}
           </ul>

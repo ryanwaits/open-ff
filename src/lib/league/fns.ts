@@ -82,6 +82,33 @@ export const makePick = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const queueAdd = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ leagueId: z.string(), playerId: z.string() }))
+  .handler(async ({ context, data }) => {
+    const eng = await import("./engine.server");
+    await eng.queueAdd(context.userId, data.leagueId, data.playerId);
+    return { ok: true };
+  });
+
+export const queueRemove = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ leagueId: z.string(), playerId: z.string() }))
+  .handler(async ({ context, data }) => {
+    const eng = await import("./engine.server");
+    await eng.queueRemove(context.userId, data.leagueId, data.playerId);
+    return { ok: true };
+  });
+
+export const queueReorder = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ leagueId: z.string(), playerIds: z.array(z.string()) }))
+  .handler(async ({ context, data }) => {
+    const eng = await import("./engine.server");
+    await eng.queueReorder(context.userId, data.leagueId, data.playerIds);
+    return { ok: true };
+  });
+
 export const setAutodraft = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ leagueId: z.string(), on: z.boolean() }))

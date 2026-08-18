@@ -958,6 +958,8 @@ export async function loadDraft(
   pickSeconds: number;
   /** True when the viewer's own seat is on autodraft. */
   myAutodraft: boolean;
+  /** The viewer's queue, still-available entries first. Empty when no seat. */
+  queue: { playerId: string; name: string; position: string | null; team: string | null }[];
 }> {
 	await ensureDemo();
 	const league = await getLeague(leagueId);
@@ -1029,6 +1031,17 @@ export async function loadDraft(
 		};
 	});
 	const seats = rosters.map((r) => ({ rosterId: r.roster_id, teamName: r.team_name }));
+	const queue =
+		mine != null
+			? (await loadQueue(leagueId, mine))
+					.filter((q) => !taken.has(q.playerId) && q.player)
+					.map((q) => ({
+						playerId: q.playerId,
+						name: q.player.full_name,
+						position: q.player.position,
+						team: q.player.team ?? null,
+					}))
+			: [];
 	return {
 		status: draft?.status ?? "pending",
 		pickNo: draft?.pick_no ?? 1,
@@ -1046,6 +1059,7 @@ export async function loadDraft(
 		pickDeadline: draft?.pick_deadline ? new Date(draft.pick_deadline).toISOString() : null,
 		pickSeconds: draft?.pick_seconds ?? 90,
 		myAutodraft: Boolean(mineRoster?.autodraft),
+		queue,
 	};
 }
 export async function makePick(userId: string, leagueId: string, playerId: string): Promise<void> {
@@ -1115,6 +1129,59 @@ async function finishDraft(leagueId) {
 	await sql`update ff_draft set status = ${"complete"}, pick_deadline = null where league_id = ${leagueId}`;
 	await sql`update ff_leagues set status = ${"in_season"} where id = ${leagueId}`;
 }
+export async function loadQueue(leagueId: string, rosterId: number) {
+	const sql = await getSql();
+	const rows = await sql`
+    select player_id, rank from ff_queue
+    where league_id = ${leagueId} and roster_id = ${rosterId}
+    order by rank asc
+  `;
+	return rows.map((r) => ({
+		playerId: r.player_id,
+		rank: r.rank,
+		player: getPlayer(r.player_id),
+	}));
+}
+
+export async function queueAdd(userId: string, leagueId: string, playerId: string): Promise<void> {
+	const mine = (await getRosters(leagueId)).find((r) => r.owner_id === userId);
+	if (!mine) throw new Error("You don't have a seat.");
+	if (!getPlayer(playerId)) throw new Error("Unknown player.");
+	const sql = await getSql();
+	const last = (await sql`
+    select coalesce(max(rank), 0) as n from ff_queue
+    where league_id = ${leagueId} and roster_id = ${mine.roster_id}
+  `)[0];
+	await sql`
+    insert into ff_queue (league_id, roster_id, player_id, rank)
+    values (${leagueId}, ${mine.roster_id}, ${playerId}, ${(last?.n ?? 0) + 1})
+    on conflict do nothing
+  `;
+}
+
+export async function queueRemove(userId: string, leagueId: string, playerId: string): Promise<void> {
+	const mine = (await getRosters(leagueId)).find((r) => r.owner_id === userId);
+	if (!mine) throw new Error("You don't have a seat.");
+	const sql = await getSql();
+	await sql`
+    delete from ff_queue
+    where league_id = ${leagueId} and roster_id = ${mine.roster_id} and player_id = ${playerId}
+  `;
+}
+
+export async function queueReorder(userId: string, leagueId: string, playerIds: string[]): Promise<void> {
+	const mine = (await getRosters(leagueId)).find((r) => r.owner_id === userId);
+	if (!mine) throw new Error("You don't have a seat.");
+	const sql = await getSql();
+	for (let i = 0; i < playerIds.length; i++) {
+		await sql`
+      update ff_queue set rank = ${i + 1}
+      where league_id = ${leagueId} and roster_id = ${mine.roster_id}
+        and player_id = ${playerIds[i]}
+    `;
+	}
+}
+
 /** Lookup used by flushHousePicks and expireDraftPicks — taken set, spots map, nextAutopick. */
 async function autopickFor(leagueId, rosterId) {
 	const sql = await getSql();
@@ -1128,6 +1195,10 @@ async function autopickFor(leagueId, rosterId) {
 		const arr = byRoster.get(s.roster_id) ?? [];
 		arr.push(s.player_id);
 		byRoster.set(s.roster_id, arr);
+	}
+	const queued = await loadQueue(leagueId, rosterId);
+	for (const q of queued) {
+		if (!taken.has(q.playerId) && q.player) return q.player;
 	}
 	return nextAutopick(rosterId, byRoster, ranked, taken);
 }
