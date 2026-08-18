@@ -72,6 +72,13 @@ export function teamKeys(abbr: string | null | undefined): string[] {
   return [...keys];
 }
 
+/** ESPN site-API team slug (`wsh` for WAS, `lar` for LAR). */
+export function espnTeamSlug(abbr: string | null | undefined): string | null {
+  const canon = canonTeam(abbr);
+  if (!canon) return null;
+  return TEAMS[canon]?.espn ?? canon.toLowerCase();
+}
+
 export function teamLogo(abbr: string | null | undefined): string | null {
   if (!abbr) return null;
   const meta = TEAMS[canonTeam(abbr) ?? abbr.toUpperCase()];
@@ -120,6 +127,19 @@ export const SLOT_LABEL: Record<string, string> = {
 
 export function slotLabel(slot: string): string {
   return SLOT_LABEL[slot] ?? slot;
+}
+
+/**
+ * The slot without its ordinal — `RB2` → `RB`, `WR3` → `WR`.
+ *
+ * The number distinguishes one roster spot from another, which is what you need
+ * when you are putting a player into one. On a board you are only reading, the
+ * rows are already in order, so the second RB is evidently the second RB and the
+ * digit is just a smaller thing to read. Display only: the numbered label is
+ * still the identity everything else matches on.
+ */
+export function baseSlotLabel(slot: string | null | undefined): string {
+  return (slot ?? "").replace(/\d+$/, "");
 }
 
 export const START_SLOTS = new Set([

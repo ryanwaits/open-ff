@@ -4,20 +4,21 @@ import { ArrowLeft } from "lucide-react";
 import { ClaimButton } from "@/components/claim-button";
 import { ClaimDialog } from "@/components/claim-dialog";
 import {
-  ProfileBook,
   ProfileGameLog,
   ProfileIdentity,
-  ProfileLeague,
+  ProfileNews,
+  ProfileSchedule,
   ProfileSplits,
   ProfileStats,
   ProfileThisWeek,
   ScoringNote,
 } from "@/components/player-profile";
-import { displayName, headshotFor, usePlayerProfile } from "@/lib/data/player-view";
-import { useClaim } from "@/lib/league/use-claim";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getLeagueBundle, getTeam } from "@/lib/data/fns";
+import { displayName, headshotFor, usePlayerProfile } from "@/lib/data/player-view";
+import { useClaim } from "@/lib/league/use-claim";
 import { fmtRecord } from "@/lib/utils";
+import { baseSlotLabel } from "@/lib/data/teams";
 
 export const Route = createFileRoute("/league/$leagueId/player/$playerId")({
   component: PlayerPage,
@@ -44,6 +45,9 @@ function PlayerPage() {
   const p = q.data;
   const mine = myTeam.data?.players.find((r) => r.player_id === playerId);
   const claim = useClaim(leagueId);
+  const ownedBy = p?.ownedBy ?? null;
+  const waiversOpen = Boolean(league.data?.ops?.waiversOpen);
+  const waiverType = league.data?.ops?.waiverType ?? "faab";
 
   if (q.isLoading) {
     return (
@@ -61,32 +65,50 @@ function PlayerPage() {
   }
 
   const player = p.player;
+  const myRecord =
+    league.data && rosterId != null
+      ? (() => {
+          const row = league.data.standings.find((s) => s.rosterId === rosterId);
+          return row ? fmtRecord(row.wins, row.losses, row.ties) : "—";
+        })()
+      : "—";
   const context = mine
     ? {
         label: mine.slot === "starter" ? `Starting at ${mine.starterSlot}` : "On your bench",
         rows: [
-          ["Slot", mine.starterSlot ?? "Bench"] as [string, string],
+          ["Slot", baseSlotLabel(mine.starterSlot) || "Bench"] as [string, string],
           ["This week", mine.weekPts != null ? String(mine.weekPts) : "Not played"] as [
             string,
             string,
           ],
         ],
       }
-    : {
-        label: "Not on your roster",
-        rows: [
-          ["Status", "Check the wire"] as [string, string],
-          [
-            "Your record",
-            league.data && rosterId != null
-              ? (() => {
-                  const row = league.data.standings.find((s) => s.rosterId === rosterId);
-                  return row ? fmtRecord(row.wins, row.losses, row.ties) : "—";
-                })()
-              : "—",
-          ] as [string, string],
-        ],
-      };
+    : ownedBy
+      ? {
+          label: `On ${ownedBy.teamName}`,
+          rows: [
+            ["Roster", ownedBy.teamName] as [string, string],
+            ["Status", "Needs a trade"] as [string, string],
+          ],
+        }
+      : waiversOpen && waiverType !== "none"
+        ? {
+            label: "On waivers",
+            rows: [
+              ["Status", waiverType === "faab" ? "Bid available" : "Claim available"] as [
+                string,
+                string,
+              ],
+              ["Your record", myRecord] as [string, string],
+            ],
+          }
+        : {
+            label: "Free agent",
+            rows: [
+              ["Status", "Available to add"] as [string, string],
+              ["Your record", myRecord] as [string, string],
+            ],
+          };
 
   return (
     <div className="flex flex-col gap-5">
@@ -101,16 +123,19 @@ function PlayerPage() {
 
       <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
         <div className="p-5">
-          <ProfileIdentity player={player} size="lg">
+          <ProfileIdentity player={player} size="lg" context={context}>
             <div className="shrink-0">
               <ClaimButton
                 verdict={claim.verdictFor(playerId, p.ownedBy)}
                 leagueId={leagueId}
+                playerId={playerId}
+                ownerRosterId={p.ownedBy?.rosterId}
                 onClaim={() =>
                   claim.setTarget({
                     player,
                     name: displayName(player),
                     headshot: headshotFor(player),
+                    action: mine ? "drop" : "add",
                   })
                 }
               />
@@ -126,6 +151,9 @@ function PlayerPage() {
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr] lg:items-start">
         <div className="flex min-w-0 flex-col gap-5">
           <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+            <ProfileNews notes={p.news} />
+          </section>
+          <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
             <ProfileGameLog weekly={p.weekly} bye={p.byeWeek} perGame={p.perGame} tall />
           </section>
           <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
@@ -138,12 +166,9 @@ function PlayerPage() {
             <ProfileThisWeek p={p} player={player} game={mine?.game} />
           </section>
           <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
-            <ProfileLeague context={context} />
+            <ProfileSchedule games={p.schedule} week={p.slateWeek} />
           </section>
-          <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
-            <ProfileBook player={player} />
-          </section>
-          {!mine ? (
+          {!mine && !ownedBy ? (
             <Link
               to="/league/$leagueId/wire"
               params={{ leagueId }}

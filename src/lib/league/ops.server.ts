@@ -254,6 +254,42 @@ export async function requestAdd(
   return { mode: "free_agent" };
 }
 
+export async function requestDrop(userId: string, leagueId: string, playerId: string): Promise<void> {
+  const league = await leagueOf(leagueId);
+  if (league.locked) throw new Error("This desk is locked.");
+  if (league.status === "pre_draft" || league.status === "drafting") {
+    throw new Error("Wait until the draft is over.");
+  }
+  const sql = await getSql();
+  const mine = (
+    await sql<RosterOps>`select * from ff_rosters where league_id = ${leagueId} and owner_id = ${userId}`
+  )[0];
+  if (!mine) throw new Error("You don't have a seat.");
+  const own = await sql`
+    select player_id from ff_spots
+    where league_id = ${leagueId} and roster_id = ${mine.roster_id} and player_id = ${playerId}
+  `;
+  if (!own[0]) throw new Error("You don't have that player to drop.");
+  await sql`
+    delete from ff_spots
+    where league_id = ${leagueId} and roster_id = ${mine.roster_id} and player_id = ${playerId}
+  `;
+  await sql`
+    insert into ff_moves (id, league_id, week, roster_id, type, add_player_id, drop_player_id)
+    values (
+      ${nid("mv_", 12)}, ${leagueId}, ${league.current_week}, ${mine.roster_id}, ${"drop"}, ${null}, ${playerId}
+    )
+  `;
+  await recordEvent({
+    leagueId,
+    week: league.current_week,
+    kind: "drop",
+    actorRoster: mine.roster_id,
+    playerId,
+    payload: { via: "drop" },
+  });
+}
+
 async function applyAddDrop(
   leagueId: string,
   rosterId: number,
@@ -515,6 +551,14 @@ export async function proposeTrade(
       if (!own[0]) throw new Error("A player in this trade is not on that roster.");
     } else {
       if (!a.pickNo) throw new Error("Missing pick.");
+      const draft = (await sql<{ pick_no: number; status: string }>`
+        select pick_no, status from ff_draft where league_id = ${leagueId}
+      `)[0];
+      // Unused picks exist on a generated board even after import. They are
+      // only a live asset while this draft is pending or on the clock.
+      if (draft?.status !== "pending" && draft?.status !== "live") {
+        throw new Error("Picks can only be traded before the season starts.");
+      }
       const pick = await sql<{ roster_id: number; player_id: string | null }>`
         select roster_id, player_id from ff_picks where league_id = ${leagueId} and pick_no = ${a.pickNo}
       `;
@@ -524,10 +568,7 @@ export async function proposeTrade(
       // The live pick cannot move. Otherwise the new owner either inherits a
       // half-spent clock or gets a fresh one — and a fresh one turns "trade the
       // pick you are on" into an unlimited stall button.
-      const draft = (await sql`
-        select pick_no, status from ff_draft where league_id = ${leagueId}
-      `)[0];
-      if (draft?.status === "live" && draft.pick_no === a.pickNo) {
+      if (draft.status === "live" && draft.pick_no === a.pickNo) {
         throw new Error("That pick is on the clock and cannot be traded.");
       }
     }
@@ -806,8 +847,13 @@ function pickLabelSync(pickNo: number, teams: number): string {
 }
 
 export async function listTradablePicks(leagueId: string) {
-  await ensureDraftBoard(leagueId);
+  await ensureOpsSchema();
   const sql = await getSql();
+  const draft = (
+    await sql<{ status: string }>`select status from ff_draft where league_id = ${leagueId}`
+  )[0];
+  if (draft?.status !== "pending" && draft?.status !== "live") return [];
+  await ensureDraftBoard(leagueId);
   const rosters = await sql<RosterOps>`select * from ff_rosters where league_id = ${leagueId}`;
   const picks = await sql<{
     pick_no: number;
@@ -1060,6 +1106,12 @@ async function refreshStatusAndRecord(leagueIds: string[]): Promise<number> {
   try {
     const { refreshPlayerStatus } = await import("@/lib/data/player-refresh.server");
     const res = await refreshPlayerStatus();
+    try {
+      const { refreshRotowireFeed } = await import("@/lib/data/rotowire.server");
+      await refreshRotowireFeed();
+    } catch {
+      /* notes are opportunistic */
+    }
     if (res.skipped || res.changed.length === 0) return 0;
 
     const sql = await getSql();

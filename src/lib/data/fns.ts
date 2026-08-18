@@ -6,11 +6,14 @@ import { isHostedLeague } from "./types";
 export const getPulse = createServerFn({ method: "GET" }).handler(async () => {
   const sleeper = await import("./sleeper.server");
   const espn = await import("./espn.server");
+  // Map refresh is daily and large — don't block the pulse on it.
+  void import("./player-refresh.server").then((m) => m.refreshPlayerStatus()).catch(() => undefined);
   const [state, board, news, trending] = await Promise.all([
     sleeper.fetchNflState(),
     espn.fetchScoreboard(),
     espn.fetchNews(),
     sleeper.loadTrending(),
+    import("./rotowire.server").then((m) => m.refreshRotowireFeed().catch(() => 0)),
   ]);
   return { state, games: board.games, news, trending };
 });
@@ -62,9 +65,7 @@ export const getLiveWire = createServerFn({ method: "GET" })
     const state = await sleeper.fetchNflState();
     const kind =
       data.kind ??
-      (state.season_type === "pre" || state.season_type === "post"
-        ? state.season_type
-        : "regular");
+      (state.season_type === "pre" || state.season_type === "post" ? state.season_type : "regular");
     const week = data.week ?? state.display_week ?? state.week;
     const season = String(data.season ?? state.season);
     const [board, pts] = await Promise.all([
@@ -138,12 +139,20 @@ export const getTeam = createServerFn({ method: "GET" })
     }),
   )
   .handler(async ({ data }) => {
-    if (isHostedLeague(data.leagueId)) {
-      const eng = await import("@/lib/league/engine.server");
-      return eng.loadTeam(data.leagueId, data.rosterId, data.week);
-    }
-    const sleeper = await import("./sleeper.server");
-    return sleeper.loadTeam(data.leagueId, data.rosterId, data.week);
+    const team = isHostedLeague(data.leagueId)
+      ? await (await import("@/lib/league/engine.server")).loadTeam(
+          data.leagueId,
+          data.rosterId,
+          data.week,
+        )
+      : await (await import("./sleeper.server")).loadTeam(
+          data.leagueId,
+          data.rosterId,
+          data.week,
+        );
+    const { decorateRoster } = await import("./player-refresh.server");
+    await decorateRoster(team.players);
+    return team;
   });
 
 export const getWire = createServerFn({ method: "GET" })
@@ -152,15 +161,17 @@ export const getWire = createServerFn({ method: "GET" })
       leagueId: z.string(),
       position: z.string(),
       query: z.string(),
+      scope: z.enum(["all", "available", "free_agent"]).optional(),
     }),
   )
   .handler(async ({ data }) => {
+    const scope = data.scope ?? "available";
     if (isHostedLeague(data.leagueId)) {
       const eng = await import("@/lib/league/engine.server");
-      return eng.loadWire(data.leagueId, data.position, data.query);
+      return eng.loadWire(data.leagueId, data.position, data.query, scope);
     }
     const sleeper = await import("./sleeper.server");
-    return sleeper.loadWire(data.leagueId, data.position, data.query);
+    return sleeper.loadWire(data.leagueId, data.position, data.query, scope);
   });
 
 export const getActivity = createServerFn({ method: "GET" })
@@ -200,6 +211,72 @@ export const getProjections = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const proj = await import("./projections.server");
     return proj.projectPlayers(data);
+  });
+
+/** Whole-week starter (+ rostered) projections. Avoids a fat GET of every player. */
+export const getWeekProjections = createServerFn({ method: "GET" })
+  .validator(
+    z.object({
+      leagueId: z.string(),
+      season: z.string(),
+      week: z.number(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { isHostedLeague } = await import("./types");
+    const sleeper = await import("./sleeper.server");
+    const seen = new Set<string>();
+    const players: {
+      player_id: string;
+      team?: string | null;
+      injury_status?: string | null;
+      status?: string | null;
+    }[] = [];
+
+    function take(
+      p: {
+        player_id: string;
+        team?: string | null;
+        injury_status?: string | null;
+        status?: string | null;
+      } | null,
+    ) {
+      if (!p || seen.has(p.player_id)) return;
+      seen.add(p.player_id);
+      players.push({
+        player_id: p.player_id,
+        team: p.team,
+        injury_status: p.injury_status,
+        status: p.status,
+      });
+    }
+
+    if (isHostedLeague(data.leagueId)) {
+      const eng = await import("@/lib/league/engine.server");
+      const { getSql } = await import("@/lib/db");
+      const [pairs, spots] = await Promise.all([
+        eng.loadMatchups(data.leagueId, data.week),
+        (await getSql())<{ player_id: string }>`
+          select distinct player_id from ff_spots where league_id = ${data.leagueId}
+        `,
+      ]);
+      for (const pair of pairs) {
+        for (const side of [pair.home, pair.away]) {
+          for (const line of side?.starters ?? []) take(line.player);
+        }
+      }
+      for (const spot of spots) take(sleeper.getPlayer(spot.player_id));
+    } else {
+      const pairs = await sleeper.loadMatchups(data.leagueId, data.week);
+      for (const pair of pairs) {
+        for (const side of [pair.home, pair.away]) {
+          for (const line of side?.starters ?? []) take(line.player);
+        }
+      }
+    }
+
+    const proj = await import("./projections.server");
+    return proj.projectPlayers({ ...data, players });
   });
 
 export const getOutlooks = createServerFn({ method: "GET" })

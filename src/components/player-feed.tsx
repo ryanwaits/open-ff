@@ -3,19 +3,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { playerSearchKeys } from "@/lib/data/player-plays";
 import type { ActivityItem, NewsItem, RosterPlayer } from "@/lib/data/types";
 import type { Phase } from "@/lib/league/phase";
-import { formatPts } from "@/lib/utils";
+import { formatAgo, formatPts } from "@/lib/utils";
 
 /**
- * There is no per-player news feed available to this app. Sleeper gives a
- * status designation with no timestamp, and ESPN's feed is eight league-wide
- * headlines. So this card is assembled from three real sources instead, and
- * changes with the week:
+ * Before kickoff this is a status board, not a scoreboard.
  *
- *   before kickoff  designations on your roster, then league moves involving
- *                   your players, then any ESPN headline that names one of them
+ * Sleeper's daily map is the record of *what* changed (`injury_status`,
+ * body part, `news_updated`). RotoWire supplies *why* when the five-item
+ * window caught that player. ESPN league headlines only appear if they
+ * actually name someone on this roster.
+ *
+ *   before kickoff  designations, then blurbs, then league moves, then ESPN
  *   live / settled  what your starters actually did, best first
- *
- * Nothing here is invented. If a source is empty it contributes nothing.
  */
 export function PlayerFeed({
   phase,
@@ -30,9 +29,10 @@ export function PlayerFeed({
   news: NewsItem[];
   loading: boolean;
 }) {
-  const rows = phase === "live" || phase === "settled"
-    ? scoringRows(players)
-    : statusRows(players, activity, news);
+  const rows =
+    phase === "live" || phase === "settled"
+      ? scoringRows(players)
+      : statusRows(players, activity, news);
 
   return (
     <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
@@ -56,17 +56,19 @@ export function PlayerFeed({
           {rows.map((r) => (
             <li
               key={r.id}
-              className="flex items-start gap-3 border-b border-line px-5 py-3 last:border-0"
+              className="flex items-center gap-3 border-b border-line px-5 py-3 last:border-0"
             >
-              {r.tag ? (
-                <Badge tone={r.tone}>{r.tag}</Badge>
-              ) : (
-                <span className="w-1" />
-              )}
+              {/* The name leads. Leading with the chip let a long designation
+                  push the names right, so no two started at the same place. */}
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold">{r.title}</span>
                 <span className="block text-[13px] text-muted">{r.detail}</span>
               </span>
+              {r.tag ? (
+                <Badge tone={r.tone} className="shrink-0">
+                  {r.tag}
+                </Badge>
+              ) : null}
               {r.value ? (
                 <span className="shrink-0 font-mono text-sm font-semibold tabular-nums">
                   {r.value}
@@ -83,7 +85,7 @@ export function PlayerFeed({
 type Row = {
   id: string;
   tag: string | null;
-  tone: "loss" | "win" | "muted";
+  tone: "loss" | "win" | "default";
   title: string;
   detail: string;
   value?: string;
@@ -98,7 +100,7 @@ function scoringRows(players: RosterPlayer[]): Row[] {
     .map((p) => ({
       id: p.player_id,
       tag: p.starterSlot ?? p.position ?? null,
-      tone: "muted" as const,
+      tone: "default" as const,
       title: p.full_name,
       detail: [p.team, p.game?.detail].filter(Boolean).join(" · ") || "No game data",
       value: formatPts(p.weekPts, 1),
@@ -106,26 +108,28 @@ function scoringRows(players: RosterPlayer[]): Row[] {
 }
 
 /** Before kickoff: what might cost you points. */
-function statusRows(
-  players: RosterPlayer[],
-  activity: ActivityItem[],
-  news: NewsItem[],
-): Row[] {
+function statusRows(players: RosterPlayer[], activity: ActivityItem[], news: NewsItem[]): Row[] {
   const rows: Row[] = [];
   const mine = players.filter((p) => p.slot !== "taxi");
 
   for (const p of mine) {
     const s = (p.injury_status ?? "").trim();
-    if (!s) continue;
+    if (!s && !p.latest_note) continue;
     const severe = /^(out|ir|doubtful|suspended|pup)$/i.test(s);
+    const detail = [
+      p.injury_body_part,
+      formatAgo(p.latest_note?.date ?? p.news_updated),
+      p.latest_note?.headline ?? p.injury_notes ??
+        (p.slot === "starter" ? `starting at ${p.starterSlot}` : "on your bench"),
+    ]
+      .filter(Boolean)
+      .join(" · ");
     rows.push({
       id: `status-${p.player_id}`,
-      tag: s.toUpperCase(),
-      tone: severe ? "loss" : "muted",
+      tag: s ? s.toUpperCase() : "Note",
+      tone: severe ? "loss" : "default",
       title: p.full_name,
-      detail: [p.position, p.team, p.slot === "starter" ? `starting at ${p.starterSlot}` : "on your bench"]
-        .filter(Boolean)
-        .join(" · "),
+      detail,
     });
   }
   // Ruled out first: those are decisions, the rest are just weather.
@@ -140,7 +144,7 @@ function statusRows(
     rows.push({
       id: `move-${item.id}-${hit.playerId}`,
       tag: add ? "Add" : "Drop",
-      tone: "muted",
+      tone: "default",
       title: hit.name,
       detail: `${item.teamNames.join(", ") || "Someone"} · ${item.type}${item.bid ? ` · $${item.bid}` : ""}`,
     });
@@ -156,7 +160,7 @@ function statusRows(
     rows.push({
       id: `news-${n.id}`,
       tag: "News",
-      tone: "muted",
+      tone: "default",
       title: n.headline,
       detail: match.p.full_name,
     });

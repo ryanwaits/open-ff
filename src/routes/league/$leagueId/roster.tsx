@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/avatar";
 import { LineupBoard } from "@/components/lineup-board";
+import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { baseSlotLabel } from "@/lib/data/teams";
 import {
   getActivity,
   getByeWeeks,
@@ -33,6 +35,26 @@ export const Route = createFileRoute("/league/$leagueId/roster")({
 function MyTeamPage() {
   const { leagueId } = Route.useParams();
   const qc = useQueryClient();
+  const [sheet, setSheet] = useState<SheetTarget | null>(null);
+
+  function openPlayer(p: RosterPlayer) {
+    const shelf =
+      p.slot === "starter"
+        ? `Starting at ${p.starterSlot}`
+        : p.slot === "ir"
+          ? "On IR"
+          : p.slot === "taxi"
+            ? "On taxi"
+            : "On your bench";
+    setSheet({
+      player: p,
+      game: p.game ?? null,
+      context: {
+        label: shelf,
+        rows: [["Slot", baseSlotLabel(p.starterSlot) || (p.slot === "starter" ? "Starter" : p.slot)]],
+      },
+    });
+  }
 
   const league = useQuery({
     queryKey: ["league", leagueId],
@@ -260,6 +282,7 @@ function MyTeamPage() {
             week={week}
             projections={projections.data}
             busy={start.isPending || sit.isPending}
+            onOpenPlayer={openPlayer}
             onStart={(playerId, replaceId, slot, name, into) =>
               start.mutate({ playerId, replaceId, slot, name, into })
             }
@@ -280,9 +303,13 @@ function MyTeamPage() {
                     <span className="w-10 shrink-0 font-mono text-[10px] uppercase text-faint">
                       {p.slot}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 truncate rounded-md text-left text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                      onClick={() => openPlayer(p)}
+                    >
                       {p.full_name}
-                    </span>
+                    </button>
                     <span className="font-mono text-[10px] uppercase text-faint">
                       {[p.position, p.team].filter(Boolean).join(" · ")}
                     </span>
@@ -294,37 +321,6 @@ function MyTeamPage() {
         </div>
 
         <div className="flex min-w-0 flex-col gap-5">
-          <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
-            <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
-              <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Bye trouble</h2>
-              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
-                Derived
-              </span>
-            </header>
-            {byeStack.length === 0 ? (
-              <p className="px-5 pb-5 text-sm text-muted">
-                {byes.data ? "No week costs you more than one player." : "Working out the byes…"}
-              </p>
-            ) : (
-              <ul>
-                {byeStack.map(([w, list]) => (
-                  <li
-                    key={w}
-                    className="flex items-start gap-3 border-b border-line px-5 py-3 last:border-0"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold">Week {w}</span>
-                      <span className="block truncate font-mono text-[10px] uppercase tracking-wide text-faint">
-                        {list.map((p) => p.full_name.split(" ").slice(-1)[0]).join(" · ")}
-                      </span>
-                    </span>
-                    <Badge tone={list.length >= 3 ? "loss" : "muted"}>{list.length} out</Badge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
           {league.data.hosted ? (
             <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
               <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
@@ -463,8 +459,41 @@ function MyTeamPage() {
               </ul>
             )}
           </section>
+
+          <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+            <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+              <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Bye trouble</h2>
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+                Derived
+              </span>
+            </header>
+            {byeStack.length === 0 ? (
+              <p className="px-5 pb-5 text-sm text-muted">
+                {byes.data ? "No week costs you more than one player." : "Working out the byes…"}
+              </p>
+            ) : (
+              <ul>
+                {byeStack.map(([w, list]) => (
+                  <li
+                    key={w}
+                    className="flex items-start gap-3 border-b border-line px-5 py-3 last:border-0"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold">Week {w}</span>
+                      <span className="block truncate font-mono text-[10px] uppercase tracking-wide text-faint">
+                        {list.map((p) => p.full_name.split(" ").slice(-1)[0]).join(" · ")}
+                      </span>
+                    </span>
+                    <Badge tone={list.length >= 3 ? "loss" : "muted"}>{list.length} out</Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
       </div>
+
+      <PlayerSheet target={sheet} leagueId={leagueId} onClose={() => setSheet(null)} />
     </div>
   );
 }

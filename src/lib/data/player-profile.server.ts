@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { applyBook, type ScoringBook } from "@/lib/league/scoring";
 import { byeWeekFor } from "./byes.server";
-import type { SlimPlayer } from "./types";
+import type { PlayerNote, PlayerScheduleGame, SlimPlayer } from "./types";
 import { isHostedLeague } from "./types";
 
 export type PlayerProfile = {
@@ -21,6 +21,13 @@ export type PlayerProfile = {
   weekly: (number | null)[];
   byeWeek: number | null;
   scoringNote: string;
+  /** RotoWire notes when we can resolve an ESPN athlete id. */
+  news: PlayerNote[];
+  /** Regular-season slate for his NFL team. */
+  schedule: PlayerScheduleGame[];
+  /** Season the news + schedule describe (live NFL year, not the stats seed). */
+  slateSeason: string;
+  slateWeek: number;
   /**
    * Who holds him in this league, or null if nobody does.
    *
@@ -64,8 +71,18 @@ export async function loadPlayerProfile(input: {
   season?: string;
 }): Promise<PlayerProfile | null> {
   const sleeper = await import("./sleeper.server");
-  const player = sleeper.getPlayer(input.playerId);
-  if (!player) return null;
+  const base = sleeper.getPlayer(input.playerId);
+  if (!base) return null;
+  const { statusOverlay } = await import("./player-refresh.server");
+  const overlay = (await statusOverlay([input.playerId]))[input.playerId];
+  const player = overlay
+    ? {
+        ...base,
+        injury_status: overlay.injuryStatus ?? base.injury_status,
+        team: overlay.team ?? base.team,
+        depth_chart_order: overlay.depthChartOrder ?? base.depth_chart_order,
+      }
+    : base;
 
   const season = input.season ?? SEED_SEASON;
   const book = await bookFor(input.leagueId);
@@ -94,7 +111,10 @@ export async function loadPlayerProfile(input: {
   }
 
   const weekly = await weeklyLine(season, input.playerId, book);
-  const byeWeek = await byeWeekFor(season, player.team);
+  const [byeWeek, slate] = await Promise.all([
+    byeWeekFor(season, player.team),
+    loadSlate(player),
+  ]);
 
   return {
     player,
@@ -109,7 +129,74 @@ export async function loadPlayerProfile(input: {
     byeWeek,
     scoringNote: `Scored with this league's book`,
     ownedBy: await ownerOf(input.leagueId, input.playerId),
+    news: slate.news,
+    schedule: withBye(slate.schedule, slate.byeWeek ?? byeWeek),
+    slateSeason: slate.season,
+    slateWeek: slate.week,
   };
+}
+
+async function loadSlate(player: SlimPlayer): Promise<{
+  news: PlayerNote[];
+  schedule: PlayerScheduleGame[];
+  season: string;
+  week: number;
+  byeWeek: number | null;
+}> {
+  const sleeper = await import("./sleeper.server");
+  const espn = await import("./espn.server");
+  let season = "2026";
+  let week = 1;
+  try {
+    const state = await sleeper.fetchNflState();
+    season = state.season;
+    // Preseason display_week is not a regular-season week — don't hide week 1.
+    week =
+      state.season_type === "regular" || state.season_type === "post"
+        ? (state.display_week ?? state.week ?? 1)
+        : 1;
+  } catch {
+    /* keep defaults */
+  }
+  const espnId =
+    player.espn_id != null && String(player.espn_id).trim() !== ""
+      ? String(player.espn_id)
+      : player.position === "DEF"
+        ? null
+        : await espn.resolveEspnAthleteId(player.full_name);
+  const year = Number(season) || new Date().getFullYear();
+  const rw = await import("./rotowire.server");
+  const [stored, espnNotes, schedule, byeWeek] = await Promise.all([
+    rw.refreshRotowireFeed().then(() => rw.notesForPlayer(player.player_id)).catch(() => []),
+    espnId ? espn.fetchPlayerNotes(espnId, year).catch(() => []) : Promise.resolve([]),
+    player.team
+      ? espn.fetchTeamSchedule(player.team, year).catch(() => [])
+      : Promise.resolve([]),
+    byeWeekFor(season, player.team),
+  ]);
+  return { news: mergeNotes(stored, espnNotes), schedule, season, week, byeWeek };
+}
+
+function mergeNotes(primary: PlayerNote[], backup: PlayerNote[]): PlayerNote[] {
+  const seen = new Set(primary.map((n) => n.headline.slice(0, 48).toLowerCase()));
+  const extra = backup.filter((n) => !seen.has(n.headline.slice(0, 48).toLowerCase()));
+  return [...primary, ...extra].slice(0, 8);
+}
+
+function withBye(
+  games: PlayerScheduleGame[],
+  byeWeek: number | null,
+): PlayerScheduleGame[] {
+  if (!byeWeek || games.some((g) => g.week === byeWeek)) return games;
+  const bye: PlayerScheduleGame = {
+    week: byeWeek,
+    date: "",
+    opp: "BYE",
+    detail: "Bye week",
+    state: "pre",
+    bye: true,
+  };
+  return [...games, bye].sort((a, b) => a.week - b.week);
 }
 
 /** Only hosted leagues have rosters we can read; an import is always read-only. */

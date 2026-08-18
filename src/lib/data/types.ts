@@ -107,6 +107,11 @@ export type GameChip = {
   detail: string;
   opp: string | null;
   gameId: string | null;
+  /** Team abbreviation that currently has the ball. Live games only. */
+  possession?: string | null;
+  /** Down/distance, e.g. "2nd & 7". Live games only. */
+  situation?: string | null;
+  redZone?: boolean;
 };
 
 export type LeagueBundle = {
@@ -151,6 +156,8 @@ export type StarterLine = {
   points: number | null;
   game: GameChip | null;
   stats?: Record<string, number> | null;
+  /** Set when `points` is a forecast rather than unofficial/live. */
+  forecast?: "proj" | "bye" | "out";
 };
 
 export type MatchupSide = {
@@ -176,6 +183,10 @@ export type RosterPlayer = SlimPlayer & {
   starterSlot?: string;
   weekPts: number | null;
   game?: GameChip | null;
+  news_updated?: string | null;
+  injury_body_part?: string | null;
+  injury_notes?: string | null;
+  latest_note?: PlayerNote | null;
 };
 
 export type TeamBundle = {
@@ -188,9 +199,17 @@ export type TeamBundle = {
   week: number;
 };
 
+export type WireScope = "all" | "available" | "free_agent";
+
+export type WireAvailability = "rostered" | "waiver" | "free_agent";
+
+export type WireOwner = { rosterId: number; teamName: string };
+
 export type WirePlayer = SlimPlayer & {
   pts: number | null;
   rank: number | null;
+  availability: WireAvailability;
+  ownedBy: WireOwner | null;
 };
 
 export type ActivityItem = {
@@ -242,6 +261,11 @@ export type ScoreGame = {
   seasonType: string;
   home: ScoreTeam;
   away: ScoreTeam;
+  /** Down/distance + spot, live games only. */
+  situation?: string | null;
+  /** Team abbreviation that currently has the ball. */
+  possession?: string | null;
+  redZone?: boolean;
 };
 
 export type GamePlay = {
@@ -327,6 +351,26 @@ export type NewsItem = {
   published: string;
   image: string | null;
   link: string | null;
+};
+
+/** Player-specific note (ESPN / RotoWire). Not league-wide headlines. */
+export type PlayerNote = {
+  id: string;
+  headline: string;
+  text: string;
+  date: string;
+  source: string;
+  link?: string | null;
+};
+
+/** One week on a team's regular-season slate. */
+export type PlayerScheduleGame = {
+  week: number;
+  date: string;
+  opp: string;
+  detail: string;
+  state: "pre" | "in" | "post";
+  bye: boolean;
 };
 
 export type TrendingPlayer = SlimPlayer & { adds: number };

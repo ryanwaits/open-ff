@@ -3,10 +3,10 @@ import { ArrowUpRight, X } from "lucide-react";
 import { useEffect } from "react";
 import {
   type LeagueContext,
-  ProfileBook,
   ProfileGameLog,
   ProfileIdentity,
-  ProfileLeague,
+  ProfileNews,
+  ProfileSchedule,
   ProfileSplits,
   ProfileStats,
   ProfileThisWeek,
@@ -89,7 +89,7 @@ function Body({
   return (
     <>
       <header className="border-b border-line px-5 py-4">
-        <ProfileIdentity player={player}>
+        <ProfileIdentity player={player} context={context}>
           <button
             type="button"
             onClick={onClose}
@@ -124,11 +124,11 @@ function Body({
               <ProfileStats p={p} player={player} />
             </div>
             <ScoringNote />
-            <ProfileGameLog weekly={p.weekly} bye={p.byeWeek} perGame={p.perGame} />
+            <ProfileNews notes={p.news} />
             <ProfileThisWeek p={p} player={player} game={game} />
-            <ProfileLeague context={context ?? null} />
+            <ProfileSchedule games={p.schedule} week={p.slateWeek} compact />
+            <ProfileGameLog weekly={p.weekly} bye={p.byeWeek} perGame={p.perGame} />
             <ProfileSplits p={p} />
-            <ProfileBook player={player} />
             <div className="h-6" />
           </>
         )}

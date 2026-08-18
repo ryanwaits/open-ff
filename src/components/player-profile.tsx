@@ -1,7 +1,7 @@
 import { Avatar } from "@/components/avatar";
 import { Badge } from "@/components/ui/badge";
 import { displayName, headshotFor, type Profile } from "@/lib/data/player-view";
-import type { GameChip, SlimPlayer } from "@/lib/data/types";
+import type { GameChip, PlayerNote, PlayerScheduleGame, SlimPlayer } from "@/lib/data/types";
 import { cn, formatPts } from "@/lib/utils";
 
 export type LeagueContext = { label: string; rows: [string, string][] } | null;
@@ -11,12 +11,23 @@ export type LeagueContext = { label: string; rows: [string, string][] } | null;
 export function ProfileIdentity({
   player,
   size = "md",
+  context,
   children,
 }: {
   player: SlimPlayer;
   size?: "md" | "lg";
+  context?: LeagueContext;
   children?: React.ReactNode;
 }) {
+  const role = [player.position, player.team, player.number ? `#${player.number}` : null]
+    .filter(Boolean)
+    .join(" · ");
+  const book = [
+    player.age != null ? String(player.age) : null,
+    player.years_exp != null ? `${player.years_exp} yr${player.years_exp === 1 ? "" : "s"}` : null,
+    player.college,
+    player.depth_chart_order ? `depth #${player.depth_chart_order}` : null,
+  ].filter(Boolean);
   return (
     <div className="flex items-start gap-3">
       <Avatar
@@ -35,13 +46,21 @@ export function ProfileIdentity({
           {displayName(player)}
         </h1>
         <div className="mt-1 flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
-            {[player.position, player.team, player.number ? `#${player.number}` : null]
-              .filter(Boolean)
-              .join(" · ")}
-          </span>
+          {role ? (
+            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+              {role}
+            </span>
+          ) : null}
           {player.injury_status ? <Badge tone="loss">{player.injury_status}</Badge> : null}
         </div>
+        {book.length ? (
+          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+            {book.join(" · ")}
+          </p>
+        ) : null}
+        {context?.label ? (
+          <p className="mt-1 text-[13px] text-muted">{context.label}</p>
+        ) : null}
       </div>
       {children}
     </div>
@@ -112,7 +131,96 @@ export function Row({ k, v, tone }: { k: string; v: string; tone?: "loss" }) {
   );
 }
 
+export function ProfileNews({ notes }: { notes: PlayerNote[] }) {
+  if (notes.length === 0) {
+    return (
+      <Section title="News">
+        <p className="px-5 text-sm text-muted">No player notes yet.</p>
+      </Section>
+    );
+  }
+  const source = notes[0]?.source;
+  return (
+    <Section title="News" meta={source}>
+      <ul>
+        {notes.slice(0, 5).map((n) => (
+          <li key={n.id} className="border-b border-line px-5 py-3 last:border-0">
+            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+              {noteWhen(n.date)}
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-snug">{n.headline}</p>
+            {n.text && n.text !== n.headline ? (
+              <p className="mt-1 text-[13px] leading-relaxed text-muted">{n.text}</p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
+export function ProfileSchedule({
+  games,
+  week,
+  compact = false,
+}: {
+  games: PlayerScheduleGame[];
+  week: number;
+  compact?: boolean;
+}) {
+  if (games.length === 0) {
+    return (
+      <Section title="Schedule">
+        <p className="px-5 text-sm text-muted">No slate for this team yet.</p>
+      </Section>
+    );
+  }
+  const shown = compact ? games.filter((g) => g.week >= week).slice(0, 6) : games;
+  const hidden = compact ? Math.max(0, games.filter((g) => g.week >= week).length - shown.length) : 0;
+  return (
+    <Section title="Schedule" meta={compact ? "Next" : `${games.length} weeks`}>
+      <ul>
+        {shown.map((g) => {
+          const now = g.week === week;
+          return (
+            <li
+              key={`${g.week}-${g.opp}`}
+              className={cn(
+                "flex items-baseline justify-between gap-3 px-5 py-1.5",
+                now && "bg-[color-mix(in_oklab,var(--brand)_10%,transparent)]",
+              )}
+            >
+              <span className="w-10 shrink-0 font-mono text-[10px] uppercase tracking-wide text-faint">
+                W{g.week}
+              </span>
+              <span className={cn("min-w-0 flex-1 truncate text-sm", g.bye && "text-muted")}>
+                {g.opp}
+              </span>
+              <span className="shrink-0 font-mono text-[11px] text-faint">
+                {g.bye ? "Bye" : g.detail}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      {hidden > 0 ? (
+        <p className="px-5 pt-1 pb-2 font-mono text-[10px] uppercase tracking-wide text-faint">
+          +{hidden} more on the full profile
+        </p>
+      ) : null}
+    </Section>
+  );
+}
+
+function noteWhen(raw: string): string {
+  if (!raw) return "";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export function ProfileThisWeek({ p, player, game }: { p: Profile; player: SlimPlayer; game?: GameChip | null }) {
+  const bye = p.schedule.find((g) => g.bye)?.week ?? p.byeWeek;
   return (
     <Section title="This week">
       <Row k="Opponent" v={game?.opp ?? "—"} />
@@ -122,18 +230,7 @@ export function ProfileThisWeek({ p, player, game }: { p: Profile; player: SlimP
         v={player.injury_status ?? "No designation"}
         tone={player.injury_status ? "loss" : undefined}
       />
-      <Row k="Bye week" v={p.byeWeek ? `Week ${p.byeWeek}` : "Unknown"} />
-    </Section>
-  );
-}
-
-export function ProfileLeague({ context }: { context: LeagueContext }) {
-  if (!context) return null;
-  return (
-    <Section title="In this league" meta={context.label}>
-      {context.rows.map(([k, v]) => (
-        <Row key={k} k={k} v={v} />
-      ))}
+      <Row k="Bye week" v={bye ? `Week ${bye}` : "Unknown"} />
     </Section>
   );
 }
@@ -173,19 +270,6 @@ export function ProfileSplits({ p }: { p: Profile }) {
           ))}
         </div>
       ))}
-    </Section>
-  );
-}
-
-export function ProfileBook({ player }: { player: SlimPlayer }) {
-  return (
-    <Section title="The book" meta="Career">
-      {player.age ? <Row k="Age" v={String(player.age)} /> : null}
-      {player.years_exp != null ? (
-        <Row k="Experience" v={`${player.years_exp} yr${player.years_exp === 1 ? "" : "s"}`} />
-      ) : null}
-      {player.college ? <Row k="College" v={player.college} /> : null}
-      {player.depth_chart_order ? <Row k="Depth chart" v={`#${player.depth_chart_order}`} /> : null}
     </Section>
   );
 }

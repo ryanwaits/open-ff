@@ -1,9 +1,12 @@
+import { canonTeam, espnTeamSlug } from "./teams";
 import type {
   BoxGroup,
   GameDrive,
   GamePlay,
   GameSummary,
   NewsItem,
+  PlayerNote,
+  PlayerScheduleGame,
   ScoreGame,
   ScoreTeam,
   ScoringPlay,
@@ -12,6 +15,23 @@ import type {
 
 const ESPN = "https://site.api.espn.com/apis/site/v2/sports/football/nfl";
 
+type EspnCompetitor = {
+  id?: string;
+  homeAway: "home" | "away";
+  score: string;
+  winner?: boolean;
+  team: { id?: string; abbreviation: string; displayName: string; logo?: string };
+  records?: Array<{ summary: string }>;
+};
+
+type EspnSituation = {
+  possession?: string | number;
+  possessionText?: string;
+  shortDownDistanceText?: string;
+  downDistanceText?: string;
+  isRedZone?: boolean;
+};
+
 type EspnEvent = {
   id: string;
   name: string;
@@ -19,13 +39,8 @@ type EspnEvent = {
   date: string;
   status: { type: { state: string; shortDetail?: string; detail?: string } };
   competitions: Array<{
-    competitors: Array<{
-      homeAway: "home" | "away";
-      score: string;
-      winner?: boolean;
-      team: { abbreviation: string; displayName: string; logo?: string };
-      records?: Array<{ summary: string }>;
-    }>;
+    competitors: EspnCompetitor[];
+    situation?: EspnSituation;
   }>;
 };
 
@@ -47,7 +62,19 @@ async function eget<T>(url: string, ttl: number): Promise<T> {
   return data;
 }
 
-function mapTeam(c: EspnEvent["competitions"][0]["competitors"][0]): ScoreTeam {
+function possessionOf(
+  sit: EspnSituation | undefined,
+  competitors: EspnCompetitor[],
+): string | null {
+  if (sit?.possession == null) return null;
+  const id = String(sit.possession);
+  const hit = competitors.find(
+    (c) => String(c.id ?? "") === id || String(c.team.id ?? "") === id,
+  );
+  return hit?.team.abbreviation ?? null;
+}
+
+function mapTeam(c: EspnCompetitor): ScoreTeam {
   return {
     abbr: c.team.abbreviation,
     name: c.team.displayName,
@@ -80,6 +107,9 @@ export async function fetchScoreboard(opts?: {
     const stateRaw = ev.status.type.state;
     const state: ScoreGame["state"] =
       stateRaw === "in" ? "in" : stateRaw === "post" ? "post" : "pre";
+    const sit = state === "in" ? comp?.situation : undefined;
+    const situation = sit?.shortDownDistanceText ?? null;
+    const possession = sit ? possessionOf(sit, comp?.competitors ?? []) : null;
     return {
       id: ev.id,
       name: ev.name,
@@ -96,6 +126,9 @@ export async function fetchScoreboard(opts?: {
       away: awayC
         ? mapTeam(awayC)
         : { abbr: "—", name: "TBD", logo: "", score: "", winner: null, record: null },
+      situation,
+      possession,
+      redZone: Boolean(sit?.isRedZone),
     };
   });
   return { games, week, season, seasonType };
@@ -120,6 +153,112 @@ export async function fetchNews(): Promise<NewsItem[]> {
     image: a.images?.[0]?.url ?? null,
     link: a.links?.web?.href ?? null,
   }));
+}
+
+const CORE = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl";
+const WEB = "https://site.web.api.espn.com/apis/common/v3";
+
+const espnIdCache = new Map<string, { at: number; id: string | null }>();
+const ESPN_ID_TTL = 12 * 60 * 60 * 1000;
+
+/**
+ * Map a Sleeper name to an ESPN athlete id.
+ *
+ * The slim player dump is missing `espn_id` for a lot of stars (Bijan, Chase,
+ * Bowers). Search is the fallback — one request, cached hard, because the id
+ * does not move.
+ */
+export async function resolveEspnAthleteId(name: string): Promise<string | null> {
+  const key = name.trim().toLowerCase();
+  if (!key) return null;
+  const hit = espnIdCache.get(key);
+  if (hit && Date.now() - hit.at < ESPN_ID_TTL) return hit.id;
+  try {
+    const q = encodeURIComponent(name.trim());
+    const data = await eget<{
+      items?: Array<{ id?: string; displayName?: string; league?: string; type?: string }>;
+    }>(`${WEB}/search?query=${q}&limit=5&type=player`, ESPN_ID_TTL);
+    const want = key;
+    const nfl = (data.items ?? []).filter((i) => (i.league ?? "nfl").toLowerCase() === "nfl");
+    const exact = nfl.find((i) => (i.displayName ?? "").trim().toLowerCase() === want);
+    const id = String(exact?.id ?? nfl[0]?.id ?? "").trim() || null;
+    espnIdCache.set(key, { at: Date.now(), id });
+    return id;
+  } catch {
+    espnIdCache.set(key, { at: Date.now(), id: null });
+    return null;
+  }
+}
+
+/** RotoWire-style notes for one athlete. Empty when ESPN has nothing. */
+export async function fetchPlayerNotes(espnId: string, season: number): Promise<PlayerNote[]> {
+  const data = await eget<{
+    items?: Array<{
+      id?: string | number;
+      headline?: string;
+      text?: string;
+      date?: string;
+      source?: string;
+    }>;
+  }>(`${CORE}/seasons/${season}/athletes/${espnId}/notes`, 10 * 60 * 1000);
+  return (data.items ?? []).map((n, i) => ({
+    id: String(n.id ?? i),
+    headline: n.headline ?? "",
+    text: n.text ?? "",
+    date: n.date ?? "",
+    source: n.source ?? "ESPN",
+  }));
+}
+
+type RawSchedEvent = {
+  date?: string;
+  week?: { number?: number };
+  competitions?: Array<{
+    competitors?: Array<{
+      homeAway?: string;
+      team?: { abbreviation?: string };
+    }>;
+    status?: {
+      type?: { state?: string; shortDetail?: string; detail?: string };
+    };
+  }>;
+};
+
+/** Regular-season slate for a team. One request; no athlete id needed. */
+export async function fetchTeamSchedule(
+  team: string,
+  season: number,
+): Promise<PlayerScheduleGame[]> {
+  const slug = espnTeamSlug(team);
+  if (!slug) return [];
+  const data = await eget<{ events?: RawSchedEvent[] }>(
+    `${ESPN}/teams/${slug}/schedule?season=${season}&seasontype=2`,
+    30 * 60 * 1000,
+  );
+  const mine = canonTeam(team);
+  const out: PlayerScheduleGame[] = [];
+  for (const ev of data.events ?? []) {
+    const week = ev.week?.number;
+    if (!week) continue;
+    const comp = ev.competitions?.[0];
+    const comps = comp?.competitors ?? [];
+    const self = comps.find((c) => canonTeam(c.team?.abbreviation) === mine);
+    const opp = comps.find((c) => c !== self);
+    const home = self?.homeAway === "home";
+    const oppAbbr = canonTeam(opp?.team?.abbreviation) ?? opp?.team?.abbreviation ?? "—";
+    const stateRaw = comp?.status?.type?.state;
+    const state: PlayerScheduleGame["state"] =
+      stateRaw === "in" ? "in" : stateRaw === "post" ? "post" : "pre";
+    out.push({
+      week,
+      date: ev.date ?? "",
+      opp: home ? `vs ${oppAbbr}` : `@ ${oppAbbr}`,
+      detail: comp?.status?.type?.shortDetail ?? comp?.status?.type?.detail ?? "",
+      state,
+      bye: false,
+    });
+  }
+  return out.sort((a, b) => a.week - b.week);
 }
 
 type RawAthlete = {
