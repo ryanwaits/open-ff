@@ -962,6 +962,7 @@ export async function loadDraft(
   queue: { playerId: string; name: string; position: string | null; team: string | null }[];
 }> {
 	await ensureDemo();
+	await (await import("./ops.server")).ensureOpsSchema();
 	const league = await getLeague(leagueId);
 	try {
 		await expireDraftPicks(leagueId);
@@ -1130,6 +1131,7 @@ async function finishDraft(leagueId) {
 	await sql`update ff_leagues set status = ${"in_season"} where id = ${leagueId}`;
 }
 export async function loadQueue(leagueId: string, rosterId: number) {
+	await (await import("./ops.server")).ensureOpsSchema();
 	const sql = await getSql();
 	const rows = await sql`
     select player_id, rank from ff_queue
@@ -1144,6 +1146,7 @@ export async function loadQueue(leagueId: string, rosterId: number) {
 }
 
 export async function queueAdd(userId: string, leagueId: string, playerId: string): Promise<void> {
+	await (await import("./ops.server")).ensureOpsSchema();
 	const mine = (await getRosters(leagueId)).find((r) => r.owner_id === userId);
 	if (!mine) throw new Error("You don't have a seat.");
 	if (!getPlayer(playerId)) throw new Error("Unknown player.");
@@ -1160,6 +1163,7 @@ export async function queueAdd(userId: string, leagueId: string, playerId: strin
 }
 
 export async function queueRemove(userId: string, leagueId: string, playerId: string): Promise<void> {
+	await (await import("./ops.server")).ensureOpsSchema();
 	const mine = (await getRosters(leagueId)).find((r) => r.owner_id === userId);
 	if (!mine) throw new Error("You don't have a seat.");
 	const sql = await getSql();
@@ -1170,6 +1174,7 @@ export async function queueRemove(userId: string, leagueId: string, playerId: st
 }
 
 export async function queueReorder(userId: string, leagueId: string, playerIds: string[]): Promise<void> {
+	await (await import("./ops.server")).ensureOpsSchema();
 	const mine = (await getRosters(leagueId)).find((r) => r.owner_id === userId);
 	if (!mine) throw new Error("You don't have a seat.");
 	const sql = await getSql();

@@ -42,7 +42,7 @@ type RosterOps = {
 };
 
 let opsReady = 0;
-const OPS_SCHEMA = 3;
+const OPS_SCHEMA = 4;
 
 export async function ensureOpsSchema(): Promise<void> {
   if (opsReady >= OPS_SCHEMA) return;
@@ -87,6 +87,20 @@ export async function ensureOpsSchema(): Promise<void> {
     `alter table ff_dispatches add column if not exists box_json text not null default '[]'`,
     `alter table ff_dispatches add column if not exists slug text`,
     `alter table ff_dispatches add column if not exists focus_json text not null default '[]'`,
+    // 0008_draft_clock — also here so a Neon/local DB that has not been
+    // migrated yet still serves the draft page (PGLite applies the file;
+    // Neon only does so on `db:migrate` / deploy).
+    `alter table ff_draft add column if not exists pick_deadline timestamptz`,
+    `alter table ff_draft add column if not exists pick_seconds int not null default 90`,
+    `alter table ff_rosters add column if not exists autodraft int not null default 0`,
+    `create table if not exists ff_queue (
+      league_id text not null,
+      roster_id int not null,
+      player_id text not null,
+      rank int not null,
+      primary key (league_id, roster_id, player_id))`,
+    `create index if not exists ff_queue_order_idx
+      on ff_queue (league_id, roster_id, rank)`,
   ];
   for (const s of stmts) await sql.query(s);
   await sql.query(
