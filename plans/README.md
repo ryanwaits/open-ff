@@ -1,6 +1,6 @@
 # Implementation Plans
 
-Two slices live here. Read the one you are executing from.
+Four slices live here. Read the one you are executing from.
 
 - **001–005 — Desk performance** (improve skill, 2026-08-17, commit `1abb347`).
   Goal: league desk feels like a spreadsheet — last-known numbers stay painted,
@@ -15,6 +15,11 @@ Two slices live here. Read the one you are executing from.
   commit `304cfb7`). Goal: a projection that moves during the season, a trade
   priced by what your lineup actually scores, and a desk built from player rows
   that carry their numbers instead of names that carry nothing.
+- **022–026 — Agent-native foundation** (improve skill, 2026-08-17, commit
+  `553f159`). Goal: the league is something a commish can run, a friend can
+  put on a home screen, a harness can restyle, and an agent can *use* —
+  because the primitives are named and tested, not because we added a chat
+  widget. Finish 014/016–021 in parallel; they do not block this slice.
 
 Execute in the order below. Each executor: read the plan fully, honor STOP
 conditions, update your row when done.
@@ -84,6 +89,23 @@ conditions, update your row when done.
 - **Rest-of-season projections are deferred.** A weekly number is not a season
   value, and blending them silently would be dishonest. Its own plan when wanted.
 
+### Agent-native foundation (022–026)
+
+- **The engine is already the product.** ~50 server fns, a scoring book, FAAB,
+  trades, a house book, an event diary. Agents cannot reach any of it. 024
+  names those verbs; it does not invent a second API.
+- **Features are still code, used via prompts.** "Add betting by describing
+  it" already happened as a human vertical slice (`wagers.server.ts`). The
+  next market is a registry (not in this slice) sitting on a conserved FAAB
+  purse. 022 pins the purse *before* 024 lets an agent stake it.
+- **Do not wrap `tickAllLeagues` as a tool.** 023 secrets the URL; 024 omits
+  it from the catalog.
+- **Skin is an overlay, not a fork.** 026 extracts `src/skin/*`. Do not
+  unbrand `public/__grok/install` or delete `grokPwaPlugin`.
+- **One installed PWA named Ledger**, `start_url=/`. Not a per-league icon.
+- **Events stay a diary.** Mechanics stay on tables. 024 exposes `readEvents`
+  / facts as reads.
+
 ## Execution order & status
 
 | Plan | Title | Priority | Effort | Depends on | Status |
@@ -101,14 +123,19 @@ conditions, update your row when done.
 | 011  | Mid-draft trading — picks, drafted players, FAAB | P2 | M | 007 | DONE `cf6fa91` (not pushed; live trade tests skipped — no signed-in mid-draft league) |
 | 012  | Mock draft — the same room with the writes turned off | P3 | M | 007, 010 | DONE `81b0c4c` (not pushed) |
 | 013  | Derived league facts — roll the ledger into standing facts | P2 | M | — | DONE `5009378` (not pushed; `832ba4e` locked-only, `ce31848` format) |
-| 014  | The desk remembers — feed facts into the weekly write-up | P2 | S | 013 | TODO |
-| 015  | Live weekly projections — a number that moves | P1 | M | — | TODO |
-| 016  | Replacement value — price a trade by the lineup it produces | P1 | S | — | TODO |
-| 017  | The player stat row — avatar, projection, rank, shape | P1 | M | — | TODO |
-| 018  | The offer card — decide with the facts in front of you | P1 | M | 016, 017 | TODO |
-| 019  | The composer — a readable deal, and FAAB you can send | P2 | L | 016, 017, 018 | TODO |
-| 020  | Three-team trades — every asset says where it lands | P3 | M | 019 | TODO |
-| 021  | The read line — one sentence that arranges the numbers | P3 | S | 016, 018/019 | TODO |
+| 014  | The desk remembers — feed facts into the weekly write-up | P2 | S | 013 | DONE `7af3716` (not pushed; backyard had 0 facts — empty-list no-op verified) |
+| 015  | Live weekly projections — a number that moves | P1 | M | — | DONE `d6d855d` (not pushed) |
+| 016  | Replacement value — price a trade by the lineup it produces | P1 | S | — | DONE `7af4bf4` (not pushed) |
+| 017  | The player stat row — avatar, projection, rank, shape | P1 | M | — | DONE `553f159` (not pushed) |
+| 018  | The offer card — decide with the facts in front of you | P1 | M | 016, 017 | DONE `5b092fa` (not pushed) |
+| 019  | The composer — a readable deal, and FAAB you can send | P2 | L | 016, 017, 018 | DONE `ec855c3` (not pushed) |
+| 020  | Three-team trades — every asset says where it lands | P3 | M | 019 | DONE `4356a5e` (not pushed) |
+| 021  | The read line — one sentence that arranges the numbers | P3 | S | 016, 018/019 | DONE `7e6cac7` (not pushed) |
+| 022  | Prove FAAB, settlement, and clock with tests | P1 | M | — | TODO |
+| 023  | Close the public clock, invite leak, and bid leak | P1 | S | — | TODO |
+| 024  | Publish the primitive catalog and a thin tool surface | P1 | M | 022, 023 | TODO |
+| 025  | Make a stranger able to run a league | P1 | M | 023 | TODO |
+| 026  | Skin contract + scan-to-homescreen | P2 | M | 025 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED
 
@@ -175,10 +202,11 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED
   only. There is no engine, DB or component test harness, and none of these
   plans stands one up. Verification is typecheck + build + a scripted
   `npx vite-node` call + manual steps.
-- **There is no `biome.json`.** `npx biome check --write` therefore applies
-  Biome's default **tab** indentation to a 2-space codebase and will silently
-  reformat whole files. Use `biome check` to read findings; do not use `--write`
-  until a config pinning `indentStyle: "space"` exists.
+- **`biome.json` now exists** and pins `indentStyle: "space"`. The old
+  "do not `--write`" hazard is gone. `bun run lint` is the gate.
+- **`bun test` is still scripts-only until 022.** `src/lib/league/mock-draft.test.mjs`
+  exists and is not run. Plans README used to claim FAAB "database tests" —
+  those files are not in the repo. 022 is the first real suite.
 
 ## Findings considered and rejected
 
@@ -205,6 +233,24 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED
 - **Sunday inactives sweep (90-minute pre-kickoff refresh):** the daily player
   refresh already shipped, and the locked betting rule is that a bet placed
   before news breaks is fair. That removes the requirement entirely. Not planned.
+- **Event-sourcing the league from `ff_events`:** diary, not source of truth.
+  024 exposes reads; it does not replay state from events.
+- **In-app chat / MCP SDK in 024:** catalog + read CLI first.
+- **Generic free-text wager props:** closed `WagerKind` until conservation is
+  pinned (022). A `total` market is the next kind, not "anything you describe."
+- **Unbranding Grok `?install=1`:** platform. 026's coach never links it
+  (that URL hides `/join`).
+- **Per-league home-screen icons:** one origin ≈ one PWA.
+- **Service worker / Web Push in this slice:** follow-up after a friend
+  actually installs. Draft 4s poll stays the in-room transport.
+- **Membership-gating every GET:** still a secret-URL desk. 023 only strips
+  invite codes and foreign bids.
+- **Rewriting `AGENTS.md`:** sandbox still needs it. 025 adds
+  `AGENTS.project.md`.
+- **Deleting `grokPwaPlugin` / `PreviewHostBridge` / `public/__grok`:**
+  platform. Skin lives beside them.
+- **Export/backup dump, native Google OAuth, `deleteLeague`:** real holes,
+  not this slice. Backup is the next self-host gap after 025.
 
 ## Suggested first execution
 
@@ -217,6 +263,16 @@ other runs `007`, then `011`, then `013 → 014`. They touch different files —
 the draft chain lives in `engine.server.ts`, while 011 is in `ops.server.ts` and
 013/014 are in `dispatch.ts` and a new module.
 
+## Suggested execution — slice 4 (agent-native)
+
+**Single executor:** `022` → `023` → `024` and `025` in either order → `026`.
+
+**Two executors:** one runs `022` then `024` (tests then catalog). The other
+runs `023` then `025` then `026` (lock the door, then hand a stranger the
+keys, then the homescreen). They touch different files.
+
+Do **not** start mutating CLI in 024 before 022 is green.
+
 ## Suggested execution — slice 3
 
 **Single executor:** `015` → `017` → `016` → `018` → `019` → `020` → `021`.
@@ -225,6 +281,19 @@ anyone will actually notice.
 
 **Two executors:** one takes `015` (server, projections); the other takes `017`
 then `016` (client, pure). They meet at `018`.
+
+## Suggested execution — slice 4 (agent-native)
+
+**Single executor:** `022` → `023` → `024` and `025` in either order → `026`.
+
+**Two executors:** one runs `022` then `024` (tests then catalog). The other
+runs `023` then `025` then `026` (lock the door, then hand a stranger the
+keys, then the homescreen). They touch different files.
+
+Do **not** start 024 before 022 is green if you are about to let an agent
+place wagers. The catalog can be drafted, but do not wire mutating CLI.
+
+## Findings considered and rejected (022–026)
 
 ## Not yet verified anywhere
 

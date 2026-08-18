@@ -36,8 +36,8 @@ split into legs, and a destination pill on every chip.
 
 ### It already works
 
-`src/routes/league/$leagueId/trades.tsx` carries the state
-(`trades.tsx:28-60`):
+`src/routes/league/$leagueId/trades.tsx` still carries the state
+(after 019, ~66 and the third* setters):
 
 ```tsx
   const [thirdId, setThirdId] = useState<number | null>(null);
@@ -58,12 +58,14 @@ own `fromRoster` and `toRoster`, and requires every involved side to accept:
 
 So a three-way is just more assets. **No server change is needed in this plan.**
 
-### What plan 019 leaves behind
+### What plan 019 left behind (HEAD `ec855c3`)
 
-Plan 019 rebuilds the two-team composer as
-`src/components/trade-composer.tsx` and is instructed **not** to redesign the
-third-team path — it keeps `AssetCol` alive if the third team still needs it.
-This plan finishes that job and removes the leftover.
+`TradeComposer` is two-team only. When `thirdId` is set, trades.tsx hides the
+composer and shows the old AssetCol grid + send mutation. The "Add a third
+team" toggle still lives in the Propose section. This plan folds the third
+team into TradeComposer and deletes AssetCol.
+
+Book section / TradeOfferCard is 018 — do not rewrite it.
 
 ## Commands you will need
 

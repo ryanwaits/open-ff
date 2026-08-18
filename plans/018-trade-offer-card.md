@@ -71,7 +71,10 @@ Accept and Decline buttons follow. There is no Counter.
       })),
       assets: assets.map((a) => ({
         fromRoster: a.from_roster,
-        /* … kind, playerId, pickNo, amount, and resolved names … */
+        toRoster: a.to_roster,
+        fromName, toName, kind, playerId, playerName, pos, pickNo, pickLabel,
+        // amount is selected from ff_trade_assets but NOT mapped (ops.server.ts:783-794).
+        // Add `amount: a.amount` — one field, nothing else in this file.
 ```
 
 Assets carry `kind: "player" | "pick" | "faab"`, so a FAAB leg already comes
@@ -119,6 +122,8 @@ No new packages.
 - `src/components/trade-offer-card.tsx` (create)
 - `src/routes/league/$leagueId/trades.tsx` — render the card in the Book section
   instead of the text list
+- `src/lib/league/ops.server.ts` — **only** add `amount: a.amount` to the
+  `listTrades` asset map. Do not touch any other function in that file.
 
 **Out of scope** (do NOT touch):
 - The propose form in the same file. Plan 019 rebuilds it; touching both at once
@@ -129,6 +134,16 @@ No new packages.
   separate work.
 - Counter's *composer* behaviour. This plan adds the button and routes it; plan
   019 makes the composer accept a pre-filled deal.
+
+### Drift vs `304cfb7` (HEAD after 015–017)
+
+- `trades.tsx` itself is unchanged. Book section is still lines 294–354.
+- `listTrades` still returns `kind`, `fromRoster`, `toRoster`, player/pick
+  names. It still **omits `amount`** from the mapped object (see above).
+- Existing Book actions to keep: Accept, Reject/Decline, **Accept for house**
+  (commish), **Pull offer** (proposer). Do not drop the last two.
+- Load each involved roster **once** (`getTeam` keyed by rosterId) and share
+  across cards. A `getTeam` per pending trade is a STOP.
 
 ## Git workflow
 

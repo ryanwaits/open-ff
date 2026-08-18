@@ -113,6 +113,58 @@ map: an `ensureSchema()`, a `ff_refresh_log` row keyed by name, a
 match it.** It also demonstrates the repo's rule that a refresh failure must
 never break the caller.
 
+### `tickAllLeagues` as of HEAD `3b951a3` (drift vs `304cfb7`)
+
+`ops.server.ts` changed since this plan was written: player-status refresh is
+now wrapped in `refreshStatusAndRecord`, not inlined. Live shape
+(`src/lib/league/ops.server.ts:1008-1034`):
+
+```ts
+export async function tickAllLeagues(): Promise<{
+  leagues: number;
+  advanced: number;
+  waivers: number;
+  statusChanges: number;
+}> {
+  await ensureOpsSchema();
+  const sql = await getSql();
+  const rows = await sql<{ id: string }>`
+    select id from ff_leagues
+    where locked = 0 and status not in (${"pre_draft"}, ${"drafting"})
+  `;
+
+  const statusChanges = await refreshStatusAndRecord(rows.map((r) => r.id));
+
+  let advanced = 0;
+  let waivers = 0;
+  for (const row of rows) {
+    const res = await tickLeague(row.id);
+    advanced += res.advanced;
+    waivers += res.waivers;
+  }
+  return { leagues: rows.length, advanced, waivers, statusChanges };
+}
+```
+
+Hang the projections refresh **after** `refreshStatusAndRecord` and **before**
+the `tickLeague` loop. Collect distinct weeks from the same live leagues:
+
+```ts
+  const weeksInPlay = await sql<{ season: string; current_week: number }>`
+    select distinct season, current_week from ff_leagues
+    where locked = 0 and status not in (${"pre_draft"}, ${"drafting"})
+  `;
+  try {
+    const { refreshProjections } = await import("@/lib/data/projection-feed.server");
+    for (const key of weeksInPlay) await refreshProjections(key.season, key.current_week);
+  } catch {
+    /* a stale projection is better than a stopped clock */
+  }
+```
+
+`ff_leagues.season` and `ff_leagues.current_week` are the columns (`LeagueOps`
+at `ops.server.ts:19` / `:23`). Do not invent a second source of week.
+
 ## Commands you will need
 
 | Purpose   | Command             | Expected on success |
@@ -130,6 +182,7 @@ No new packages.
 - `src/lib/data/projection-feed.server.ts` (create) — fetch, store, read
 - `src/lib/data/projections.server.ts` — `projectPlayers` and `outlooksFor`
   prefer the feed, fall back to `perGameUnder`
+- `src/lib/data/types.ts` — add `"season-avg"` to `Projection.reason` (step 5)
 - `src/lib/league/ops.server.ts` — hang the weekly refresh off `tickAllLeagues`
 - `migrations/0009_projections.sql` (create)
 
@@ -262,10 +315,10 @@ player:
 ```
 npx vite-node -e "
   const p = await import('./src/lib/data/projections.server.ts');
-  const book = await p.scoringBookFor('<a hosted league id>');
+  const book = await p.scoringBookFor('lg_backyard');
   console.log('season avg:', p.perGameUnder(book, '4046'));
   console.log('projected :', (await p.projectPlayers({
-    leagueId:'<id>', season:'2025', week:8,
+    leagueId:'lg_backyard', season:'2025', week:8,
     players:[{ player_id:'4046' }] })));
 "
 ```
@@ -275,19 +328,11 @@ consulted — that is a STOP condition, not a rounding coincidence.
 
 ### Step 4: Refresh weekly from the cron
 
-In `src/lib/league/ops.server.ts`, inside `tickAllLeagues`, alongside the
-existing player-status refresh, add a projections refresh for each distinct
-`(season, current_week)` across live leagues. Wrap it so a failure cannot stop
-the clock:
-
-```ts
-  try {
-    const { refreshProjections } = await import("@/lib/data/projection-feed.server");
-    for (const key of weeksInPlay) await refreshProjections(key.season, key.week);
-  } catch {
-    /* a stale projection is better than a stopped clock */
-  }
-```
+In `src/lib/league/ops.server.ts`, inside `tickAllLeagues`, after
+`refreshStatusAndRecord` and before the `tickLeague` loop (see Current state
+for the exact live snippet). Collect distinct `(season, current_week)` from
+`ff_leagues` for the same live-league filter already used. Wrap it so a
+failure cannot stop the clock. One `refreshProjections` call site only.
 
 **Verify**: `grep -n "refreshProjections" src/lib/league/ops.server.ts` → one
 call. `npm run build` → exit 0.

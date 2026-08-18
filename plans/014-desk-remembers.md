@@ -79,11 +79,20 @@ export type DispatchContext = {
 
 ### Where it is called
 
-`src/lib/league/engine.server.ts (desk composition path)` (inside the desk composition path):
+`src/lib/league/engine.server.ts` `loadDesk` (lines 2232–2334). Composition
+is **after** the stale-placeholder delete, at 2301–2312:
 
 ```ts
 	const { buildDispatchContext, composeDesk } = await import("./dispatch");
+	const ctx = buildDispatchContext({
+		leagueId, leagueName: row.name, season: row.season, week,
+		status: row.status, standings, pairs, activity, rosters: rosterCards,
+	});
+	const desk = composeDesk(ctx);
 ```
+
+`context_json` currently stores only `{ week, league }`. Put the selected
+facts in that object so next week can avoid them.
 
 …and the result is stored in `ff_dispatches.context_json`
 (`engine.server.ts (ff_dispatches insert)`):
@@ -181,9 +190,8 @@ returned object.
 
 ### Step 2: Load facts at the call site
 
-In `src/lib/league/engine.server.ts`, at the desk composition path near line
-1923, load facts alongside the existing inputs and pass them to
-`buildDispatchContext`:
+In `src/lib/league/engine.server.ts` `loadDesk`, immediately before
+`buildDispatchContext` (~2301), load facts and pass them in:
 
 ```ts
 	// The week's snapshot says what happened; the facts say what it means in the

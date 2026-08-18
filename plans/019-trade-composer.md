@@ -38,7 +38,8 @@ an omission.
 
 ### The form
 
-`src/routes/league/$leagueId/trades.tsx` (443 lines). State (~line 28-60):
+`src/routes/league/$leagueId/trades.tsx` (~544 lines after 018). Composer state
+(~line 202-210):
 
 ```tsx
   const [partnerId, setPartnerId] = useState<number | null>(null);
@@ -58,8 +59,10 @@ an omission.
 redesign, not new capability — plan 020 handles the three-team presentation;
 here, preserve the two-team path and do not regress the third.
 
-Rendering is `AssetCol` (~line 359-430): a destination chip row plus a scrolling
-list of toggle buttons, twice, in a `lg:grid-cols-2`.
+Rendering is `AssetCol` (~line 359 / function at ~543): a destination chip row
+plus a scrolling list of toggle buttons, twice, in a `lg:grid-cols-2`. Plan 018
+added Book loading (`useQueries` getTeam, `tradeDelta`, `?counter` via
+`validateSearch`) **above** this form. **Do not touch the Book section.**
 
 ### The submit path
 
@@ -110,7 +113,8 @@ No new packages.
 
 **Out of scope** (do NOT touch):
 - `proposeTrade` and its validation. It already accepts everything this sends.
-- The Book section — plan 018 owns it.
+- The Book section (`<section>` whose heading is `Book`) — plan 018 owns it.
+  Diffs that rewrite TradeOfferCard wiring fail review.
 - `src/components/draft-trade-drawer.tsx` — in-draft trading, plan 011,
   separate work.
 - Three-team **presentation** — plan 020. Keep the existing third-team code
