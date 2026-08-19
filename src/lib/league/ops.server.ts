@@ -42,7 +42,7 @@ type RosterOps = {
 };
 
 let opsReady = 0;
-const OPS_SCHEMA = 4;
+const OPS_SCHEMA = 5;
 
 export async function ensureOpsSchema(): Promise<void> {
   if (opsReady >= OPS_SCHEMA) return;
@@ -101,6 +101,10 @@ export async function ensureOpsSchema(): Promise<void> {
       primary key (league_id, roster_id, player_id))`,
     `create index if not exists ff_queue_order_idx
       on ff_queue (league_id, roster_id, rank)`,
+    `create table if not exists ff_allowlist (
+      league_id text not null,
+      email text not null,
+      primary key (league_id, email))`,
   ];
   for (const s of stmts) await sql.query(s);
   await sql.query(

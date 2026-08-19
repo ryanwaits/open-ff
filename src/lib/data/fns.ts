@@ -113,6 +113,7 @@ export const getLeagueBundle = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     if (isHostedLeague(data.leagueId)) {
       const eng = await import("@/lib/league/engine.server");
+      await eng.assertLeagueViewer(data.leagueId, context.userId);
       return eng.loadLeagueBundle(data.leagueId, context.userId);
     }
     const sleeper = await import("./sleeper.server");

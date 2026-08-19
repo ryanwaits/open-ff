@@ -12,7 +12,7 @@ If it's not in this table, it is not a tool. Stop. Do not invent a table.
 |----|-------|------|-----------|
 | listMyLeagues | spectator | read | List leagues the signed-in user belongs to. |
 | createLeague | commish | workflow | Create a hosted league and take the first seat. |
-| joinLeague | manager | atomic | Join a league by invite code and claim a seat. |
+| joinLeague | manager | atomic | Join a league by invite code and claim a seat, plus allowlist if the commish seeded one. |
 | previewInvite | spectator | read | Preview a league from an invite code. |
 | getDesk | spectator | read | Load the league desk for a week. |
 | getEvents | spectator | read | Read the league event diary. |
@@ -38,7 +38,10 @@ If it's not in this table, it is not a tool. Stop. Do not invent a table.
 | importRebuild | commish | workflow | Commit a paste/PDF rebuild into the ledger. |
 | getSettings | spectator | read | Load league settings and whether you are commish. |
 | saveSettings | commish | workflow | Save scoring, slots, FAAB, playoffs, and betting knobs. |
-| claimRoster | manager | atomic | Claim an open roster seat as your own. |
+| claimRoster | manager | atomic | Claim an open roster seat as your own (invite code required unless you are commish). |
+| listAllowlist | commish | read | List emails allowed to join this league. |
+| addAllowlistEmail | commish | atomic | Add an email to the league invite allowlist. |
+| removeAllowlistEmail | commish | atomic | Remove an email from the league invite allowlist. |
 | getClaims | spectator | read | List waiver claims visible to you. |
 | cancelClaim | manager | atomic | Withdraw one of your pending waiver claims. |
 | processWaivers | commish | workflow | Run the waiver wire and award winning claims. |

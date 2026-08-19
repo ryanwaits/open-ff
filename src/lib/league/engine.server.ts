@@ -244,6 +244,86 @@ export async function rosterIdOwnedBy(
 	`;
 	return rows[0]?.roster_id ?? null;
 }
+
+async function loadUserEmail(userId: string): Promise<string | null> {
+	const sql = await getSql();
+	const rows = await sql<{ email: string }>`
+		select email from "user" where id = ${userId} limit 1
+	`;
+	return rows[0]?.email ?? null;
+}
+
+async function loadAllowEmails(leagueId: string): Promise<string[]> {
+	await (await import("./ops.server")).ensureOpsSchema();
+	const sql = await getSql();
+	const rows = await sql<{ email: string }>`
+		select email from ff_allowlist where league_id = ${leagueId} order by email
+	`;
+	return rows.map((r) => r.email);
+}
+
+async function assertAllowlisted(leagueId: string, userId: string): Promise<void> {
+	const { emailAllowed } = await import("./allowlist");
+	const allow = await loadAllowEmails(leagueId);
+	if (allow.length === 0) return;
+	const email = await loadUserEmail(userId);
+	if (!emailAllowed(allow, email)) {
+		throw new Error("Your email is not on this league's invite list.");
+	}
+}
+
+/** Commish or seat holder. Unsigned / non-member → UnauthorizedError. */
+export async function assertLeagueViewer(
+	leagueId: string,
+	userId: string | null,
+): Promise<void> {
+	const { UnauthorizedError } = await import("@/lib/auth/verify.server");
+	if (!userId) throw new UnauthorizedError();
+	const row = await getLeague(leagueId);
+	if (row.commish_id === userId) return;
+	const mine = await rosterIdOwnedBy(leagueId, userId);
+	if (mine == null) throw new UnauthorizedError();
+}
+
+export async function listAllowlist(userId: string, leagueId: string): Promise<string[]> {
+	const row = await getLeague(leagueId);
+	if (row.commish_id !== userId) throw new Error("Only the commissioner can manage the invite list.");
+	return loadAllowEmails(leagueId);
+}
+
+export async function addAllowlistEmail(
+	userId: string,
+	leagueId: string,
+	rawEmail: string,
+): Promise<void> {
+	const row = await getLeague(leagueId);
+	if (row.commish_id !== userId) throw new Error("Only the commissioner can manage the invite list.");
+	if (row.locked) throw new Error("This desk is locked.");
+	const { normEmail } = await import("./allowlist");
+	const email = normEmail(rawEmail);
+	if (!email || !email.includes("@")) throw new Error("Enter a valid email.");
+	await (await import("./ops.server")).ensureOpsSchema();
+	const sql = await getSql();
+	await sql`
+		insert into ff_allowlist (league_id, email) values (${leagueId}, ${email})
+		on conflict do nothing
+	`;
+}
+
+export async function removeAllowlistEmail(
+	userId: string,
+	leagueId: string,
+	rawEmail: string,
+): Promise<void> {
+	const row = await getLeague(leagueId);
+	if (row.commish_id !== userId) throw new Error("Only the commissioner can manage the invite list.");
+	if (row.locked) throw new Error("This desk is locked.");
+	const { normEmail } = await import("./allowlist");
+	const email = normEmail(rawEmail);
+	await (await import("./ops.server")).ensureOpsSchema();
+	const sql = await getSql();
+	await sql`delete from ff_allowlist where league_id = ${leagueId} and email = ${email}`;
+}
 async function getSpots(id) {
 	return (await getSql())`select * from ff_spots where league_id = ${id}`;
 }
@@ -757,19 +837,24 @@ export async function loadActivity(leagueId: string, _week: number): Promise<Act
 }
 export async function listMyLeagues(userId: string): Promise<{ leagueId: string; name: string; season: string; status: string; role: string }[]> {
 	await ensureDemo();
+	const seen = new Set<string>();
 	return (await (await getSql())`
     select l.id, l.name, l.season, l.status, l.commish_id, r.owner_id
     from ff_leagues l
     left join ff_rosters r on r.league_id = l.id and r.owner_id = ${userId}
     where r.owner_id = ${userId} or l.commish_id = ${userId}
     order by l.created_at desc
-  `).map((r) => ({
-		leagueId: r.id,
-		name: r.name,
-		season: r.season,
-		status: r.status,
-		role: r.commish_id === userId ? "commish" : "member"
-	}));
+  `).flatMap((r) => {
+		if (seen.has(r.id)) return [];
+		seen.add(r.id);
+		return [{
+			leagueId: r.id,
+			name: r.name,
+			season: r.season,
+			status: r.status,
+			role: r.commish_id === userId ? "commish" : "member"
+		}];
+	});
 }
 export async function createLeague(input: { userId: string; name: string; teamName: string; teamCount: number; scoring: "ppr" | "half" | "std"; fillHouse: boolean }): Promise<{ leagueId: string; inviteCode: string; season: string }> {
 	await ensureDemo();
@@ -849,6 +934,7 @@ export async function joinLeague(userId: string, code: string, teamName: string,
 	if ((await sql`select * from ff_rosters where league_id = ${league.id} and owner_id = ${userId}`)[0]) {
 		return { leagueId: league.id, season: league.season, name: league.name };
 	}
+	await assertAllowlisted(league.id, userId);
 	const seat = rosterId
 		? (await sql`select * from ff_rosters where league_id = ${league.id} and roster_id = ${rosterId} and owner_id is null`)[0]
 		: (await sql`
@@ -1813,7 +1899,37 @@ async function ensureSnapColumns() {
 	await sql.query(`alter table ff_rosters add column if not exists snap_pf real`);
 	await sql.query(`alter table ff_rosters add column if not exists snap_pa real`);
 }
+const rebuildInflight = new Map<string, Promise<{ leagueId: string; inviteCode: string }>>();
+
 export async function importRebuild(input: {
+  userId: string;
+  paste?: string;
+  known?: string;
+  pdfBase64?: string;
+  teams?: {
+    teamName: string;
+    manager: string;
+    wins: number | null;
+    losses: number | null;
+    ties: number | null;
+    pf: number | null;
+    pa: number | null;
+    names: string[];
+  }[];
+  name: string;
+  season: string;
+  scoring: "ppr" | "half" | "std";
+  claimRosterId: number | null;
+}): Promise<{ leagueId: string; inviteCode: string }> {
+	const key = `${input.userId}:${input.known ?? `${input.name.trim().toLowerCase()}:${input.season}`}`;
+	const pending = rebuildInflight.get(key);
+	if (pending) return pending;
+	const run = importRebuildOnce(input).finally(() => rebuildInflight.delete(key));
+	rebuildInflight.set(key, run);
+	return run;
+}
+
+async function importRebuildOnce(input: {
   userId: string;
   paste?: string;
   known?: string;
@@ -1847,6 +1963,13 @@ export async function importRebuild(input: {
 	if (teams.length < 2) throw new Error(parsed.warnings[0] ?? "Need at least two teams.");
 	if (teams.length > 14) throw new Error("14 teams max for now.");
 	const sql = await getSql();
+	if (input.known) {
+		const existing = await sql<{ id: string; invite_code: string }>`
+      select id, invite_code from ff_leagues
+      where commish_id = ${input.userId} and source_league_id = ${input.known}
+    `.catch(() => []);
+		if (existing[0]) return { leagueId: existing[0].id, inviteCode: existing[0].invite_code };
+	}
 	const ops = await import("./ops.server");
 	await ops.ensureOpsSchema();
 	const id = nid("lg_");
@@ -1865,12 +1988,12 @@ export async function importRebuild(input: {
     insert into ff_leagues (
       id, name, season, invite_code, commish_id, status, team_count,
       scoring, roster_slots, playoff_teams, current_week, locked,
-      scoring_json, source, playoff_byes
+      scoring_json, source, source_league_id, playoff_byes
     ) values (
       ${id}, ${name}, ${season}, ${code}, ${input.userId},
       ${"in_season"}, ${teams.length}, ${input.scoring},
       ${JSON.stringify(DEFAULT_SLOTS)}, ${playoff}, ${season === "2025" ? 14 : 1},
-      ${0}, ${JSON.stringify(book)}, ${"rebuild"}, ${byes}
+      ${0}, ${JSON.stringify(book)}, ${"rebuild"}, ${input.known ?? null}, ${byes}
     )
   `;
 	await sql`insert into ff_draft (league_id, status, pick_no) values (${id}, ${"complete"}, ${1})`;
@@ -2071,8 +2194,22 @@ export async function saveSettings(userId: string, leagueId: string, input: {
 	}
 	await ensureRemainingSchedule(leagueId);
 }
-export async function claimRoster(userId: string, leagueId: string, rosterId: number): Promise<void> {
-	if ((await getLeague(leagueId)).locked) throw new Error("This desk is locked.");
+export async function claimRoster(
+	userId: string,
+	leagueId: string,
+	rosterId: number,
+	code?: string | null,
+): Promise<void> {
+	const league = await getLeague(leagueId);
+	if (league.locked) throw new Error("This desk is locked.");
+	const isCommish = league.commish_id === userId;
+	if (!isCommish) {
+		const provided = (code ?? "").trim().toUpperCase();
+		if (!provided || provided !== league.invite_code) {
+			throw new Error("Invite code required.");
+		}
+	}
+	await assertAllowlisted(leagueId, userId);
 	const sql = await getSql();
 	if ((await sql`select * from ff_rosters where league_id = ${leagueId} and owner_id = ${userId}`)[0]) throw new Error("You already have a seat.");
 	const seat = (await sql`select * from ff_rosters where league_id = ${leagueId} and roster_id = ${rosterId}`)[0];

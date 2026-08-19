@@ -18,7 +18,16 @@ import {
   type SlotCounts,
 } from "@/lib/league/roster";
 import { getLeagueBundle } from "@/lib/data/fns";
-import { claimRoster, getSettings, saveSettings, processWaivers, advanceWeek } from "@/lib/league/fns";
+import {
+  addAllowlistEmail,
+  advanceWeek,
+  claimRoster,
+  getSettings,
+  listAllowlist,
+  processWaivers,
+  removeAllowlistEmail,
+  saveSettings,
+} from "@/lib/league/fns";
 import { defaultPlayoffByes, describeBracket } from "@/lib/league/playoffs";
 import { cn } from "@/lib/utils";
 
@@ -110,7 +119,14 @@ function SettingsPage() {
   });
 
   const claim = useMutation({
-    mutationFn: (rosterId: number) => claimRoster({ data: { leagueId, rosterId } }),
+    mutationFn: (rosterId: number) =>
+      claimRoster({
+        data: {
+          leagueId,
+          rosterId,
+          code: q.data?.inviteCode ?? null,
+        },
+      }),
     onSuccess: async () => {
       toast("Seat claimed.");
       await qc.invalidateQueries({ queryKey: ["league", leagueId] });
@@ -204,6 +220,7 @@ function SettingsPage() {
           </label>
         </div>
         {q.data.inviteCode ? <InviteCard code={q.data.inviteCode} origin={origin} /> : null}
+        {q.data.isCommish ? <AllowlistPanel leagueId={leagueId} locked={q.data.locked} /> : null}
       </section>
 
       <section>
@@ -617,6 +634,86 @@ function SettingsPage() {
           {q.data.locked ? "Demo desk is locked." : "Only the commissioner can edit scoring."}
         </p>
       )}
+    </div>
+  );
+}
+
+function AllowlistPanel({ leagueId, locked }: { leagueId: string; locked: boolean }) {
+  const qc = useQueryClient();
+  const [email, setEmail] = useState("");
+  const q = useQuery({
+    queryKey: ["allowlist", leagueId],
+    queryFn: () => listAllowlist({ data: { leagueId } }),
+  });
+  const add = useMutation({
+    mutationFn: () => addAllowlistEmail({ data: { leagueId, email } }),
+    onSuccess: async () => {
+      setEmail("");
+      toast("Email added.");
+      await qc.invalidateQueries({ queryKey: ["allowlist", leagueId] });
+    },
+    onError: (err) => toast(err instanceof Error ? err.message : "Could not add."),
+  });
+  const remove = useMutation({
+    mutationFn: (addr: string) => removeAllowlistEmail({ data: { leagueId, email: addr } }),
+    onSuccess: async () => {
+      toast("Email removed.");
+      await qc.invalidateQueries({ queryKey: ["allowlist", leagueId] });
+    },
+    onError: (err) => toast(err instanceof Error ? err.message : "Could not remove."),
+  });
+  const emails = q.data ?? [];
+  return (
+    <div className="mt-6">
+      <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Invite list</h3>
+      <p className="mt-1 text-sm text-muted">
+        {emails.length === 0
+          ? "Anyone with the code can join. Add emails to lock it."
+          : "Only these emails can join or claim a seat with the code."}
+      </p>
+      <form
+        className="mt-3 flex flex-wrap gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!email.trim() || locked) return;
+          add.mutate();
+        }}
+      >
+        <Input
+          className="max-w-xs"
+          type="email"
+          placeholder="manager@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          disabled={locked || add.isPending}
+        />
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={locked || add.isPending || !email.trim()}
+        >
+          {add.isPending ? "Adding…" : "Add"}
+        </Button>
+      </form>
+      {emails.length > 0 ? (
+        <ul className="mt-3 divide-y divide-line rounded-xl bg-surface shadow-[var(--shadow-border)]">
+          {emails.map((addr) => (
+            <li key={addr} className="flex items-center justify-between gap-3 px-4 py-2.5">
+              <span className="font-mono text-sm">{addr}</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={locked || remove.isPending}
+                onClick={() => remove.mutate(addr)}
+              >
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

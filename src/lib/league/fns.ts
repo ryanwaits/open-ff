@@ -48,9 +48,11 @@ export const previewInvite = createServerFn({ method: "GET" })
   });
 
 export const getDesk = createServerFn({ method: "GET" })
+  .middleware([optionalAuthMiddleware])
   .validator(z.object({ leagueId: z.string(), week: z.number() }))
-  .handler(async ({ data }) => {
+  .handler(async ({ context, data }) => {
     const eng = await import("./engine.server");
+    await eng.assertLeagueViewer(data.leagueId, context.userId);
     return eng.loadDesk(data.leagueId, data.week);
   });
 
@@ -63,7 +65,9 @@ export const getEvents = createServerFn({ method: "GET" })
       sinceWeek: z.number().optional(),
     }),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ context, data }) => {
+    const eng = await import("./engine.server");
+    await eng.assertLeagueViewer(data.leagueId, context.userId);
     const ev = await import("./events.server");
     const rows = await ev.readEvents(data.leagueId, {
       limit: data.limit,
@@ -86,7 +90,9 @@ export const getEvents = createServerFn({ method: "GET" })
 export const getLeagueFacts = createServerFn({ method: "GET" })
   .middleware([optionalAuthMiddleware])
   .validator(z.object({ leagueId: z.string(), week: z.number() }))
-  .handler(async ({ data }) => {
+  .handler(async ({ context, data }) => {
+    const eng = await import("./engine.server");
+    await eng.assertLeagueViewer(data.leagueId, context.userId);
     const facts = await import("./league-facts.server");
     return facts.loadLeagueFacts(data.leagueId, data.week);
   });
@@ -96,6 +102,7 @@ export const getDraft = createServerFn({ method: "GET" })
   .validator(z.object({ leagueId: z.string(), position: z.string(), query: z.string() }))
   .handler(async ({ context, data }) => {
     const eng = await import("./engine.server");
+    await eng.assertLeagueViewer(data.leagueId, context.userId);
     await eng.ensureDemo();
     await eng.flushHousePicks(data.leagueId);
     return eng.loadDraft(data.leagueId, context.userId, data.position, data.query);
@@ -373,6 +380,7 @@ export const getSettings = createServerFn({ method: "GET" })
   .validator(z.object({ leagueId: z.string() }))
   .handler(async ({ context, data }) => {
     const eng = await import("./engine.server");
+    await eng.assertLeagueViewer(data.leagueId, context.userId);
     return eng.loadSettings(data.leagueId, context.userId);
   });
 
@@ -406,10 +414,42 @@ export const saveSettings = createServerFn({ method: "POST" })
 
 export const claimRoster = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ leagueId: z.string(), rosterId: z.number() }))
+  .validator(
+    z.object({
+      leagueId: z.string(),
+      rosterId: z.number(),
+      code: z.string().nullable().optional(),
+    }),
+  )
   .handler(async ({ context, data }) => {
     const eng = await import("./engine.server");
-    await eng.claimRoster(context.userId, data.leagueId, data.rosterId);
+    await eng.claimRoster(context.userId, data.leagueId, data.rosterId, data.code);
+    return { ok: true };
+  });
+
+export const listAllowlist = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ leagueId: z.string() }))
+  .handler(async ({ context, data }) => {
+    const eng = await import("./engine.server");
+    return eng.listAllowlist(context.userId, data.leagueId);
+  });
+
+export const addAllowlistEmail = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ leagueId: z.string(), email: z.string() }))
+  .handler(async ({ context, data }) => {
+    const eng = await import("./engine.server");
+    await eng.addAllowlistEmail(context.userId, data.leagueId, data.email);
+    return { ok: true };
+  });
+
+export const removeAllowlistEmail = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ leagueId: z.string(), email: z.string() }))
+  .handler(async ({ context, data }) => {
+    const eng = await import("./engine.server");
+    await eng.removeAllowlistEmail(context.userId, data.leagueId, data.email);
     return { ok: true };
   });
 
@@ -419,6 +459,7 @@ export const getClaims = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const ops = await import("./ops.server");
     const eng = await import("./engine.server");
+    await eng.assertLeagueViewer(data.leagueId, context.userId);
     const mine = await eng.rosterIdOwnedBy(data.leagueId, context.userId ?? null);
     return ops.listClaims(data.leagueId, mine);
   });
@@ -452,7 +493,9 @@ export const advanceWeek = createServerFn({ method: "POST" })
 export const getTrades = createServerFn({ method: "GET" })
   .middleware([optionalAuthMiddleware])
   .validator(z.object({ leagueId: z.string() }))
-  .handler(async ({ data }) => {
+  .handler(async ({ context, data }) => {
+    const eng = await import("./engine.server");
+    await eng.assertLeagueViewer(data.leagueId, context.userId);
     const ops = await import("./ops.server");
     return ops.listTrades(data.leagueId);
   });
@@ -510,6 +553,7 @@ export const getSchedule = createServerFn({ method: "GET" })
   .validator(z.object({ leagueId: z.string() }))
   .handler(async ({ context, data }) => {
     const eng = await import("./engine.server");
+    await eng.assertLeagueViewer(data.leagueId, context.userId);
     return eng.loadSchedule(data.leagueId, context.userId);
   });
 
@@ -548,6 +592,8 @@ export const getBook = createServerFn({ method: "GET" })
   .middleware([optionalAuthMiddleware])
   .validator(z.object({ leagueId: z.string(), week: z.number().optional() }))
   .handler(async ({ context, data }) => {
+    const eng = await import("./engine.server");
+    await eng.assertLeagueViewer(data.leagueId, context.userId);
     const book = await import("./book.server");
     return book.loadBook(data.leagueId, context.userId, data.week);
   });
