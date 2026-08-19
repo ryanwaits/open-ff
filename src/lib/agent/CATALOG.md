@@ -18,6 +18,7 @@ If it's not in this table, it is not a tool. Stop. Do not invent a table.
 | getDesk | spectator | read | Load the league desk for a week. |
 | getEvents | spectator | read | Read the league event diary. |
 | getLeagueFacts | spectator | read | Load standing facts rolled up through a week. |
+| getAgentContext | spectator | read | Seat, spendable FAAB, facts, recent events, and the tools in your scope. |
 | getDraft | spectator | read | Load the live draft board, queue, and clock. |
 | getMockPool | spectator | read | Load the scored mock-draft player pool. |
 | startDraft | commish | atomic | Open the draft room and start the clock. |

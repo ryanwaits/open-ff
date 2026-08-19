@@ -106,6 +106,16 @@ export const getLeagueFacts = createServerFn({ method: "GET" })
     return facts.loadLeagueFacts(data.leagueId, data.week);
   });
 
+export const getAgentContext = createServerFn({ method: "GET" })
+  .middleware([optionalAuthMiddleware])
+  .validator(z.object({ leagueId: z.string() }))
+  .handler(async ({ context, data }) => {
+    const eng = await import("./engine.server");
+    await eng.assertLeagueViewer(data.leagueId, context.userId);
+    const ctx = await import("./agent-context.server");
+    return ctx.loadAgentContext(data.leagueId, context.userId);
+  });
+
 export const getDraft = createServerFn({ method: "GET" })
   .middleware([optionalAuthMiddleware])
   .validator(z.object({ leagueId: z.string(), position: z.string(), query: z.string() }))

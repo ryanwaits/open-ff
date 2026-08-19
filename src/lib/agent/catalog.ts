@@ -69,6 +69,13 @@ export const AGENT_TOOLS: AgentTool[] = [
     "read",
   ),
   tool(
+    "getAgentContext",
+    "Get agent context",
+    "Seat, spendable FAAB, facts, recent events, and the tools in your scope.",
+    "spectator",
+    "read",
+  ),
+  tool(
     "getDraft",
     "Get draft",
     "Load the live draft board, queue, and clock.",

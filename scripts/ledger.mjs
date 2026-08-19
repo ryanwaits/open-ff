@@ -5,13 +5,15 @@
  *   bun scripts/ledger.mjs --help
  *   bun scripts/ledger.mjs getEvents --league <id> --limit 20
  *   bun scripts/ledger.mjs getLeagueFacts --league <id> --week <n>
+ *   bun scripts/ledger.mjs getAgentContext --league <id> --user <id>
  *
  * --help / --list work with zero DB (catalog import only).
  *
- * Live reads import `events.server` / `league-facts.server`, which call
- * `getSql()`. bun has no Vite `import.meta.glob`, so the PGLite fallback
- * cannot migrate here. Set `DATABASE_URL` to the same Postgres the app uses,
- * or run reads through the running app.
+ * Live reads import `events.server` / `league-facts.server` /
+ * `agent-context.server`, which call `getSql()`. bun has no Vite
+ * `import.meta.glob`, so the PGLite fallback cannot migrate here. Set
+ * `DATABASE_URL` to the same Postgres the app uses, or run reads through
+ * the running app.
  *
  * Mutating catalog entries (placeWager, makePick, …) are listed in --help
  * but are not dispatched from argv.
@@ -55,9 +57,11 @@ function printHelp() {
     "  bun scripts/ledger.mjs --list",
     "  bun scripts/ledger.mjs getEvents --league <id> [--limit n] [--sinceWeek n]",
     "  bun scripts/ledger.mjs getLeagueFacts --league <id> --week <n>",
+    "  bun scripts/ledger.mjs getAgentContext --league <id> --user <id>",
     "",
     "Live reads need DATABASE_URL (same Postgres as the app) or the running app.",
     "bun cannot boot the PGLite fallback (no import.meta.glob).",
+    "--user is the seat holder's user id (dump is their purse).",
     "",
     "Tools:",
   ];
@@ -75,6 +79,7 @@ function payloadOf(args) {
     limit: args.limit != null ? Number(args.limit) : json.limit,
     sinceWeek: args.sinceWeek != null ? Number(args.sinceWeek) : json.sinceWeek,
     week: args.week != null ? Number(args.week) : json.week,
+    userId: args.user ?? args.userId ?? json.userId,
   };
 }
 
@@ -95,8 +100,15 @@ async function dispatchRead(id, args) {
     const facts = await import("../src/lib/league/league-facts.server.ts");
     return facts.loadLeagueFacts(data.leagueId, data.week);
   }
+  if (id === "getAgentContext") {
+    if (!data.leagueId || !data.userId) {
+      fail("getAgentContext requires --league <id> --user <id>");
+    }
+    const ctx = await import("../src/lib/league/agent-context.server.ts");
+    return ctx.loadAgentContext(data.leagueId, data.userId);
+  }
   fail(
-    `${id} is a catalogued read but this CLI slice only dispatches getEvents and getLeagueFacts.`,
+    `${id} is a catalogued read but this CLI slice only dispatches getEvents, getLeagueFacts, and getAgentContext.`,
   );
 }
 

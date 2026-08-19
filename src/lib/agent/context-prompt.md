@@ -3,6 +3,7 @@
 open-ff is a hosted fantasy football league: draft, lineups, waivers/FAAB,
 trades, a matchup book, and an event diary. Mechanics live as named primitives
 in [CATALOG.md](./CATALOG.md). Features are prompts over those tools.
+Start a session with `getAgentContext`.
 
 ## Scopes
 

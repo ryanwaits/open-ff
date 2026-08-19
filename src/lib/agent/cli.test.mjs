@@ -15,6 +15,7 @@ test("--help prints getEvents and placeWager without a DB", () => {
   });
   assert.equal(r.status, 0, r.stderr || r.stdout);
   assert.match(r.stdout, /getEvents/);
+  assert.match(r.stdout, /getAgentContext/);
   assert.match(r.stdout, /placeWager/);
 });
 
@@ -28,4 +29,16 @@ test("placeWager is listed but not dispatched from argv", () => {
   });
   assert.notEqual(r.status, 0);
   assert.match(`${r.stdout}\n${r.stderr}`, /mutating|not dispatched|not available/i);
+});
+
+test("getAgentContext without --user fails without a DB", () => {
+  const env = { ...process.env };
+  delete env.DATABASE_URL;
+  const r = spawnSync("bun", ["scripts/ledger.mjs", "getAgentContext", "--league", "lg_x"], {
+    cwd: root,
+    encoding: "utf8",
+    env,
+  });
+  assert.notEqual(r.status, 0);
+  assert.match(`${r.stdout}\n${r.stderr}`, /--user/);
 });
