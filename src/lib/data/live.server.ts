@@ -1,5 +1,5 @@
-import type { GameChip, ScoreGame } from "./types";
 import { canonTeam, teamKeys } from "./teams";
+import type { GameChip, ScoreGame } from "./types";
 
 export function seasonTypeNum(seasonType?: string | null): number {
   if (seasonType === "pre") return 1;
@@ -51,6 +51,13 @@ export function gameForTeam(
 
 const pointsCache = new Map<string, { at: number; data: Record<string, number> }>();
 const statsCache = new Map<string, { at: number; data: Record<string, Record<string, number>> }>();
+const statsInflight = new Map<string, Promise<Record<string, Record<string, number>>>>();
+
+function weekStatsTtlMs(season: string): number {
+  const year = Number(season);
+  if (Number.isFinite(year) && year < new Date().getFullYear()) return 6 * 60 * 60 * 1000;
+  return 12_000;
+}
 
 /** Unofficial Sleeper weekly points. Short TTL so Sunday games tick. */
 export async function fetchWeekPoints(
@@ -82,14 +89,24 @@ export async function fetchWeekStats(
   const kind = seasonType === "pre" || seasonType === "post" ? seasonType : "regular";
   const key = `raw:${kind}:${season}:${week}`;
   const hit = statsCache.get(key);
-  if (hit && Date.now() - hit.at < 12_000) return hit.data;
-  const res = await fetch(`https://api.sleeper.app/v1/stats/nfl/${kind}/${season}/${week}`, {
-    headers: { accept: "application/json" },
-  });
-  if (!res.ok) return hit?.data ?? {};
-  const raw = ((await res.json()) as Record<string, Record<string, number>>) ?? {};
-  statsCache.set(key, { at: Date.now(), data: raw });
-  return raw;
+  if (hit && Date.now() - hit.at < weekStatsTtlMs(season)) return hit.data;
+  const pending = statsInflight.get(key);
+  if (pending) return pending;
+  const job = (async () => {
+    const res = await fetch(`https://api.sleeper.app/v1/stats/nfl/${kind}/${season}/${week}`, {
+      headers: { accept: "application/json" },
+    });
+    if (!res.ok) return hit?.data ?? {};
+    const raw = ((await res.json()) as Record<string, Record<string, number>>) ?? {};
+    statsCache.set(key, { at: Date.now(), data: raw });
+    return raw;
+  })();
+  statsInflight.set(key, job);
+  try {
+    return await job;
+  } finally {
+    statsInflight.delete(key);
+  }
 }
 
 const seasonCache = new Map<string, { at: number; data: Record<string, Record<string, number>> }>();
@@ -121,7 +138,10 @@ export async function fetchSeasonStats(
   return data;
 }
 
-const boardCache = new Map<string, { at: number; data: Awaited<ReturnType<typeof weekBoardUncached>> }>();
+const boardCache = new Map<
+  string,
+  { at: number; data: Awaited<ReturnType<typeof weekBoardUncached>> }
+>();
 
 async function weekBoardUncached(season: string, week: number, seasonType?: string | null) {
   const espn = await import("./espn.server");
