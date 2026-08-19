@@ -7,7 +7,7 @@ import { PlayerCell } from "@/components/player-cell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getLeagueBundle, getTeam } from "@/lib/data/fns";
-import type { RosterPlayer } from "@/lib/data/types";
+import type { LeagueBundle, RosterPlayer } from "@/lib/data/types";
 import { sitPlayer, startPlayer } from "@/lib/league/fns";
 import { labeledStartSlots, slotAccepts } from "@/lib/league/roster";
 import { cn, fmtRecord, formatPts } from "@/lib/utils";
@@ -29,11 +29,13 @@ function TeamPage() {
     queryFn: () => getLeagueBundle({ data: { leagueId } }),
     refetchInterval: (q) => (q.state.data?.scoringLive ? 15_000 : false),
   });
-  const week = league.data?.currentWeek ?? 1;
+  const week =
+    league.data?.currentWeek ??
+    qc.getQueryData<LeagueBundle>(["league", leagueId])?.currentWeek ??
+    1;
   const team = useQuery({
     queryKey: ["team", leagueId, rosterId, week],
     queryFn: () => getTeam({ data: { leagueId, rosterId: Number(rosterId), week } }),
-    enabled: Boolean(league.data),
     refetchInterval: () => (league.data?.scoringLive ? 15_000 : false),
   });
 

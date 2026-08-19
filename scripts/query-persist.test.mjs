@@ -15,7 +15,7 @@ test("PERSIST_ROOTS allowlist includes workbook keys and excludes live keys", ()
   const roots = [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
   const set = new Set(roots);
 
-  for (const key of ["league", "matchups", "team", "my-leagues"]) {
+  for (const key of ["league", "matchups", "team", "my-leagues", "desk", "settings", "wire", "player-profile"]) {
     assert.ok(set.has(key), `missing persist root: ${key}`);
   }
   for (const key of ["scores", "pulse", "live-wire", "week-stats", "draft"]) {

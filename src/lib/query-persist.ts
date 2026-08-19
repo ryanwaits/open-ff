@@ -7,12 +7,14 @@ export const PERSIST_ROOTS = new Set<string>([
   "byes",
   "activity",
   "recap",
+  "desk",
   "trades",
   "claims",
   "picks",
   "settings",
   "schedule",
   "player-profile",
+  "wire",
 ]);
 
 export const PERSIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;

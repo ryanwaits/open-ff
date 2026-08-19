@@ -68,7 +68,7 @@ export function ScheduleDesk({
     onError: (e) => toast(e instanceof Error ? e.message : "Could not rebuild."),
   });
 
-  if (q.isLoading) {
+  if (q.data == null && q.isPending) {
     return <div className="h-40 animate-pulse rounded-xl bg-surface" />;
   }
   if (!q.data) return null;

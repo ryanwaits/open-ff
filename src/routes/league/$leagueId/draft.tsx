@@ -116,7 +116,7 @@ function DraftPage() {
     onError: (e) => toast(e instanceof Error ? e.message : "Could not reorder"),
   });
 
-  if (league.isLoading) {
+  if (league.data == null && league.isPending) {
     return <Skeleton className="h-64 rounded-xl" />;
   }
   if (league.isError) {

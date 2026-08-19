@@ -186,6 +186,10 @@ function MockDraftPage() {
     });
   }
 
+  if (league.data == null && league.isPending) {
+    return <Skeleton className="h-64 rounded-xl" />;
+  }
+
   if (!league.data?.hosted) {
     return (
       <p className="text-sm text-muted">
@@ -194,7 +198,7 @@ function MockDraftPage() {
     );
   }
 
-  if (league.isLoading || seats.length === 0) {
+  if (seats.length === 0) {
     return <Skeleton className="h-64 rounded-xl" />;
   }
 

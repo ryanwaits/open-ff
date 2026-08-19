@@ -27,7 +27,6 @@ function DeskPage() {
   const desk = useQuery({
     queryKey: ["desk", leagueId, week],
     queryFn: () => getDesk({ data: { leagueId, week } }),
-    enabled: Boolean(league.data),
   });
 
   const articles = desk.data?.articles ?? [];

@@ -32,7 +32,9 @@ function PlayersPage() {
     return leaders.data ?? [];
   }, [q, search.data, leaders.data]);
 
-  const loading = q.trim() ? search.isLoading : leaders.isLoading;
+  const loading = q.trim()
+    ? search.data == null && search.isPending
+    : leaders.data == null && leaders.isPending;
 
   return (
     <Shell>

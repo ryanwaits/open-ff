@@ -4,8 +4,9 @@ import { ScoreStrip } from "@/components/scoreboard";
 import { Shell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getLiveWire, getScores, getPulse } from "@/lib/data/fns";
 import { calendarOf } from "@/lib/data/calendar";
+import { getLiveWire, getPulse, getScores } from "@/lib/data/fns";
+import { warmQuery } from "@/lib/query-client";
 import { cn, formatPts } from "@/lib/utils";
 
 type Search = { week?: number; season?: number; kind?: "pre" | "regular" | "post" };
@@ -24,11 +25,11 @@ export const Route = createFileRoute("/scores")({
     const { week, season, kind } = deps;
     const seasonType = kind === "pre" ? 1 : kind === "post" ? 3 : 2;
     return Promise.all([
-      context.queryClient.ensureQueryData({
+      warmQuery(context.queryClient, {
         queryKey: ["pulse"],
         queryFn: () => getPulse(),
       }),
-      context.queryClient.ensureQueryData({
+      warmQuery(context.queryClient, {
         queryKey: ["scores", season, week, seasonType],
         queryFn: () => getScores({ data: { week, season, seasonType } }),
       }),

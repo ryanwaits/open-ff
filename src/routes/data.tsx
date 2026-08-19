@@ -47,7 +47,7 @@ function DataPage() {
       </p>
 
       <div className="mt-10 grid gap-4 md:grid-cols-3">
-        {sources.isLoading
+        {sources.data == null && sources.isPending
           ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-48" />)
           : sources.data?.map((s) => <SourceCard key={s.id} source={s} />)}
       </div>

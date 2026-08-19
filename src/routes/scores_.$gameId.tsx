@@ -27,7 +27,7 @@ function GamePage() {
     },
   });
 
-  if (q.isLoading) {
+  if (q.data == null && q.isPending) {
     return (
       <Shell>
         <Skeleton className="h-8 w-40" />

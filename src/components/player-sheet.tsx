@@ -110,7 +110,7 @@ function Body({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        {q.isLoading ? (
+        {q.data == null && q.isPending ? (
           <div className="space-y-3 p-5">
             <Skeleton className="h-20 rounded-lg" />
             <Skeleton className="h-40 rounded-lg" />

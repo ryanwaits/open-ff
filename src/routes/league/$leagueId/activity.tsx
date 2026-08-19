@@ -23,7 +23,6 @@ function ActivityPage() {
   const activity = useQuery({
     queryKey: ["activity", leagueId, week],
     queryFn: () => getActivity({ data: { leagueId, week } }),
-    enabled: Boolean(league.data),
   });
 
   return (
