@@ -19,6 +19,7 @@ import {
   getTeam,
 } from "@/lib/data/fns";
 import { prefetchPlayerProfile, useWarmRosterProfiles } from "@/lib/data/player-view";
+import { projectionRosterKey } from "@/lib/data/projection-key";
 import { baseSlotLabel } from "@/lib/data/teams";
 import { useDemoOn } from "@/lib/demo/store";
 import { planAutoFill } from "@/lib/league/autofill";
@@ -71,7 +72,7 @@ function MyTeamPage() {
 
   const roster = team.data?.players;
   const projections = useQuery({
-    queryKey: ["projections", leagueId, week, roster?.length ?? 0],
+    queryKey: ["projections", leagueId, week, projectionRosterKey(roster?.map((p) => p.player_id))],
     queryFn: () =>
       getProjections({
         data: {

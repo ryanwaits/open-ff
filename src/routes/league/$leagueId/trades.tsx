@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { TradeComposer, type TradeComposerInitial } from "@/components/trade-composer";
 import { TradeOfferCard } from "@/components/trade-offer-card";
 import { getLeagueBundle, getProjections, getTeam } from "@/lib/data/fns";
+import { projectionRosterKey } from "@/lib/data/projection-key";
 import type { Projection, RosterPlayer, SlimPlayer } from "@/lib/data/types";
 import { cancelTradeFn, getTradablePicks, getTrades, voteTrade } from "@/lib/league/fns";
 import { type TradeDelta, tradeDelta } from "@/lib/league/lineup-value";
@@ -192,14 +193,8 @@ function TradesPage() {
     return [...byId.values()];
   }, [rosterById, mineTeam.data?.players, themTeam.data?.players, thirdTeam.data?.players]);
 
-  // Key on the actual ids. Length alone collides when you switch partners
-  // with the same roster size, and the new side renders as "—".
   const projectionKey = useMemo(
-    () =>
-      projectionInputs
-        .map((p) => p.player_id)
-        .sort()
-        .join(","),
+    () => projectionRosterKey(projectionInputs.map((p) => p.player_id)),
     [projectionInputs],
   );
   const projectionsQ = useQuery({
