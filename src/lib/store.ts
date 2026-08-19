@@ -11,6 +11,7 @@ type LeagueStore = {
   recent: SavedLeague[];
   remember: (league: SavedLeague) => void;
   hasHydrated: boolean;
+  markHydrated: () => void;
 };
 
 export const useLeagueStore = create<LeagueStore>()(
@@ -18,6 +19,7 @@ export const useLeagueStore = create<LeagueStore>()(
     (set, get) => ({
       recent: [],
       hasHydrated: false,
+      markHydrated: () => set({ hasHydrated: true }),
       remember: (league) => {
         const next = [
           league,
@@ -29,8 +31,13 @@ export const useLeagueStore = create<LeagueStore>()(
     {
       name: "ledger-leagues",
       partialize: (s) => ({ recent: s.recent }),
-      onRehydrateStorage: () => () => {
-        useLeagueStore.setState({ hasHydrated: true });
+      // Called through the rehydrated state, not through the exported store:
+      // localStorage reads synchronously, so this fires while `useLeagueStore`
+      // is still in its temporal dead zone. Naming the export here threw, the
+      // flag never flipped, and the recent-league chip stayed hidden for
+      // everyone who had one.
+      onRehydrateStorage: () => (state) => {
+        state?.markHydrated();
       },
     },
   ),
