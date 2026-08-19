@@ -1,6 +1,6 @@
 # Implementation Plans
 
-Five slices live here. Read the one you are executing from.
+Slices live here. Read the one you are executing from.
 
 - **001–005 — Desk performance** (improve skill, 2026-08-17, commit `1abb347`).
   Goal: league desk feels like a spreadsheet — last-known numbers stay painted,
@@ -32,6 +32,13 @@ Five slices live here. Read the one you are executing from.
   2026-08-19, commit `dd9bc53`). Goal: one context dump, pull-ticket
   parity, and no minted FAAB on trade accept — so a loop over named
   verbs is honest. 033 (mutating CLI) runs **after** 038, not before.
+- **041–044 — Headless engine: token, MCP, skills** (improve skill,
+  2026-08-19, commit `735b0ba`). Goal: Codex / Claude / Grok can
+  install open-ff as a tool server (stdio local, HTTP hosted) and
+  run migrate / sit / book playbooks. The PWA stays client zero.
+- **045 — Migrate sources** (improve skill, 2026-08-19, commit
+  `735b0ba`). After 044. Canonical import pack; file always works;
+  NFL hops to ESPN; Yahoo OAuth gated on actual API approval.
 
 Execute in the order below. Each executor: read the plan fully, honor STOP
 conditions, update your row when done.
@@ -126,14 +133,19 @@ conditions, update your row when done.
   Every guide is the wrong storage bet for a multi-manager money
   system. Agents get a legible catalog + a live context dump
   (`getAgentContext`), not a notes-folder rewrite.
-- **Operator CLI ≠ manager session.** `ledger.mjs` + `DATABASE_URL` +
-  `--user` is the commish-on-the-box path. A friend's Claude talking
-  to a hosted origin still needs the same-origin session (cookie).
-  Do not invent a league API key in this slice. MCP waits until 038
-  + 033 have been used for real.
+- **Operator CLI ≠ manager session.** `ledger.mjs` / MCP stdio +
+  `DATABASE_URL` + `OPENFF_USER` is the commish-on-the-box path.
+  A hosted friend uses a personal `off_` token (041), never a
+  client-supplied `userId`. No shared league API key.
+- **MCP is the plug, skills are the features, plugins are a box.**
+  Build one server (`dispatch` + `AGENT_CORE`) and three markdown
+  skills. Do not build a Codex app, a Claude app, and a Grok app.
+  A `/plugin` marketplace listing is packaging for later.
 - **Conservation is a guardrail, not a workflow tool.** `applyLoss` /
   `spendable` / execute-trade refusal stay in code. Judgment about
   *whether* to stake belongs in the prompt.
+- **Engine stays UI-blind.** No `renderMatchupHtml` in the catalog.
+  Generative UI / voice / Codex artifacts are clients.
 
 ## Execution order & status
 
@@ -179,6 +191,11 @@ conditions, update your row when done.
 | 038  | One dump: seat, spendable, facts, verbs | P1 | M | 024 | TODO |
 | 039  | Pull an open ticket from the book list | P1 | S | 024 | TODO |
 | 040  | Refuse a FAAB trade the sender cannot cover | P1 | S | 027 | TODO |
+| 041  | Mint a personal token so a host can act as a seat | P1 | M | 038 | TODO |
+| 042  | Speak MCP on stdio (local Codex / Claude / Grok) | P1 | M | 038, 033 | TODO |
+| 043  | Serve the same MCP over HTTP with the token | P1 | M | 041, 042 | TODO |
+| 044  | Skills: migrate, lineup, book | P1 | S | 042 | TODO |
+| 045  | Canonical import pack; file fallback; no NFL scrape | P1 | L | 044 | TODO (after 044; Yahoo gated) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED
 
@@ -328,35 +345,87 @@ then `016` (client, pure). They meet at `018`.
 
 ## Suggested execution — slice 6 (door + leftovers)
 
-**Do first:** `030` (hosted RPC gate). Independent of the rest.
+**030 is DONE** (`4fd580c`). Remaining leftovers are **not** on the
+headless-engine critical path:
 
-**Then any order:** `031` (pure tests) · `034` (backup). `036` after
-`034`. `035` anytime. `032` only when a week has a live line. `037`
+`031` (pure tests) anytime · `034` then `036` (backup/delete) ·
+`035` (Google) anytime · `032` when a week has a line · `037`
 only after a human installed the PWA.
 
-**Do not run 033 yet.** It writes without a context dump. Slice 7
-first.
+`034`/`036` share settings.tsx — do not run them in parallel.
 
-`030` and `031` do not touch the same files. `034`/`036` share
-settings.tsx — do not run them in parallel on one branch.
+## Sprints to the headless engine (do these)
 
-## Suggested execution — slice 7 (agent can use it)
+North star: migrate in → any client (PWA, Codex, Claude, Grok)
+speaks the same verbs. PWA is client zero, not the product.
 
-**Single executor:** `038` → `040` → `039` → then `033`.
+### Sprint 1 — Honest loop (in-repo, no host yet)
 
-`038` is the Every context.md analog (Postgres, not files). `040`
-closes the remaining mint so a loop cannot invent FAAB. `039` is
-bidirectional parity for `pullWager`. `033` is the first mutating
-CLI dispatch — only after an agent can *see* the purse.
+**Parallel:** `038` · `040` · `039` · `031`
 
-`038` and `040` touch different files (`agent-context.server.ts` vs
-`ops.server.ts`) and can run in parallel. `039` is independent of
-both.
+Then: `033` (CLI `placeWager --write`, needs 038).
+
+Done when: an operator with `DATABASE_URL` can dump context and
+the purse cannot mint on trade accept. Pull exists in the PWA.
+
+### Sprint 2 — Local host (commish Codex on the box)
+
+`042` (stdio MCP + `dispatch` + `AGENT_CORE`).
+
+Needs 038 + 033 so the socket is not hollow.
+
+Done when:
+
+```
+export DATABASE_URL=… OPENFF_USER=…
+codex mcp add openff --command bun --args scripts/mcp.mjs
+```
+
+and “sit the injured RB” hits `sitPlayer`.
+
+### Sprint 3 — Hosted host (a friend’s Codex)
+
+`041` (tokens) then `043` (HTTP `/api/mcp`).
+
+Done when:
+
+```
+export OPENFF_TOKEN=off_…
+codex mcp add openff --url https://HOST/api/mcp --bearer-token-env-var OPENFF_TOKEN
+```
+
+Same `dispatch`. Cookie still for the PWA.
+
+### Sprint 4 — Playbooks (features as files)
+
+`044` — migrate / lineup / book skills. Copy into
+`~/.codex/skills`, `~/.claude/skills`, `.grok/skills`.
+
+Done when “migrate my sdiff league” is a skill over
+`preview*` → `confirm: true` → `import*` (Sleeper / ESPN /
+rebuild as they exist today).
+
+### Sprint 4b — Migrate completeness (after the plug works)
+
+`045` — one `ImportPack`, file always works, NFL.com → ESPN hop,
+Sleeper prior season optional. **Yahoo OAuth only if the YDN app
+is approved.** Do not block Sprints 1–4 on Yahoo.
+
+### Sprint 5 — Self-host + season ops (off the critical path)
+
+`034` → `036` · `035` · `032` · `037` (stop if no install).
+
+### Not a sprint
+
+Plugin marketplace, ChatGPT Actions, generative matchup UI in
+*this* repo, voice host, `total` market, rename/leave/rotate
+invite, `@open-ff/engine` npm extract.
 
 ## Findings considered and rejected (038 audit)
 
-- **MCP SDK / in-app chat:** catalog is still not callable. 038 + 033
-  first. MCP wraps the same verbs later; it is not a second engine.
+- **MCP SDK / in-app chat (038 slice):** was deferred until the
+  catalog was callable. **041–044 is that later.** Still no desk
+  chatbot.
 - **Files as the league source of truth:** multi-manager money. Keep
   Postgres. Dump + catalog is the spirit of context.md.
 - **`--user` as a hosted manager token:** operator CLI only. A hosted
@@ -375,6 +444,22 @@ both.
   event-source. A later facts pass can add kinds; 038 already returns
   the last 20 rows as they are.
 
+## Findings considered and rejected (041 audit)
+
+- **A Codex / Claude / Grok plugin as three products:** one MCP
+  server. Plugin is a later box around 042+044.
+- **ChatGPT Actions / second OpenAPI surface:** MCP is the
+  standard. Do not maintain two contracts.
+- **Better Auth apiKey plugin:** do not rewrite `server.ts`. Own
+  `ff_agent_tokens` table (041).
+- **Expose all 67 tools on MCP day one:** `AGENT_CORE` only. Cora
+  drowned on fat tool lists.
+- **`userId` as a tool argument:** host env or `off_` token only.
+- **`renderMatchupHtml` / in-repo generative UI:** a client. Not
+  a verb.
+- **Extract `@open-ff/engine`:** the boundary is `dispatch` +
+  catalog. A package split before 043 works is a rewrite.
+
 ## Findings considered and rejected (022–026)
 
 See the list above (event-sourcing, MCP SDK, free-text props, Grok install
@@ -382,13 +467,15 @@ unbrand, per-league icons, SW/push this slice).
 
 ## Open leftovers
 
-Planned as **030–037** (door + self-host) and **038–040** (agent
-runtime). Do not re-audit as unnamed findings.
+Planned: **031–037** (self-host/ops), **038–040** (callable
+catalog), **041–044** (token / MCP / skills). Do not re-audit as
+unnamed findings.
 
 Still unplanned, still real, still not this backlog:
 
 - Rename team, leave/unclaim, rotate invite, update-bid, commish
   adjust-FAAB, commish void-wager.
-- Manager-session HTTP (cookie/device flow) for a friend's Claude.
-- Prompt files under `src/lib/agent/prompts/` once 038+033 run.
+- `/plugin` marketplace box (after someone besides us `mcp add`s).
 - `total` market registry after someone has staked a spread.
+- Yahoo OAuth importer until YDN review is actually approved.
+- NFL.com HTML scrape (platform moving to ESPN for 2026).
