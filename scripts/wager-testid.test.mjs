@@ -13,3 +13,9 @@ test("wager ticket + line panel expose stable data-testids", () => {
   assert.match(book, /data-testid="wager-price"/);
   assert.match(book, /data-testid="wager-no-price"/);
 });
+
+test("standings book list wires pullWager with wager-pull testid", () => {
+  const standings = readFileSync(join(root, "src/routes/league/$leagueId/standings.tsx"), "utf8");
+  assert.match(standings, /wager-pull/);
+  assert.match(standings, /pullWager/);
+});

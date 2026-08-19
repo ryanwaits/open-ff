@@ -1,14 +1,15 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Avatar } from "@/components/avatar";
+import { PurseMeter } from "@/components/book-panel";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getActivity, getLeagueBundle, getMatchups, getRecap } from "@/lib/data/fns";
-import { getBook } from "@/lib/league/fns";
-import { PurseMeter } from "@/components/book-panel";
 import type { LeagueBundle } from "@/lib/data/types";
-import { getTrades } from "@/lib/league/fns";
+import { getBook, getTrades, pullWager } from "@/lib/league/fns";
 import { cn, fmtRecord, formatPts } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$leagueId/standings")({
@@ -26,6 +27,7 @@ export const Route = createFileRoute("/league/$leagueId/standings")({
 function LeaguePage() {
   const { leagueId } = Route.useParams();
   const search = Route.useSearch();
+  const qc = useQueryClient();
 
   const league = useQuery({
     queryKey: ["league", leagueId],
@@ -57,6 +59,16 @@ function LeaguePage() {
     queryKey: ["book", leagueId],
     queryFn: () => getBook({ data: { leagueId } }),
     enabled: Boolean(league.data?.hosted),
+  });
+
+  const pull = useMutation({
+    mutationFn: (input: { wagerId: string; stake: number }) =>
+      pullWager({ data: { leagueId, wagerId: input.wagerId } }),
+    onSuccess: (_r, input) => {
+      void qc.invalidateQueries({ queryKey: ["book", leagueId] });
+      toast(`Pulled $${input.stake}.`);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not pull"),
   });
 
   if (league.data == null && league.isPending) {
@@ -176,8 +188,7 @@ function LeaguePage() {
               {(matchups.data ?? []).map((pair) => {
                 const homeLeads = !pair.away || pair.home.points >= pair.away.points;
                 const decided = pair.home.points > 0 || (pair.away?.points ?? 0) > 0;
-                const involvesMe =
-                  pair.home.rosterId === mine || pair.away?.rosterId === mine;
+                const involvesMe = pair.home.rosterId === mine || pair.away?.rosterId === mine;
                 return (
                   <li key={pair.matchupId}>
                     <Link
@@ -331,8 +342,7 @@ function LeaguePage() {
             <div className="px-5 py-3">
               <p className="font-mono text-lg font-bold tabular-nums">${book.data.pool.balance}</p>
               <p className="text-xs text-faint">
-                In the pool, against ${book.data.pool.committed} committed. Funded by losing
-                stakes.
+                In the pool, against ${book.data.pool.committed} committed. Funded by losing stakes.
               </p>
             </div>
             {book.data.positions.length ? (
@@ -351,6 +361,17 @@ function LeaguePage() {
                       </span>
                     </span>
                     <span className="font-mono text-sm font-semibold tabular-nums">${p.stake}</span>
+                    {p.mine && p.status === "placed" && !book.data.locked ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        data-testid={`wager-pull-${p.id}`}
+                        disabled={pull.isPending}
+                        onClick={() => pull.mutate({ wagerId: p.id, stake: p.stake })}
+                      >
+                        Pull
+                      </Button>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -381,7 +402,11 @@ function LeaguePage() {
                         p.status === "lost" && "text-loss",
                       )}
                     >
-                      {p.status === "won" ? `+$${p.payout ?? 0}` : p.status === "lost" ? `−$${p.stake}` : "—"}
+                      {p.status === "won"
+                        ? `+$${p.payout ?? 0}`
+                        : p.status === "lost"
+                          ? `−$${p.stake}`
+                          : "—"}
                     </span>
                   </li>
                 ))}
