@@ -54,6 +54,43 @@ export const getDesk = createServerFn({ method: "GET" })
     return eng.loadDesk(data.leagueId, data.week);
   });
 
+export const getEvents = createServerFn({ method: "GET" })
+  .middleware([optionalAuthMiddleware])
+  .validator(
+    z.object({
+      leagueId: z.string(),
+      limit: z.number().optional(),
+      sinceWeek: z.number().optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const ev = await import("./events.server");
+    const rows = await ev.readEvents(data.leagueId, {
+      limit: data.limit,
+      sinceWeek: data.sinceWeek,
+    });
+    // Server-fn wire rejects Record<string, unknown>; payloads are JSON objects.
+    return rows as Array<{
+      id: string;
+      week: number;
+      kind: string;
+      actorRoster: number | null;
+      subjectRoster: number | null;
+      playerId: string | null;
+      amount: number | null;
+      payload: Record<string, string | number | boolean | null>;
+      at: string;
+    }>;
+  });
+
+export const getLeagueFacts = createServerFn({ method: "GET" })
+  .middleware([optionalAuthMiddleware])
+  .validator(z.object({ leagueId: z.string(), week: z.number() }))
+  .handler(async ({ data }) => {
+    const facts = await import("./league-facts.server");
+    return facts.loadLeagueFacts(data.leagueId, data.week);
+  });
+
 export const getDraft = createServerFn({ method: "GET" })
   .middleware([optionalAuthMiddleware])
   .validator(z.object({ leagueId: z.string(), position: z.string(), query: z.string() }))
