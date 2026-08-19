@@ -408,7 +408,16 @@ export async function processWaivers(leagueId: string, week?: number): Promise<{
       select player_id from ff_spots where league_id = ${leagueId} and player_id = ${c.add_player_id}
     `;
     const cash = purse.get(c.roster_id) ?? 0;
-    if (taken[0] || c.bid > cash) {
+    // Live stakes are reserved until settlement — award against spendable, not
+    // the headline purse, or a claim can drain cash the book still expects.
+    let free = cash;
+    try {
+      const { spendable } = await import("./wagers.server");
+      free = await spendable(leagueId, c.roster_id, cash);
+    } catch {
+      /* no book in this league; the headline figure is the whole story */
+    }
+    if (taken[0] || c.bid > free) {
       await sql`update ff_claims set status = ${"lost"} where id = ${c.id}`;
       // Why it lost is the interesting part and no table keeps it: outbid by
       // someone earlier in this same loop, or short the money by Wednesday.
@@ -419,7 +428,7 @@ export async function processWaivers(leagueId: string, week?: number): Promise<{
         actorRoster: c.roster_id,
         playerId: c.add_player_id,
         amount: c.bid,
-        payload: { reason: taken[0] ? "outbid" : "short", had: cash },
+        payload: { reason: taken[0] ? "outbid" : "short", had: free },
       });
       continue;
     }

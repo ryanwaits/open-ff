@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { applyLoss } from "./faab.ts";
 import { atRisk, payoutMultiplier, spendable } from "./wagers.server.ts";
 
 // Pure book math runs without a DB. spendable / atRisk / placeWager / settleWeek
@@ -23,18 +24,16 @@ test.skip("atRisk sums placed-wager stakes", () => {
   void atRisk;
 });
 
-test.skip("current: claim then lose can mint pool dollars", () => {
-  // needs PGLite fixture
-  //
-  // Seed: one league, one roster at $100, pool at $200 (genesis = 300).
-  // Place a $70 wager, file an $80 claim, award the claim, settle the wager as a loss.
-  //
-  // WANT: after a $70 lost wager and an $80 winning claim on a $100 purse,
-  // remaining + pool + burned_claims === genesis. TODAY: pool is credited
-  // the full $70 even when remaining only had $20 (wagers.server.ts:474-479).
-  //
-  // Actual numbers today (assert these so 023 fails on purpose when it fixes):
-  //   award $80 claim first → remaining 20, pool 200
-  //   lose $70: remaining = greatest(0, 20-70) = 0, pool += 70 → 270
-  //   remaining(0) + pool(270) + burned_claims(80) = 350, not 300. Minted $50.
+test("lost wager pools only what the purse had (no mint)", () => {
+  // Was: claim $80 then lose $70 on a $100 purse pooled the full $70 and
+  // minted $50 (remaining 0 + pool 270 + burned 80 = 350 ≠ genesis 300).
+  // applyLoss + spendable award closed that path.
+  const afterClaim = 20;
+  const pool = 200;
+  const burned = 80;
+  const genesis = 300;
+  const { remaining, poolCredit } = applyLoss(afterClaim, 70);
+  assert.equal(poolCredit, 20);
+  assert.equal(remaining, 0);
+  assert.equal(remaining + (pool + poolCredit) + burned, genesis);
 });

@@ -1,6 +1,7 @@
 import { getSql } from "@/lib/db";
-import { normalCdf, type PlayerOutlook, winProbability } from "./win-probability";
 import { recordEvent } from "./events.server";
+import { applyLoss } from "./faab";
+import { normalCdf, type PlayerOutlook, winProbability } from "./win-probability";
 
 /**
  * The book.
@@ -18,13 +19,7 @@ import { recordEvent } from "./events.server";
 
 export type WagerKind = "spread" | "moneyline";
 
-export type WagerStatus =
-  | "placed"
-  | "won"
-  | "lost"
-  | "push"
-  | "pulled"
-  | "voided";
+export type WagerStatus = "placed" | "won" | "lost" | "push" | "pulled" | "voided";
 
 export type Quote = {
   matchupId: number;
@@ -114,9 +109,7 @@ type LeagueBook = {
 async function bookLeague(leagueId: string): Promise<LeagueBook> {
   await ensureWagerSchema();
   const sql = await getSql();
-  const row = (
-    await sql<LeagueBook>`select * from ff_leagues where id = ${leagueId}`
-  )[0];
+  const row = (await sql<LeagueBook>`select * from ff_leagues where id = ${leagueId}`)[0];
   if (!row) throw new Error("No such league.");
   return row;
 }
@@ -237,8 +230,7 @@ export async function placeWager(input: PlaceInput): Promise<{ id: string }> {
   )[0];
   if (!pair) throw new Error("No such matchup this week.");
 
-  const inThisGame =
-    pair.home_roster === mine.roster_id || pair.away_roster === mine.roster_id;
+  const inThisGame = pair.home_roster === mine.roster_id || pair.away_roster === mine.roster_id;
   // You control your own lineup. Backing yourself is harmless; fading yourself
   // means profiting from a loss you can arrange, which is the one thing that
   // would break the league.
@@ -471,15 +463,22 @@ export async function settleWeek(
   }
 
   // Losses fund the pool first, so a week can partly pay for itself.
+  // Pool only the cash actually taken — never the full stake when the purse
+  // was already short (claim then lose used to mint the gap).
   for (const w of losers) {
-    await sql`
-      update ff_rosters set faab_remaining = greatest(0, coalesce(faab_remaining, 0) - ${w.stake})
+    const rows = await sql<{ faab_remaining: number | null }>`
+      select faab_remaining from ff_rosters
       where league_id = ${leagueId} and roster_id = ${w.roster_id}
     `;
-    await movePool(leagueId, w.stake);
+    const { remaining, poolCredit } = applyLoss(rows[0]?.faab_remaining ?? 0, w.stake);
+    await sql`
+      update ff_rosters set faab_remaining = ${remaining}
+      where league_id = ${leagueId} and roster_id = ${w.roster_id}
+    `;
+    await movePool(leagueId, poolCredit);
     await sql`
       update ff_wagers set status = ${"lost"}, payout = ${0}, settled_at = now()
-      where id = ${w.id}
+      where id = ${w.id} and status = ${"placed"}
     `;
   }
 
