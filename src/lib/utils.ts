@@ -26,18 +26,28 @@ export function fmtRecord(wins: number, losses: number, ties = 0): string {
   return ties > 0 ? `${wins}–${losses}–${ties}` : `${wins}–${losses}`;
 }
 
+/**
+ * Elapsed time as one token — "3m", "5h", "2d". For meta columns too narrow
+ * to carry "ago". Null when the timestamp is missing or in the future.
+ */
+export function elapsedShort(at: number | null | undefined): string | null {
+  if (at == null) return null;
+  const ms = Date.now() - at;
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
 /** Compact relative time for status lines. Null when the date is missing or junk. */
 export function formatAgo(iso: string | null | undefined): string | null {
   if (!iso) return null;
-  const ms = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return null;
-  const mins = Math.floor(ms / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 48) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  const short = elapsedShort(new Date(iso).getTime());
+  if (short == null) return null;
+  return short === "now" ? "just now" : `${short} ago`;
 }
 
 /** Surname only — enough to identify a player in a one-line summary. */

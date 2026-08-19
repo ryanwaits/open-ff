@@ -3,7 +3,9 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/avatar";
+import { ClaimLedgerFoot, ClaimLedgerRow } from "@/components/claim-ledger";
 import { LineupBoard } from "@/components/lineup-board";
+import { MoveRow } from "@/components/move-row";
 import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
 import { TradeSpineRow } from "@/components/trade-spine";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getActivity, getByeWeeks, getLeagueBundle, getProjections, getTeam } from "@/lib/data/fns";
 import { prefetchPlayerProfile, useWarmRosterProfiles } from "@/lib/data/player-view";
+import { projectionRosterKey } from "@/lib/data/projection-key";
 import { baseSlotLabel } from "@/lib/data/teams";
 import type { RosterPlayer } from "@/lib/data/types";
 import {
@@ -24,6 +27,9 @@ import {
 } from "@/lib/league/fns";
 import { invalidateAfterLineup } from "@/lib/league/lineup-cache";
 import { cn, fmtRecord, formatPts } from "@/lib/utils";
+
+/** The card is a digest; the activity page is the full ledger. */
+const MOVES_SHOWN = 4;
 
 export const Route = createFileRoute("/league/$leagueId/roster")({
   component: MyTeamPage,
@@ -90,7 +96,12 @@ function MyTeamPage() {
     players?.map((p) => p.player_id),
   );
   const projections = useQuery({
-    queryKey: ["projections", leagueId, week, players?.length ?? 0],
+    queryKey: [
+      "projections",
+      leagueId,
+      week,
+      projectionRosterKey(players?.map((p) => p.player_id)),
+    ],
     queryFn: () =>
       getProjections({
         data: {
@@ -239,6 +250,17 @@ function MyTeamPage() {
   // Only live claims. A cancelled or settled one is finished business and
   // belongs in Your moves, not in a card headed "what is still in".
   const myClaims = (claims.data?.items ?? []).filter((c) => c.mine && c.status === "pending");
+  // Their amounts are sealed; the count of who else is in on the same player
+  // is not, and it is the fact that decides whether a bid is high enough.
+  const contenders = new Map<string, number>();
+  for (const c of claims.data?.items ?? []) {
+    if (c.mine || c.status !== "pending") continue;
+    contenders.set(c.add.id, (contenders.get(c.add.id) ?? 0) + 1);
+  }
+  const waiverType = claims.data?.waiverType ?? ops?.waiverType ?? "faab";
+  const claimsStaked = myClaims.reduce((n, c) => n + (c.bid ?? 0), 0);
+  // faabAtRisk is wagers, not claims — it is already unavailable to bid with.
+  const spendable = Math.max(0, (league.data.faabRemaining ?? 0) - (league.data.faabAtRisk ?? 0));
   const myTrades = (trades.data ?? []).filter(
     (t2) => t2.status === "proposed" && t2.sides.some((s) => s.rosterId === rosterId),
   );
@@ -363,36 +385,28 @@ function MyTeamPage() {
                 </Link>
               </header>
               {myClaims.length === 0 ? (
-                <p className="px-5 pb-5 text-sm text-muted">No claims in.</p>
+                <p className="px-5 pb-4 text-sm text-muted">No claims in.</p>
               ) : (
-                <ul>
+                <ul className="mt-1">
                   {myClaims.map((c) => (
-                    <li
+                    <ClaimLedgerRow
                       key={c.id}
-                      className="flex items-center gap-3 border-b border-line px-5 py-3 last:border-0"
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">{c.add.name}</span>
-                        <span className="block truncate font-mono text-[10px] uppercase tracking-wide text-faint">
-                          {[c.add.pos, c.drop ? `drop ${c.drop.name}` : "no drop"]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </span>
-                      </span>
-                      <span className="font-mono text-sm font-semibold">${c.bid}</span>
-                      <button
-                        type="button"
-                        aria-label={`Withdraw claim for ${c.add.name}`}
-                        disabled={drop.isPending}
-                        onClick={() => drop.mutate(c.id)}
-                        className="grid size-8 shrink-0 place-items-center rounded-pill text-faint hover:bg-raised hover:text-loss"
-                      >
-                        ×
-                      </button>
-                    </li>
+                      claim={c}
+                      contenders={contenders.get(c.add.id) ?? 0}
+                      showBid={waiverType === "faab"}
+                      busy={drop.isPending}
+                      onWithdraw={() => drop.mutate(c.id)}
+                    />
                   ))}
                 </ul>
               )}
+              <ClaimLedgerFoot
+                open={claims.data?.open ?? false}
+                week={claims.data?.week ?? week}
+                staked={claimsStaked}
+                spendable={spendable}
+                showMoney={waiverType === "faab"}
+              />
             </section>
           ) : null}
 
@@ -454,31 +468,35 @@ function MyTeamPage() {
           <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
             <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
               <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Your moves</h2>
-              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
-                Week {week}
-              </span>
+              <Link
+                to="/league/$leagueId/activity"
+                params={{ leagueId }}
+                search={{ week: undefined }}
+                className="font-mono text-[10px] uppercase tracking-wide text-accent-strong"
+              >
+                All moves
+              </Link>
             </header>
             {myMoves.length === 0 ? (
               <p className="px-5 pb-5 text-sm text-muted">Nothing this week.</p>
             ) : (
-              <ul>
-                {myMoves.slice(0, 6).map((m) => (
-                  <li
-                    key={m.id}
-                    className="flex items-start gap-3 border-b border-line px-5 py-2.5 last:border-0"
-                  >
-                    <Badge tone="muted">{m.type}</Badge>
-                    <span className="min-w-0 flex-1 text-[13px] text-muted">
-                      {[
-                        m.adds.length ? `in ${m.adds.map((x) => x.name).join(", ")}` : null,
-                        m.drops.length ? `out ${m.drops.map((x) => x.name).join(", ")}` : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
+              <>
+                <ul className="mt-1">
+                  {myMoves.slice(0, MOVES_SHOWN).map((m) => (
+                    <MoveRow key={m.id} move={m} />
+                  ))}
+                </ul>
+                {/* Say what was cut. A silent slice reads as "that is all of them".
+                    No season total: the activity query is capped league-wide, so
+                    this count is "more than you can see here", not "all year". */}
+                {myMoves.length > MOVES_SHOWN ? (
+                  <div className="border-t border-line px-5 py-3">
+                    <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-faint">
+                      +{myMoves.length - MOVES_SHOWN} more
                     </span>
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                ) : null}
+              </>
             )}
           </section>
 
