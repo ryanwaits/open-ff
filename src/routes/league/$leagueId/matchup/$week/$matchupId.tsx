@@ -7,7 +7,6 @@ import { MatchupEdge } from "@/components/matchup-edge";
 import { PlayerCell } from "@/components/player-cell";
 import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
 import { PlayerWatch, type WatchTarget, watchFromLine } from "@/components/player-watch";
-import { ReplayBar } from "@/components/replay-bar";
 import { SlotPts } from "@/components/slot-pts";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,6 +19,7 @@ import {
   getWeekStats,
 } from "@/lib/data/fns";
 import { liveStatLine, paintMatchup, pairIsProjected, slotDisplay } from "@/lib/data/matchup-view";
+import { baseSlotLabel } from "@/lib/data/teams";
 import type {
   GameChip,
   MatchupPair,
@@ -30,11 +30,11 @@ import type {
   StarterLine,
   TeamBundle,
 } from "@/lib/data/types";
+import { useDemoStore, useSimPhase } from "@/lib/demo/store";
 import {
   applyReplaySide,
   bookFromLeague,
   LIVE_POLL_MS,
-  pairingHasScores,
   pairingIsLive,
   REPLAY_PHASES,
   REPLAY_TICK_MS,
@@ -43,7 +43,6 @@ import {
   seedPairForReplay,
 } from "@/lib/replay";
 import { cn, fmtRecord, formatPts } from "@/lib/utils";
-import { baseSlotLabel } from "@/lib/data/teams";
 
 export const Route = createFileRoute("/league/$leagueId/matchup/$week/$matchupId")({
   component: MatchupPage,
@@ -53,8 +52,9 @@ function MatchupPage() {
   const { leagueId, week: weekParam, matchupId: idParam } = Route.useParams();
   const week = Number(weekParam);
   const matchupId = Number(idParam);
-  const [phase, setPhase] = useState<number | null>(null);
-  const [running, setRunning] = useState(false);
+  // The transport lives in the demo toolbar; this page only reads the clock.
+  const phase = useSimPhase();
+  const stopSim = useDemoStore((s) => s.stop);
   const [watch, setWatch] = useState<WatchTarget | null>(null);
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
 
@@ -161,7 +161,6 @@ function MatchupPage() {
     staleTime: 60_000,
   });
   const book = bookFromLeague(league.data?.league.scoring_settings);
-  const usingDemo = Boolean(rawPair && !pairingHasScores(rawPair));
   const seeded = useMemo(() => {
     if (!rawPair) return null;
     const bags = Object.keys(finalsRaw).length ? finalsRaw : { ...(priorStats.data ?? {}) };
@@ -169,20 +168,14 @@ function MatchupPage() {
   }, [rawPair, week, finalsRaw, priorStats.data, book]);
 
   useEffect(() => {
-    setPhase(null);
-    setRunning(false);
     setWatch(null);
   }, [week, matchupId, leagueId]);
 
+  // A box already playing out for real has nothing to replay, and a fake Q3 on
+  // top of live scores is the worst thing this page could do.
   useEffect(() => {
-    if (!running || phase == null) return;
-    if (phase >= REPLAY_PHASES.length - 1) {
-      setRunning(false);
-      return;
-    }
-    const t = window.setTimeout(() => setPhase((p) => (p == null ? 0 : p + 1)), REPLAY_TICK_MS);
-    return () => window.clearTimeout(t);
-  }, [running, phase]);
+    if (rawPair && pairingIsLive(rawPair) && phase != null) stopSim();
+  }, [rawPair, phase, stopSim]);
 
   const livePair = useMemo(() => {
     if (!seeded) return null;
@@ -253,7 +246,6 @@ function MatchupPage() {
 
   const standings = league.data?.standings ?? [];
   const lastPhase = REPLAY_PHASES.length - 1;
-  const canReplay = Boolean(rawPair && !pairingIsLive(rawPair));
   const status =
     phase == null
       ? statusOf(livePair ?? pair)
@@ -292,30 +284,7 @@ function MatchupPage() {
         </div>
       </div>
 
-      {canReplay ? (
-        <div className="mb-4">
-          <ReplayBar
-            phase={phase}
-            running={running}
-            onStart={() => {
-              setPhase(0);
-              setRunning(true);
-            }}
-            onToggle={() => setRunning((v) => !v)}
-            onStop={() => {
-              setRunning(false);
-              setPhase(null);
-            }}
-            kicker={usingDemo ? "Simulate this box" : "Replay this box"}
-            actionLabel={usingDemo ? "Simulate this week" : "Watch it tick"}
-            copy={
-              usingDemo
-                ? "No unofficial lines yet — last season / a demo bag, scored with your book. Real Sunday stats replace it automatically."
-                : "Unofficial yards, TDs, and catches unfold on the same clock as the score."
-            }
-          />
-        </div>
-      ) : pairingIsLive(pair) ? (
+      {pairingIsLive(pair) ? (
         <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-live">
           Live unofficial · same pipe as Sunday · ticks every {LIVE_POLL_MS / 1000}s
         </p>

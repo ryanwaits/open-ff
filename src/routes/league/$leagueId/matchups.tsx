@@ -8,26 +8,23 @@ import { MatchupEdge } from "@/components/matchup-edge";
 import { MatchupSpine } from "@/components/matchup-spine";
 import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
 import { PlayerWatch, type WatchTarget, watchFromLine } from "@/components/player-watch";
-import { ReplayBar } from "@/components/replay-bar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type TicketTarget, WagerTicket } from "@/components/wager-ticket";
 import { fantasyStatKind } from "@/lib/data/calendar";
 import { getLeagueBundle, getMatchups, getWeekProjections, getWeekStats } from "@/lib/data/fns";
 import { liveStatLine, paintMatchups, pairIsProjected } from "@/lib/data/matchup-view";
+import { baseSlotLabel } from "@/lib/data/teams";
+import { useDemoStore, useSimPhase } from "@/lib/demo/store";
 import { getBook, getClaims } from "@/lib/league/fns";
 import {
   applyReplayPairs,
   bookFromLeague,
   LIVE_POLL_MS,
-  pairingHasScores,
   pairingIsLive,
-  REPLAY_PHASES,
-  REPLAY_TICK_MS,
   replayStatMap,
   seedPairsForReplay,
 } from "@/lib/replay";
 import { cn, formatPts } from "@/lib/utils";
-import { baseSlotLabel } from "@/lib/data/teams";
 
 type Search = { week?: number; focus?: number };
 
@@ -42,8 +39,9 @@ export const Route = createFileRoute("/league/$leagueId/matchups")({
 function MatchupsPage() {
   const { leagueId } = Route.useParams();
   const search = Route.useSearch();
-  const [phase, setPhase] = useState<number | null>(null);
-  const [running, setRunning] = useState(false);
+  // The transport lives in the demo toolbar; this page only reads the clock.
+  const phase = useSimPhase();
+  const stopSim = useDemoStore((s) => s.stop);
   const [watch, setWatch] = useState<WatchTarget | null>(null);
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
   const [ticket, setTicket] = useState<TicketTarget | null>(null);
@@ -143,23 +141,6 @@ function MatchupsPage() {
   }, [matchups.data, week, liveFinals, priorStats.data, hasLiveStats, book]);
   const finals = seeded.finals;
   const seededPairs = seeded.pairs;
-  const usingDemo = Boolean(matchups.data?.some((p) => !pairingHasScores(p)));
-
-  useEffect(() => {
-    setPhase(null);
-    setRunning(false);
-  }, [week, leagueId]);
-
-  useEffect(() => {
-    if (!running || phase == null) return;
-    if (phase >= REPLAY_PHASES.length - 1) {
-      setRunning(false);
-      return;
-    }
-    const t = window.setTimeout(() => setPhase((p) => (p == null ? 0 : p + 1)), REPLAY_TICK_MS);
-    return () => window.clearTimeout(t);
-  }, [running, phase]);
-
   const rawShown = useMemo(() => {
     if (!seededPairs.length) return [];
     if (phase == null) return matchups.data ?? [];
@@ -237,25 +218,12 @@ function MatchupsPage() {
     el.scrollBy({ left: dir * Math.max(el.clientWidth * 0.8, 200), behavior: "smooth" });
   }
 
+  // A week already playing out for real has nothing to replay, and a fake Q3
+  // sitting on top of live scores is the worst thing this page could do.
   const weekLive = (matchups.data ?? []).some(pairingIsLive);
-  const canReplay = matchups.isSuccess && !weekLive;
-
   useEffect(() => {
-    if (!canReplay && phase != null) {
-      setPhase(null);
-      setRunning(false);
-    }
-  }, [canReplay, phase]);
-
-  function startReplay() {
-    setPhase(0);
-    setRunning(true);
-  }
-
-  function stopReplay() {
-    setRunning(false);
-    setPhase(null);
-  }
+    if (weekLive && phase != null) stopSim();
+  }, [weekLive, phase, stopSim]);
 
   return (
     <div>
@@ -263,25 +231,6 @@ function MatchupsPage() {
         <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-live">
           Live unofficial · ticks every {LIVE_POLL_MS / 1000}s
         </p>
-      ) : null}
-
-      {canReplay ? (
-        <div className="mb-4">
-          <ReplayBar
-            phase={phase}
-            running={running}
-            onStart={startReplay}
-            onToggle={() => setRunning((v) => !v)}
-            onStop={stopReplay}
-            kicker={usingDemo ? "Simulate this week" : "Replay lab"}
-            actionLabel={usingDemo ? "Simulate this week" : "Watch it tick"}
-            copy={
-              usingDemo
-                ? "No unofficial lines yet — this unfolds last season / a demo bag through your scoring book. Real Sunday stats replace it automatically."
-                : "Unofficial points and stat lines from this week, unfolded like a Sunday."
-            }
-          />
-        </div>
       ) : null}
 
       {matchups.data == null &&

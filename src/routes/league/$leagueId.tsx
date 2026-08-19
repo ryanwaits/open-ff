@@ -3,31 +3,41 @@ import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tan
 import { BarChart3, House, Search, Settings, Shield, Swords } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { DemoToolbar } from "@/components/demo-toolbar";
 import { Shell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WeekPicker } from "@/components/week-picker";
-import { getLeagueBundle, getMatchups, getTeam } from "@/lib/data/fns";
+import { getLeagueBundle, getMatchups, getTeam, getWire } from "@/lib/data/fns";
 import { joinLeague } from "@/lib/league/fns";
+import { type PrototypeState, parsePrototypeState } from "@/lib/league/prototype";
+import { warmQuery } from "@/lib/query-client";
 import { useLeagueStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
-type LeagueSearch = { week?: number; focus?: number };
+type LeagueSearch = {
+  week?: number;
+  focus?: number;
+  /** Dev-only week-phase override. See `lib/league/prototype`. */
+  state?: PrototypeState;
+};
 
 export const Route = createFileRoute("/league/$leagueId")({
   validateSearch: (s: Record<string, unknown>): LeagueSearch => ({
     week: s.week != null && Number.isFinite(Number(s.week)) ? Number(s.week) : undefined,
     focus: s.focus != null && Number.isFinite(Number(s.focus)) ? Number(s.focus) : undefined,
+    state: parsePrototypeState(s.state),
   }),
   loader: async ({ context, params, location }) => {
-    const bundle = await context.queryClient.ensureQueryData({
+    const qc = context.queryClient;
+    const bundle = await warmQuery(qc, {
       queryKey: ["league", params.leagueId],
       queryFn: () => getLeagueBundle({ data: { leagueId: params.leagueId } }),
     });
     const search = location.search as LeagueSearch;
     const week = search.week ?? bundle.currentWeek ?? 1;
     const jobs: Promise<unknown>[] = [
-      context.queryClient.ensureQueryData({
+      warmQuery(qc, {
         queryKey: ["matchups", params.leagueId, week],
         queryFn: () => getMatchups({ data: { leagueId: params.leagueId, week } }),
       }),
@@ -35,7 +45,7 @@ export const Route = createFileRoute("/league/$leagueId")({
     const myRosterId = bundle.myRosterId;
     if (myRosterId != null) {
       jobs.push(
-        context.queryClient.ensureQueryData({
+        warmQuery(qc, {
           queryKey: ["team", params.leagueId, myRosterId, week],
           queryFn: () =>
             getTeam({
@@ -44,6 +54,13 @@ export const Route = createFileRoute("/league/$leagueId")({
         }),
       );
     }
+    void qc.prefetchQuery({
+      queryKey: ["wire", params.leagueId, "ALL", "available"],
+      queryFn: () =>
+        getWire({
+          data: { leagueId: params.leagueId, position: "ALL", query: "", scope: "available" },
+        }),
+    });
     await Promise.all(jobs);
     return { week };
   },
@@ -57,7 +74,14 @@ export const Route = createFileRoute("/league/$leagueId")({
  * too quiet on the night it matters.
  */
 const TABS = [
-  { to: "/league/$leagueId" as const, label: "Home", end: true, when: "always", owns: [] as string[], Icon: House },
+  {
+    to: "/league/$leagueId" as const,
+    label: "Home",
+    end: true,
+    when: "always",
+    owns: [] as string[],
+    Icon: House,
+  },
   {
     to: "/league/$leagueId/roster" as const,
     label: "My Team",
@@ -82,13 +106,20 @@ const TABS = [
     owns: ["/trades", "/activity", "/team/", "/recap"],
     Icon: BarChart3,
   },
-  { to: "/league/$leagueId/wire" as const, label: "Players", end: false, when: "hosted", owns: [] as string[], Icon: Search },
+  {
+    to: "/league/$leagueId/wire" as const,
+    label: "Players",
+    end: false,
+    when: "hosted",
+    owns: [] as string[],
+    Icon: Search,
+  },
 ];
 
 function LeagueLayout() {
   const { leagueId } = Route.useParams();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const search = useRouterState({ select: (s) => s.location.search as { week?: number } });
+  const search = useRouterState({ select: (s) => s.location.search as LeagueSearch });
   const navigate = useNavigate();
   const remember = useLeagueStore((s) => s.remember);
   const q = useQuery({
@@ -138,7 +169,11 @@ function LeagueLayout() {
   const usesWeek = WEEKLY.some((seg) => pathname.startsWith(`/league/${leagueId}${seg}`));
   const playoffStart =
     q.data?.ops?.playoffStartWeek ?? q.data?.league.settings.playoff_week_start ?? 15;
-  const maxWeek = Math.max(playoffStart + 2, q.data?.ops?.regularWeeks ?? 14, q.data?.currentWeek ?? 1);
+  const maxWeek = Math.max(
+    playoffStart + 2,
+    q.data?.ops?.regularWeeks ?? 14,
+    q.data?.currentWeek ?? 1,
+  );
   const shownWeek = search.week ?? q.data?.currentWeek ?? 1;
 
   const setupHref = `/league/${leagueId}/settings`;
@@ -161,12 +196,12 @@ function LeagueLayout() {
 
   return (
     <Shell tabs={tabs} trailing={gear}>
-      {q.isLoading ? (
+      {q.data == null && q.isPending ? (
         <div className="space-y-3">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-12 w-80" />
         </div>
-      ) : q.error ? (
+      ) : q.error && q.data == null ? (
         <p className="text-sm text-loss">Couldn't load that league.</p>
       ) : q.data ? (
         <header className="mb-6">
@@ -197,6 +232,8 @@ function LeagueLayout() {
       ) : null}
 
       <Outlet />
+
+      <DemoToolbar state={search.state} />
     </Shell>
   );
 }

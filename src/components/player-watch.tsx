@@ -10,6 +10,7 @@ import { bagForPlayer, simulatePlayerGame } from "@/lib/data/sim-game";
 import { formatStatLine } from "@/lib/data/statline";
 import { baseSlotLabel, dstLabel, playerHeadshot, teamLogo } from "@/lib/data/teams";
 import type { GamePlay, GameSummary, SlimPlayer, StarterLine } from "@/lib/data/types";
+import { useSimPhase } from "@/lib/demo/store";
 import { REPLAY_PHASES, replayPts, replayStats } from "@/lib/replay";
 import { cn, formatPts } from "@/lib/utils";
 
@@ -84,7 +85,9 @@ export function PlayerWatch({
         className="relative z-10 flex h-[min(88vh,42rem)] w-full flex-col rounded-t-xl bg-surface shadow-[var(--shadow-border)] sm:h-full sm:w-[34rem] sm:rounded-none sm:border-l sm:border-line"
       >
         <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line sm:hidden" />
-        <WatchBody target={target} onClose={onClose} />
+        {/* Keyed on the player so switching subjects resets the drawer's tab
+            and queries the way a fresh mount would. */}
+        <WatchBody key={target.player.player_id} target={target} onClose={onClose} />
       </section>
     </div>
   );
@@ -92,8 +95,9 @@ export function PlayerWatch({
 
 function WatchBody({ target, onClose }: { target: WatchTarget; onClose: () => void }) {
   const [tab, setTab] = useState<"drive" | "plays">("drive");
-  const [phase, setPhase] = useState<number | null>(null);
-  const [running, setRunning] = useState(false);
+  // No transport of its own. If a simulated Sunday is running, this drawer is
+  // part of it; otherwise it shows whatever the real box says.
+  const simPhase = useSimPhase();
   const q = useQuery({
     queryKey: ["game", target.gameId],
     queryFn: () => getGameSummary({ data: { gameId: target.gameId! } }),
@@ -108,33 +112,12 @@ function WatchBody({ target, onClose }: { target: WatchTarget; onClose: () => vo
   const liveHasPlays =
     Boolean(q.data?.drives.some((d) => d.plays.length)) && q.data?.state !== "pre";
   const bag = bagForPlayer(target.player, target.stats);
-  const last = REPLAY_PHASES.length - 1;
-
-  useEffect(() => {
-    setPhase(null);
-    setRunning(false);
-    setTab("drive");
-  }, [target.player.player_id]);
-
-  useEffect(() => {
-    if (liveHasPlays) {
-      setPhase(null);
-      setRunning(false);
-    }
-  }, [liveHasPlays]);
-
-  useEffect(() => {
-    if (!running || phase == null) return;
-    if (phase >= last) {
-      setRunning(false);
-      return;
-    }
-    const t = window.setTimeout(() => setPhase((p) => (p == null ? 0 : p + 1)), 1400);
-    return () => window.clearTimeout(t);
-  }, [running, phase, last]);
+  // Real play-by-play always wins: a game that is actually being played does
+  // not get a made-up one drawn over it.
+  const phase = liveHasPlays ? null : simPhase;
 
   const sim =
-    !liveHasPlays && phase != null
+    phase != null
       ? simulatePlayerGame({ player: target.player, bag, phase, base: q.data ?? null })
       : null;
   const g = sim ?? q.data ?? null;
@@ -192,37 +175,9 @@ function WatchBody({ target, onClose }: { target: WatchTarget; onClose: () => vo
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {!liveHasPlays && !(target.gameId && q.isLoading) ? (
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-              {running
-                ? `Sim · ${REPLAY_PHASES[phase ?? 0]?.label ?? ""}`
-                : phase != null && phase >= last
-                  ? "Sim final"
-                  : phase != null
-                    ? `Paused · ${REPLAY_PHASES[phase]?.label ?? ""}`
-                    : "No kickoff yet"}
-            </p>
-            <button
-              type="button"
-              className="h-9 rounded-sm bg-accent px-3 text-sm text-accent-fg"
-              onClick={() => {
-                if (running) {
-                  setRunning(false);
-                  return;
-                }
-                if (phase == null || phase >= last) setPhase(0);
-                setRunning(true);
-              }}
-            >
-              {running
-                ? "Pause"
-                : phase == null
-                  ? "Simulate"
-                  : phase >= last
-                    ? "Simulate"
-                    : "Resume"}
-            </button>
-          </div>
+          <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+            {phase != null ? `Sim · ${REPLAY_PHASES[phase]?.label ?? ""}` : "No kickoff yet"}
+          </p>
         ) : null}
 
         {target.gameId && q.isLoading && !sim ? (
