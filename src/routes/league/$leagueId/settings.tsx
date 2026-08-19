@@ -219,7 +219,9 @@ function SettingsPage() {
             />
           </label>
         </div>
-        {q.data.inviteCode ? <InviteCard code={q.data.inviteCode} origin={origin} /> : null}
+        {q.data.isCommish && q.data.inviteCode ? (
+          <InviteCard code={q.data.inviteCode} origin={origin} />
+        ) : null}
         {q.data.isCommish ? <AllowlistPanel leagueId={leagueId} locked={q.data.locked} /> : null}
       </section>
 
