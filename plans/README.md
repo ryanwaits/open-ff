@@ -1,6 +1,6 @@
 # Implementation Plans
 
-Four slices live here. Read the one you are executing from.
+Five slices live here. Read the one you are executing from.
 
 - **001–005 — Desk performance** (improve skill, 2026-08-17, commit `1abb347`).
   Goal: league desk feels like a spreadsheet — last-known numbers stay painted,
@@ -19,7 +19,11 @@ Four slices live here. Read the one you are executing from.
   `553f159`). Goal: the league is something a commish can run, a friend can
   put on a home screen, a harness can restyle, and an agent can *use* —
   because the primitives are named and tested, not because we added a chat
-  widget. Finish 014/016–021 in parallel; they do not block this slice.
+  widget. 024–026 are DONE.
+- **027–029 — Purse, door, and a real click** (improve skill, 2026-08-18,
+  commit `b918703`). Goal: the book cannot invent FAAB, a league can be
+  locked to invited emails and member-only reads, and the wager ticket is
+  scripted so we stop saying "no one has clicked it."
 
 Execute in the order below. Each executor: read the plan fully, honor STOP
 conditions, update your row when done.
@@ -92,8 +96,8 @@ conditions, update your row when done.
 ### Agent-native foundation (022–026)
 
 - **The engine is already the product.** ~50 server fns, a scoring book, FAAB,
-  trades, a house book, an event diary. Agents cannot reach any of it. 024
-  names those verbs; it does not invent a second API.
+  trades, a house book, an event diary. 024 names those verbs in
+  `src/lib/agent/` + `scripts/ledger.mjs` (reads only).
 - **Features are still code, used via prompts.** "Add betting by describing
   it" already happened as a human vertical slice (`wagers.server.ts`). The
   next market is a registry (not in this slice) sitting on a conserved FAAB
@@ -102,9 +106,12 @@ conditions, update your row when done.
   it from the catalog.
 - **Skin is an overlay, not a fork.** 026 extracts `src/skin/*`. Do not
   unbrand `public/__grok/install` or delete `grokPwaPlugin`.
-- **One installed PWA named Ledger**, `start_url=/`. Not a per-league icon.
+- **One installed PWA named open-ff**, `start_url=/`. Not a per-league icon.
 - **Events stay a diary.** Mechanics stay on tables. 024 exposes `readEvents`
   / facts as reads.
+- **Product name is open-ff.** License is MIT. (025 / 026)
+- **Join stays invite-code.** Allowlist + member reads are **028**.
+- **Do not wire mutating wager CLI** until **027** (mint) lands.
 
 ## Execution order & status
 
@@ -123,19 +130,22 @@ conditions, update your row when done.
 | 011  | Mid-draft trading — picks, drafted players, FAAB | P2 | M | 007 | DONE `cf6fa91` (not pushed; live trade tests skipped — no signed-in mid-draft league) |
 | 012  | Mock draft — the same room with the writes turned off | P3 | M | 007, 010 | DONE `81b0c4c` (not pushed) |
 | 013  | Derived league facts — roll the ledger into standing facts | P2 | M | — | DONE `5009378` (not pushed; `832ba4e` locked-only, `ce31848` format) |
-| 014  | The desk remembers — feed facts into the weekly write-up | P2 | S | 013 | DONE `7af3716` (not pushed; backyard had 0 facts — empty-list no-op verified) |
+| 014  | The desk remembers — feed facts into the weekly write-up | P2 | S | 013 | DONE `7af3716` (verified `e6d44de`: desk calls `loadLeagueFacts`) |
 | 015  | Live weekly projections — a number that moves | P1 | M | — | DONE `d6d855d` (not pushed) |
-| 016  | Replacement value — price a trade by the lineup it produces | P1 | S | — | DONE `7af4bf4` (not pushed) |
+| 016  | Replacement value — price a trade by the lineup it produces | P1 | S | — | DONE `7af4bf4` (verified `e6d44de`: `lineup-value.ts`) |
 | 017  | The player stat row — avatar, projection, rank, shape | P1 | M | — | DONE `553f159` (not pushed) |
 | 018  | The offer card — decide with the facts in front of you | P1 | M | 016, 017 | DONE `5b092fa` (not pushed) |
-| 019  | The composer — a readable deal, and FAAB you can send | P2 | L | 016, 017, 018 | DONE `ec855c3` (not pushed) |
+| 019  | The composer — a readable deal, and FAAB you can send | P2 | L | 016, 017, 018 | DONE `ec855c3` (verified: composer sends `kind: "faab"`) |
 | 020  | Three-team trades — every asset says where it lands | P3 | M | 019 | DONE `4356a5e` (not pushed) |
-| 021  | The read line — one sentence that arranges the numbers | P3 | S | 016, 018/019 | DONE `7e6cac7` (not pushed) |
-| 022  | Prove FAAB, settlement, and clock with tests | P1 | M | — | DONE `ec0bd72` (not pushed; live mint test skipped — no PGLite fixture in bun) |
-| 023  | Close the public clock, invite leak, and bid leak | P1 | S | — | DONE `d9083ad` (not pushed) |
-| 024  | Publish the primitive catalog and a thin tool surface | P1 | M | 022, 023 | TODO |
-| 025  | Make a stranger able to run a league | P1 | M | 023 | TODO |
-| 026  | Skin contract + scan-to-homescreen | P2 | M | 025 | TODO |
+| 021  | The read line — one sentence that arranges the numbers | P3 | S | 016, 018/019 | DONE `7e6cac7` (verified: `trade-read.ts`) |
+| 022  | Prove FAAB, settlement, and clock with tests | P1 | M | — | DONE `ec0bd72` (verified `e6d44de`: `bun test src scripts`; live mint still skipped) |
+| 023  | Close the public clock, invite leak, and bid leak | P1 | S | — | DONE `d9083ad` (verified: `CRON_SECRET` + commish-only invite) |
+| 024  | Publish the primitive catalog and a thin tool surface | P1 | M | 022, 023 | DONE `7f5a247` (verified `b918703`: catalog + `getEvents` / `getLeagueFacts` + `scripts/ledger.mjs`) |
+| 025  | Make a stranger able to run a league | P1 | M | 023 | DONE `f738a3b` (verified: `open-ff`, README, LICENSE, PGLite `dataDir`) |
+| 026  | Skin contract + scan-to-homescreen | P2 | M | 025 | DONE `b918703` (verified: `src/skin/*`, join keeps `?code=`) |
+| 027  | Stop a lost wager from minting FAAB | P1 | M | 022 | TODO |
+| 028  | Invite-only desk — allowlist emails and member reads | P1 | M | 023 | TODO |
+| 029  | Exercise the FAAB wager ticket for real | P2 | M | — | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED
 
@@ -204,9 +214,10 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED
   `npx vite-node` call + manual steps.
 - **`biome.json` now exists** and pins `indentStyle: "space"`. The old
   "do not `--write`" hazard is gone. `bun run lint` is the gate.
-- **`bun test` is still scripts-only until 022.** `src/lib/league/mock-draft.test.mjs`
-  exists and is not run. Plans README used to claim FAAB "database tests" —
-  those files are not in the repo. 022 is the first real suite.
+- **`bun test` is `bun test src scripts` (022).** Includes scoring, odds,
+  win%, mock-draft, and a **skipped** live FAAB-mint fixture (PGLite cannot
+  migrate under bun — no `import.meta.glob`).
+- **`npm test` / vite-node notes above are stale for 022+.** Use `bun`.
 
 ## Findings considered and rejected
 
@@ -243,8 +254,9 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED
 - **Per-league home-screen icons:** one origin ≈ one PWA.
 - **Service worker / Web Push in this slice:** follow-up after a friend
   actually installs. Draft 4s poll stays the in-room transport.
-- **Membership-gating every GET:** still a secret-URL desk. 023 only strips
-  invite codes and foreign bids.
+- **Membership-gating every GET (023):** 023 only strips invite codes and
+  foreign bids. Operator later asked for invite-only / email allowlist —
+  that is a new plan, not a rewrite of 023.
 - **Rewriting `AGENTS.md`:** sandbox still needs it. 025 adds
   `AGENTS.project.md`.
 - **Deleting `grokPwaPlugin` / `PreviewHostBridge` / `public/__grok`:**
@@ -263,16 +275,6 @@ other runs `007`, then `011`, then `013 → 014`. They touch different files —
 the draft chain lives in `engine.server.ts`, while 011 is in `ops.server.ts` and
 013/014 are in `dispatch.ts` and a new module.
 
-## Suggested execution — slice 4 (agent-native)
-
-**Single executor:** `022` → `023` → `024` and `025` in either order → `026`.
-
-**Two executors:** one runs `022` then `024` (tests then catalog). The other
-runs `023` then `025` then `026` (lock the door, then hand a stranger the
-keys, then the homescreen). They touch different files.
-
-Do **not** start mutating CLI in 024 before 022 is green.
-
 ## Suggested execution — slice 3
 
 **Single executor:** `015` → `017` → `016` → `018` → `019` → `020` → `021`.
@@ -284,21 +286,31 @@ then `016` (client, pure). They meet at `018`.
 
 ## Suggested execution — slice 4 (agent-native)
 
-**Single executor:** `022` → `023` → `024` and `025` in either order → `026`.
+**DONE.** `024` `7f5a247` · `025` `f738a3b` · `026` `b918703`.
 
-**Two executors:** one runs `022` then `024` (tests then catalog). The other
-runs `023` then `025` then `026` (lock the door, then hand a stranger the
-keys, then the homescreen). They touch different files.
+Do **not** wire mutating wager CLI until 027.
 
-Do **not** start 024 before 022 is green if you are about to let an agent
-place wagers. The catalog can be drafted, but do not wire mutating CLI.
+## Suggested execution — slice 5 (purse, door, click)
+
+**Single executor:** `027` → `029`. `028` is independent and can run
+anytime.
+
+**Two executors:** one runs `027` then `029` (honest book, then click it).
+The other runs `028` (allowlist + member reads). They touch different
+files except catalog rows on 028.
+
+028 must add `migrations/0011_allowlist.sql` — `0010_player_news.sql`
+already exists.
 
 ## Findings considered and rejected (022–026)
 
+See the list above (event-sourcing, MCP SDK, free-text props, Grok install
+unbrand, per-league icons, SW/push this slice).
+
 ## Not yet verified anywhere
 
-Carried forward so it is not lost: **nothing in the FAAB wagering UI has been
-exercised by a human.** The economics are proven by direct database tests
-(supply conservation, pool-shortfall scaling, fair-odds payouts, the one-balance
-rule), but no one has clicked a price button. That needs a signed-in session and
-is not covered by any plan here.
+- **FAAB wagering UI** — planned as **029**. Until that script runs, no
+  human/script has submitted `WagerTicket`.
+- **FAAB conservation** — planned as **027**. 022 still skips the live
+  mint fixture.
+- **Invite-only reads / email allowlist** — planned as **028**.

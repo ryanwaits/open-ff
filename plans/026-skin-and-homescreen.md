@@ -5,7 +5,7 @@
 > next step. If anything in the "STOP conditions" section occurs, stop and
 > report. Update `plans/README.md` when done.
 >
-> **Drift check (run first)**: `git diff --stat 553f159..HEAD -- src/styles.css src/lib/theme.ts src/components/shell.tsx src/routes/__root.tsx src/routes/join.tsx src/routes/login.tsx scripts/grok-pwa-shared.mjs`
+> **Drift check (run first)**: `git diff --stat e6d44de..HEAD -- src/styles.css src/lib/theme.ts src/components/shell.tsx src/routes/__root.tsx src/routes/join.tsx src/routes/login.tsx scripts/grok-pwa-shared.mjs`
 > On a mismatch, STOP.
 
 ## Status
@@ -15,7 +15,10 @@
 - **Risk**: MED
 - **Depends on**: 025 (product name / README exist)
 - **Category**: direction
-- **Planned at**: commit `553f159`, 2026-08-17
+- **Planned at**: commit `e6d44de`, 2026-08-18
+  (reconciled: `styles.css` gained `--caution` / `--color-warn`; `Shell`
+  has a `center` prop. Join still drops `?code=`. Brand name locked to
+  **open-ff**, not Ledger.)
 
 ## Why this matters
 
@@ -37,13 +40,13 @@ Do **not** unbrand `scripts/install-page.html` (platform). Do **not** put
 ## Current state
 
 - Tokens already layered correctly in `src/styles.css:14-19` (`:root` →
-  `@theme inline` → utilities). `data-accent="blue"` is documented and
-  **never stamped**.
+  `@theme inline` → utilities). Also `--caution` / `--color-warn` (injury
+  Q-mark). `data-accent="blue"` is documented and **never stamped**.
 - `src/lib/theme.ts` — light/dark/system only; `THEME_KEY = "ledger-theme"`
-- `src/components/shell.tsx:56` hardcodes `Ledger`
-- `src/routes/__root.tsx:15-47` — `APP_NAME = "Ledger"`; manifest and
+- `src/components/shell.tsx` hardcodes wordmark `Ledger`; accepts `center?`
+- `src/routes/__root.tsx` — `APP_NAME = "Ledger"`; manifest and
   apple-touch-icon are `/__grok/*`; viewport has no `viewport-fit=cover`
-- `src/routes/join.tsx:50-58` — unsigned `/join?code=YARD26` redirects to
+- `src/routes/join.tsx:51,58` — unsigned `/join?code=YARD26` redirects to
   `/login?redirect=/join` (code dropped)
 - Invite is a faint code in the league header, no share/QR
 - `scripts/grok-pwa-shared.mjs:91-114` — manifest name from host slug;
@@ -53,7 +56,7 @@ Do **not** unbrand `scripts/install-page.html` (platform). Do **not** put
 
 Decisions locked for this plan:
 
-- **One installed app** named Ledger (or the skin name), `start_url=/`.
+- **One installed app** named **open-ff** (or the skin name), `start_url=/`.
   Not a per-league home-screen icon (iOS snapshots title/icon at add-time;
   one origin ≈ one PWA).
 - **Host-level skin**, not per-league CSS.
@@ -162,8 +165,8 @@ html { overscroll-behavior-y: none; }
 
 ```ts
 export const brand = {
-  name: "Ledger",
-  shortName: "Ledger",
+  name: "open-ff",
+  shortName: "open-ff",
   tagline: "Your league, your desk.",
   kicker: "Hosted here · no other app",
 } as const;

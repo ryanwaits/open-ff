@@ -6,7 +6,7 @@
 > report — do not improvise. When done, update the status row for this plan
 > in `plans/README.md`.
 >
-> **Drift check (run first)**: `git diff --stat 553f159..HEAD -- src/lib/league/fns.ts src/lib/data/fns.ts src/lib/league/events.server.ts src/lib/auth/middleware.ts AGENTS.md`
+> **Drift check (run first)**: `git diff --stat e6d44de..HEAD -- src/lib/league/fns.ts src/lib/data/fns.ts src/lib/league/events.server.ts src/lib/auth/middleware.ts AGENTS.md`
 > On a mismatch, STOP.
 
 ## Status
@@ -16,7 +16,10 @@
 - **Risk**: MED
 - **Depends on**: 022 (tests exist), 023 (tick/invite/bids not public)
 - **Category**: direction
-- **Planned at**: commit `553f159`, 2026-08-17
+- **Planned at**: commit `e6d44de`, 2026-08-18
+  (reconciled from `553f159`: 014 landed — desk calls `loadLeagueFacts`;
+  `dropPlayer` is a new atomic fn; still no `getEvents` / `getLeagueFacts`
+  RPC and no `src/lib/agent/`)
 
 ## Why this matters
 
@@ -46,12 +49,19 @@ Two layers, do not collapse them:
 - ~50 `createServerFn`s in `src/lib/league/fns.ts` and `src/lib/data/fns.ts`
 - Auth: `authMiddleware` / `optionalAuthMiddleware` in `src/lib/auth/middleware.ts`
 - Atomic enough already: `makePick`, `startPlayer`, `sitPlayer`, `queueAdd`,
-  `placeWager`, `pullWager`, `voteTrade`, `cancelClaim`, `setAutodraft`
+  `placeWager`, `pullWager`, `voteTrade`, `cancelClaim`, `setAutodraft`,
+  `dropPlayer` (`fns.ts:207-214` — added after this plan was first written;
+  catalog **must** include it)
 - Workflow-shaped (keep as recipes, do not split in this plan):
   `createLeague`, `addDrop`, `saveSettings`, `advanceWeek`, `autoFillDraft`
 - `readEvents` (`events.server.ts:146`) — **no** server fn, no UI
-- `loadLeagueFacts` — **no** server fn; plan 014 still TODO (do not implement 014 here)
-- `pullWager` exists (`fns.ts:526`) — **no** UI (do not add UI here)
+- `loadLeagueFacts(leagueId, throughWeek)` is used by the desk
+  (`engine.server.ts:2336-2337`). **Still no** `getEvents` / `getLeagueFacts`
+  server fn. Do not re-implement 014; wrap the existing export. The GET
+  validator needs `leagueId` **and** `week` (pass `week` through as
+  `throughWeek`).
+- `pullWager` exists (`fns.ts:535`) — **no** UI import (do not add UI here)
+- `bun test` is `bun test src scripts` (022). Do not shrink the glob.
 - No MCP SDK in `package.json`. Do not `npm install` unless this plan's
   spike proves the official SDK is required — prefer a **stdio JSON catalog
   + curl-shaped CLI** first so any harness can call it.
@@ -167,15 +177,15 @@ export const getEvents = createServerFn({ method: "GET" })
 
 export const getLeagueFacts = createServerFn({ method: "GET" })
   .middleware([optionalAuthMiddleware])
-  .validator(z.object({ leagueId: z.string() }))
+  .validator(z.object({ leagueId: z.string(), week: z.number() }))
   .handler(async ({ data }) => {
     const facts = await import("./league-facts.server");
-    return facts.loadLeagueFacts(data.leagueId);
+    return facts.loadLeagueFacts(data.leagueId, data.week);
   });
 ```
 
-Confirm `loadLeagueFacts` is exported and takes `leagueId` only. If its
-signature differs, wrap it — do not change fact math.
+Confirm `loadLeagueFacts` is exported as
+`(leagueId: string, throughWeek: number)`. Wrap it — do not change fact math.
 
 **Verify**: `bun run typecheck` exits 0. `rg -n "export const getEvents" src/lib/league/fns.ts`.
 
@@ -186,7 +196,7 @@ signature differs, wrap it — do not change fact math.
 ```
 bun scripts/ledger.mjs --help
 bun scripts/ledger.mjs getEvents --league <id> --limit 20
-bun scripts/ledger.mjs getLeagueFacts --league <id>
+bun scripts/ledger.mjs getLeagueFacts --league <id> --week <n>
 ```
 
 Implementation: import catalog, dispatch by id, call the **server module**
@@ -209,7 +219,7 @@ The catalog still *lists* them so a later plan / MCP can wire them.
 
 Add `src/lib/agent/context-prompt.md` (static) that a harness can prepend:
 
-- What Ledger is
+- What open-ff is
 - Scopes
 - Invariants: one FAAB purse for claims + wagers; cannot fade yourself;
   on-clock pick is not tradeable; betting off until `bettingOn`; mock draft
@@ -238,8 +248,8 @@ Add `src/lib/agent/context-prompt.md` (static) that a harness can prepend:
 
 ## STOP conditions
 
-- `loadLeagueFacts` is not exported or requires more than `leagueId` and you
-  cannot wrap it in 10 lines — stop
+- `loadLeagueFacts` is not exported or you cannot wrap
+  `(leagueId, throughWeek)` in 10 lines — stop
 - You believe you need `@modelcontextprotocol/sdk` to finish — stop and
   report; this plan's slice is catalog + CLI
 - Temptation to split `saveSettings` — out of scope

@@ -5,7 +5,7 @@
 > next step. If anything in the "STOP conditions" section occurs, stop and
 > report. Update `plans/README.md` when done.
 >
-> **Drift check (run first)**: `git diff --stat 553f159..HEAD -- package.json src/lib/db.ts src/lib/auth/email-password.ts src/lib/auth/server.ts src/lib/auth/preview.ts src/routes/login.tsx startup.sh AGENTS.md`
+> **Drift check (run first)**: `git diff --stat e6d44de..HEAD -- package.json src/lib/db.ts src/lib/auth/email-password.ts src/lib/auth/server.ts src/lib/auth/preview.ts src/routes/login.tsx startup.sh AGENTS.md`
 > On a mismatch, STOP.
 
 ## Status
@@ -15,7 +15,10 @@
 - **Risk**: MED
 - **Depends on**: 023 (document `CRON_SECRET` the way tick actually works)
 - **Category**: dx
-- **Planned at**: commit `553f159`, 2026-08-17
+- **Planned at**: commit `e6d44de`, 2026-08-18
+  (reconciled: 023 gated tick behind `CRON_SECRET`; login pre-fills
+  `LOCAL_SEED` and admits the in-memory wipe; PGLite still has no `dataDir`.
+  Product name locked to **open-ff**. License locked to **MIT**.)
 
 ## Why this matters
 
@@ -29,15 +32,21 @@ the Grok preview broker, and the package is still named
 ## Current state
 
 - No `README.md`, no `LICENSE`, no `.env.example`, no Docker
-- `package.json:2` `"name": "app-builder-workspace"`
+- `package.json:2` `"name": "app-builder-workspace"` — rename to **`open-ff`**
 - `package.json:6` `"packageManager": "bun@1.3.10"`
-- `src/lib/db.ts:106-118` — `new PGlite({ parsers })` **no `dataDir`**
+- `package.json:17` `"test": "bun test src scripts"` — do not revert
+- `src/lib/db.ts:106-118` — `new PGlite({ parsers })` **no `dataDir`**.
+  After migrate it now calls `seedLocalAccount` (`db.ts:168-170`). Keep
+  that seed; persist the dir.
 - `src/lib/auth/email-password.ts:10` — `emailAndPasswordEnabled = true`
 - `src/lib/auth/server.ts:73-84` — Google/X always fall back to preview
   client when `GROK_AUTH_*` unset
 - `src/lib/auth/preview.ts:19-32` — preview client only valid on
   `*.grok-sandbox.com`
-- `src/routes/login.tsx:53-59` — copy says Google and X "use the same login"
+- `src/routes/login.tsx` — email form pre-fills `LOCAL_SEED`; copy still
+  offers Google/X as if they work off-sandbox
+- `src/routes/api/league/tick.ts` — if `CRON_SECRET` is set, requires
+  `Authorization: Bearer` or `?secret=`. Document that.
 - `startup.sh` — Grok sandbox (`/workspace`, curl tick every 180s)
 - `vercel.json` already crons `/api/league/tick`
 
@@ -55,9 +64,9 @@ Email/password on localhost **does** work. That is the self-host path.
 
 **In scope**:
 - `README.md` (create)
-- `LICENSE` (create — MIT unless the operator says otherwise)
+- `LICENSE` (create — **MIT**)
 - `.env.example` (create)
-- `package.json` — `name` only (`ledger` or `open-ff`; do not shuffle deps)
+- `package.json` — `name` only (`open-ff`; do not shuffle deps)
 - `src/lib/db.ts` — PGLite `dataDir` when `DATABASE_URL` is unset
 - `src/lib/auth/server.ts` — do **not** rewrite; only gate preview-broker
   providers so they are omitted unless `GROK_AUTH_CLIENT_ID` is set **or**
