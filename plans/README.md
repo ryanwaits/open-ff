@@ -23,7 +23,11 @@ Five slices live here. Read the one you are executing from.
 - **027–029 — Purse, door, and a real click** (improve skill, 2026-08-18,
   commit `b918703`). Goal: the book cannot invent FAAB, a league can be
   locked to invited emails and member-only reads, and the wager ticket is
-  scripted so we stop saying "no one has clicked it."
+  scripted so we stop saying "no one has clicked it." **All three are DONE**
+  (verified `dd9bc53`).
+- **030–037 — Close the door, then self-host leftovers** (improve skill,
+  2026-08-19, commit `dd9bc53`). Goal: invite-only means the RPCs too;
+  the remaining skips and self-host gaps are named instead of rediscovered.
 
 Execute in the order below. Each executor: read the plan fully, honor STOP
 conditions, update your row when done.
@@ -110,8 +114,9 @@ conditions, update your row when done.
 - **Events stay a diary.** Mechanics stay on tables. 024 exposes `readEvents`
   / facts as reads.
 - **Product name is open-ff.** License is MIT. (025 / 026)
-- **Join stays invite-code.** Allowlist + member reads are **028**.
-- **Do not wire mutating wager CLI** until **027** (mint) lands.
+- **Join stays invite-code.** Allowlist + member reads landed in **028**.
+- **Mutating wager CLI is still off.** 027 closed the mint; 024's catalog
+  lists `placeWager` but `scripts/ledger.mjs` still refuses it from argv.
 
 ## Execution order & status
 
@@ -138,14 +143,22 @@ conditions, update your row when done.
 | 019  | The composer — a readable deal, and FAAB you can send | P2 | L | 016, 017, 018 | DONE `ec855c3` (verified: composer sends `kind: "faab"`) |
 | 020  | Three-team trades — every asset says where it lands | P3 | M | 019 | DONE `4356a5e` (not pushed) |
 | 021  | The read line — one sentence that arranges the numbers | P3 | S | 016, 018/019 | DONE `7e6cac7` (verified: `trade-read.ts`) |
-| 022  | Prove FAAB, settlement, and clock with tests | P1 | M | — | DONE `ec0bd72` (verified `e6d44de`: `bun test src scripts`; live mint still skipped) |
+| 022  | Prove FAAB, settlement, and clock with tests | P1 | M | — | DONE `ec0bd72` (live spendable/atRisk still skipped; mint case flipped in 027) |
 | 023  | Close the public clock, invite leak, and bid leak | P1 | S | — | DONE `d9083ad` (verified: `CRON_SECRET` + commish-only invite) |
 | 024  | Publish the primitive catalog and a thin tool surface | P1 | M | 022, 023 | DONE `7f5a247` (verified `b918703`: catalog + `getEvents` / `getLeagueFacts` + `scripts/ledger.mjs`) |
 | 025  | Make a stranger able to run a league | P1 | M | 023 | DONE `f738a3b` (verified: `open-ff`, README, LICENSE, PGLite `dataDir`) |
 | 026  | Skin contract + scan-to-homescreen | P2 | M | 025 | DONE `b918703` (verified: `src/skin/*`, join keeps `?code=`) |
-| 027  | Stop a lost wager from minting FAAB | P1 | M | 022 | TODO |
-| 028  | Invite-only desk — allowlist emails and member reads | P1 | M | 023 | TODO |
-| 029  | Exercise the FAAB wager ticket for real | P2 | M | — | TODO |
+| 027  | Stop a lost wager from minting FAAB | P1 | M | 022 | DONE `9f512b5` (verified `dd9bc53`: `applyLoss` + `movePool(poolCredit)`) |
+| 028  | Invite-only desk — allowlist emails and member reads | P1 | M | 023 | DONE `fe3d1a6` (verified `dd9bc53`: allowlist + viewer on listed wrappers) |
+| 029  | Exercise the FAAB wager ticket for real | P2 | M | — | DONE `dd9bc53` (verified: `wager-qa.mjs` + testids; preseason no-price) |
+| 030  | Require a seat for every hosted league GET | P1 | S | 028 | TODO |
+| 031  | Prove spendable and atRisk without a live database | P2 | S | 027 | TODO |
+| 032  | Re-run the wager script when a week has a live line | P3 | S | 029 | TODO (ops; no code) |
+| 033  | Let the CLI place a wager when asked in writing | P2 | M | 027 | TODO |
+| 034  | Let a commish download their league | P2 | M | 025 | TODO |
+| 035  | Optional native Google sign-in for self-host | P2 | M | 025 | TODO |
+| 036  | Let a commish delete a league they run | P2 | M | 034 | TODO |
+| 037  | Web Push after someone actually installs the PWA | P3 | L | 026 | TODO (stop if no install) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED
 
@@ -214,9 +227,10 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED
   `npx vite-node` call + manual steps.
 - **`biome.json` now exists** and pins `indentStyle: "space"`. The old
   "do not `--write`" hazard is gone. `bun run lint` is the gate.
-- **`bun test` is `bun test src scripts` (022).** Includes scoring, odds,
-  win%, mock-draft, and a **skipped** live FAAB-mint fixture (PGLite cannot
-  migrate under bun — no `import.meta.glob`).
+- **`bun test` is `bun test src scripts`.** Includes scoring, odds, win%,
+  mock-draft, `applyLoss`, allowlist match, catalog ids, wager testids.
+  Live `spendable` / `atRisk` still skipped (PGLite cannot migrate under
+  bun — no `import.meta.glob`).
 - **`npm test` / vite-node notes above are stale for 022+.** Use `bun`.
 
 ## Findings considered and rejected
@@ -288,29 +302,26 @@ then `016` (client, pure). They meet at `018`.
 
 **DONE.** `024` `7f5a247` · `025` `f738a3b` · `026` `b918703`.
 
-Do **not** wire mutating wager CLI until 027.
-
 ## Suggested execution — slice 5 (purse, door, click)
 
-**Single executor:** `027` → `029`. `028` is independent and can run
-anytime.
+**DONE.** `027` `9f512b5` · `028` `fe3d1a6` · `029` `dd9bc53`.
 
-**Two executors:** one runs `027` then `029` (honest book, then click it).
-The other runs `028` (allowlist + member reads). They touch different
-files except catalog rows on 028.
+## Suggested execution — slice 6 (door + leftovers)
 
-028 must add `migrations/0011_allowlist.sql` — `0010_player_news.sql`
-already exists.
+**Do first:** `030` (hosted RPC gate). Independent of the rest.
+
+**Then any order:** `031` (pure tests) · `033` (CLI write) · `034`
+(backup). `036` after `034`. `035` anytime. `032` only when a week
+has a live line. `037` only after a human installed the PWA.
+
+`030` and `031` do not touch the same files. `034`/`036` share
+settings.tsx — do not run them in parallel on one branch.
 
 ## Findings considered and rejected (022–026)
 
 See the list above (event-sourcing, MCP SDK, free-text props, Grok install
 unbrand, per-league icons, SW/push this slice).
 
-## Not yet verified anywhere
+## Open leftovers
 
-- **FAAB wagering UI** — planned as **029**. Until that script runs, no
-  human/script has submitted `WagerTicket`.
-- **FAAB conservation** — planned as **027**. 022 still skips the live
-  mint fixture.
-- **Invite-only reads / email allowlist** — planned as **028**.
+Planned as **030–037**. Do not re-audit as unnamed findings.

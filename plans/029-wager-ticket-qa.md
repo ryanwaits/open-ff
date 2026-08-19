@@ -19,6 +19,8 @@
   in a real league; the script should use a throwaway league)
 - **Category**: tests
 - **Planned at**: commit `b918703`, 2026-08-18
+- **Landed**: `dd9bc53` (not pushed; no-price path)
+- **Verified**: `dd9bc53` (reconcile 2026-08-19)
 
 ## Why this matters
 

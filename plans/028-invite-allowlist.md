@@ -19,6 +19,8 @@
   non-commish; reads still public)
 - **Category**: security
 - **Planned at**: commit `b918703`, 2026-08-18
+- **Landed**: `fe3d1a6` (not pushed)
+- **Verified**: `dd9bc53` (reconcile 2026-08-19)
 
 ## Why this matters
 

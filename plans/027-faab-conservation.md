@@ -18,6 +18,8 @@
 - **Depends on**: plans/022-money-characterization.md (DONE — skipped fixture documents the mint)
 - **Category**: bug
 - **Planned at**: commit `b918703`, 2026-08-18
+- **Landed**: `9f512b5` (not pushed)
+- **Verified**: `dd9bc53` (reconcile 2026-08-19)
 
 ## Why this matters
 
