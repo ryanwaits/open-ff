@@ -1,20 +1,28 @@
 import { formatDistanceToNow } from "date-fns";
+import { ChevronDown } from "lucide-react";
+import { useId, useState } from "react";
 import { PlayerStatRow, type PlayerStatRowData } from "@/components/player-stat-row";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Projection, RosterPlayer, SlimPlayer } from "@/lib/data/types";
 import type { TradeDelta } from "@/lib/league/lineup-value";
 import { readTrade } from "@/lib/league/trade-read";
-import { cn } from "@/lib/utils";
+import { cn, joinBits, lastName } from "@/lib/utils";
 
 /**
- * An offer, with the facts needed to answer it.
+ * An offer, collapsed to a line you can scan and opened to the facts that
+ * decide it.
  *
- * Deciding used to be two lines of text and two buttons, which is the least
- * information of any screen in the app despite being the most common trade
- * action. What you get comes first because that is what you opened it for;
- * what it costs is a column, not a footnote; and the position depth before and
- * after is the fact that actually decides it.
+ * The book is a log: most of what is in it is settled, and a settled deal does
+ * not need two columns of faces and a bar chart. So the row carries the four
+ * things that tell you whether to look — who, what for what, what it does to
+ * your starters, and where it stands — and everything else waits behind a tap.
+ * The one offer actually waiting on you opens itself, because that is the row
+ * you came for.
+ *
+ * Inside the expansion: what you get comes first because that is what you
+ * opened it for; what it costs is a column, not a footnote; and the position
+ * depth before and after is the fact that actually decides it.
  */
 
 export type TradeOfferAsset = {
@@ -111,24 +119,61 @@ export function TradeOfferCard({
   const showActions =
     trade.status === "proposed" && (showDecide || showHouse || showPull || onCounter);
 
+  // The row you have to answer starts open. Everything else is history until
+  // you ask for it.
+  const [open, setOpen] = useState(waitingOnMe);
+  const bodyId = useId();
+
+  const ago = Number.isFinite(trade.created)
+    ? formatDistanceToNow(trade.created, { addSuffix: true })
+    : "";
+  const standing = waitingOnMe
+    ? "waiting on you"
+    : waitingNames.length
+      ? `waiting on ${waitingNames.join(", ")}`
+      : "";
+  const change = delta?.change ?? null;
+
   return (
-    <li className="rounded-xl bg-surface px-4 py-3 shadow-[var(--shadow-border)]">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-sm text-fg">
-            <span className="font-semibold">{proposer}</span> wants to trade
-          </p>
-          <p className="mt-0.5 font-mono text-[11px] text-faint">
-            {Number.isFinite(trade.created)
-              ? formatDistanceToNow(trade.created, { addSuffix: true })
-              : ""}
-            {waitingOnMe
-              ? " · waiting on you"
-              : waitingNames.length
-                ? ` · waiting on ${waitingNames.join(", ")}`
-                : ""}
-          </p>
-        </div>
+    <li className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={bodyId}
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors duration-150",
+          open ? "rounded-b-none" : "hover:bg-raised",
+        )}
+      >
+        <span className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-baseline gap-1.5 text-sm">
+            <span className="shrink-0 truncate font-semibold">{proposer}</span>
+            <span className="min-w-0 truncate text-muted">
+              {summarise(incoming, outgoing, involved)}
+            </span>
+          </span>
+          {/* The separator belongs to the clause after it, so a wrap never
+              leaves a dangling middot at the end of the first line. */}
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 font-mono text-[11px] text-faint">
+            <span>{ago}</span>
+            {standing ? <span>&middot; {standing}</span> : null}
+          </span>
+        </span>
+
+        {change != null && change !== 0 ? (
+          <span
+            className={cn(
+              "shrink-0 font-mono text-sm tabular-nums",
+              change > 0 ? "text-accent-strong" : "text-loss",
+            )}
+            title="Change to your weekly starter total"
+          >
+            {change > 0 ? "+" : "\u2212"}
+            {Math.abs(change).toFixed(1)}
+          </span>
+        ) : null}
+
         <Badge
           tone={
             trade.status === "processed" ? "win" : trade.status === "proposed" ? "live" : "muted"
@@ -136,70 +181,110 @@ export function TradeOfferCard({
         >
           {trade.status}
         </Badge>
-      </div>
 
-      <div className="mt-3 grid gap-4 sm:grid-cols-2">
-        <AssetColumn
-          title={involved ? "You get" : "Assets"}
-          assets={incoming}
-          projections={projections}
-          playerById={playerById}
-          empty="Nothing coming in"
+        <ChevronDown
+          aria-hidden
+          className={cn(
+            "size-4 shrink-0 text-faint transition-transform duration-200 ease-out",
+            open && "rotate-180",
+          )}
+          strokeWidth={2.2}
         />
-        {involved ? (
-          <AssetColumn
-            title="You give"
-            assets={outgoing}
-            projections={projections}
-            playerById={playerById}
-            empty="Nothing going out"
-          />
-        ) : null}
-      </div>
+      </button>
 
-      <TradeRosterAfter before={posBefore} after={posAfter} read={read} />
+      {open ? (
+        <div id={bodyId} className="border-t border-line px-4 pt-3 pb-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <AssetColumn
+              title={involved ? "You get" : "Assets"}
+              assets={incoming}
+              projections={projections}
+              playerById={playerById}
+              empty="Nothing coming in"
+            />
+            {involved ? (
+              <AssetColumn
+                title="You give"
+                assets={outgoing}
+                projections={projections}
+                playerById={playerById}
+                empty="Nothing going out"
+              />
+            ) : null}
+          </div>
 
-      <p className="mt-3 font-mono text-[11px] text-faint">
-        {trade.sides.map((s) => `${s.teamName} ${s.accepted ? "in" : "…"}`).join(" · ")}
-      </p>
+          <TradeRosterAfter before={posBefore} after={posAfter} read={read} />
 
-      {showActions ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {showDecide ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className="text-loss"
-                disabled={busy}
-                onClick={onDecline}
-              >
-                Decline
-              </Button>
-              {onCounter ? (
-                <Button type="button" variant="outline" disabled={busy} onClick={onCounter}>
-                  Counter
+          <p className="mt-3 font-mono text-[11px] text-faint">
+            {trade.sides
+              .map((s) => `${s.teamName} ${s.accepted ? "in" : "\u2026"}`)
+              .join(" \u00b7 ")}
+          </p>
+
+          {showActions ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {showDecide ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="text-loss"
+                    disabled={busy}
+                    onClick={onDecline}
+                  >
+                    Decline
+                  </Button>
+                  {onCounter ? (
+                    <Button type="button" variant="outline" disabled={busy} onClick={onCounter}>
+                      Counter
+                    </Button>
+                  ) : null}
+                  <Button type="button" disabled={busy} onClick={onAccept}>
+                    Accept
+                  </Button>
+                </>
+              ) : null}
+              {showHouse ? (
+                <Button type="button" variant="outline" disabled={busy} onClick={onAcceptHouse}>
+                  Accept for house
                 </Button>
               ) : null}
-              <Button type="button" disabled={busy} onClick={onAccept}>
-                Accept
-              </Button>
-            </>
-          ) : null}
-          {showHouse ? (
-            <Button type="button" variant="outline" disabled={busy} onClick={onAcceptHouse}>
-              Accept for house
-            </Button>
-          ) : null}
-          {showPull ? (
-            <Button type="button" variant="ghost" disabled={busy} onClick={onPull}>
-              Pull offer
-            </Button>
+              {showPull ? (
+                <Button type="button" variant="ghost" disabled={busy} onClick={onPull}>
+                  Pull offer
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}
     </li>
   );
+}
+
+/**
+ * The deal in one clause: what leaves, then what arrives. Reads the way people
+ * say it out loud — "Pollard for Robinson" — so the row is scannable without
+ * the columns underneath it.
+ */
+function summarise(
+  incoming: TradeOfferAsset[],
+  outgoing: TradeOfferAsset[],
+  involved: boolean,
+): string {
+  const get = incoming.map(labelAsset).filter(Boolean);
+  if (!involved) return get.length ? joinBits(get) : "No assets";
+  const give = outgoing.map(labelAsset).filter(Boolean);
+  if (give.length && get.length) return `${joinBits(give)} \u2192 ${joinBits(get)}`;
+  if (get.length) return `for ${joinBits(get)}`;
+  if (give.length) return `gives ${joinBits(give)}`;
+  return "No assets";
+}
+
+function labelAsset(a: TradeOfferAsset): string {
+  if (a.kind === "pick") return `Pick ${a.pickLabel ?? a.pickNo}`;
+  if (a.kind === "faab") return `$${a.amount ?? 0}`;
+  return a.playerName ? lastName({ full_name: a.playerName }) : "Player";
 }
 
 function AssetColumn({

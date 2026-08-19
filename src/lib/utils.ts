@@ -1,4 +1,4 @@
-import { clsx, type ClassValue } from "clsx";
+import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
@@ -38,4 +38,19 @@ export function formatAgo(iso: string | null | undefined): string | null {
   if (hours < 48) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+/** Surname only — enough to identify a player in a one-line summary. */
+export function lastName(p: { last_name?: string | null; full_name: string }): string {
+  const last = p.last_name?.trim();
+  if (last) return last;
+  const parts = p.full_name.trim().split(/\s+/);
+  return parts[parts.length - 1] || p.full_name;
+}
+
+/** "A", "A + B", "A, B + C" — a list read aloud, not a CSV. */
+export function joinBits(bits: string[]): string {
+  if (bits.length <= 1) return bits[0] ?? "";
+  if (bits.length === 2) return `${bits[0]} + ${bits[1]}`;
+  return `${bits.slice(0, -1).join(", ")} + ${bits[bits.length - 1]}`;
 }

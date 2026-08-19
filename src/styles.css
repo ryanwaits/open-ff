@@ -217,6 +217,37 @@
 }
 
 /* ============================================================================
+   Scrolling
+   ----------------------------------------------------------------------------
+   An overflow list needs a visible track, or the only cue that it scrolls is
+   the fact that it scrolls. Thin and hairline-coloured, so it reads as an edge
+   rather than as chrome. Pairs with <ScrollShade/>, which fades the ends.
+   ========================================================================= */
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline-strong) transparent;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+  border-radius: 999px;
+}
+
+.scroll-thin:hover::-webkit-scrollbar-thumb {
+  background: var(--ink-3);
+}
+
+/* ============================================================================
    Motion
    ========================================================================= */
 

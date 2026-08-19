@@ -2,20 +2,12 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  TradeComposer,
-  type TradeComposerInitial,
-} from "@/components/trade-composer";
+import { TradeComposer, type TradeComposerInitial } from "@/components/trade-composer";
 import { TradeOfferCard } from "@/components/trade-offer-card";
 import { getLeagueBundle, getProjections, getTeam } from "@/lib/data/fns";
 import type { Projection, RosterPlayer, SlimPlayer } from "@/lib/data/types";
-import {
-  cancelTradeFn,
-  getTradablePicks,
-  getTrades,
-  voteTrade,
-} from "@/lib/league/fns";
-import { tradeDelta, type TradeDelta } from "@/lib/league/lineup-value";
+import { cancelTradeFn, getTradablePicks, getTrades, voteTrade } from "@/lib/league/fns";
+import { type TradeDelta, tradeDelta } from "@/lib/league/lineup-value";
 import { cn } from "@/lib/utils";
 
 type TradesSearch = { counter?: string; want?: string; with?: number };
@@ -45,8 +37,7 @@ function TradesPage() {
     queryKey: ["trades", leagueId],
     queryFn: () => getTrades({ data: { leagueId } }),
   });
-  const picksOpen =
-    league.data?.draftStatus === "pending" || league.data?.draftStatus === "live";
+  const picksOpen = league.data?.draftStatus === "pending" || league.data?.draftStatus === "live";
   const picks = useQuery({
     queryKey: ["picks", leagueId],
     queryFn: () => getTradablePicks({ data: { leagueId } }),
@@ -157,7 +148,8 @@ function TradesPage() {
 
   const mineTeam = useQuery({
     queryKey: ["team", leagueId, mineId, league.data?.currentWeek],
-    queryFn: () => getTeam({ data: { leagueId, rosterId: mineId!, week: league.data!.currentWeek } }),
+    queryFn: () =>
+      getTeam({ data: { leagueId, rosterId: mineId!, week: league.data!.currentWeek } }),
     enabled: Boolean(mineId && league.data?.hosted && !league.data.locked),
   });
   const themTeam = useQuery({
@@ -167,7 +159,8 @@ function TradesPage() {
   });
   const thirdTeam = useQuery({
     queryKey: ["team", leagueId, thirdId, league.data?.currentWeek],
-    queryFn: () => getTeam({ data: { leagueId, rosterId: thirdId!, week: league.data!.currentWeek } }),
+    queryFn: () =>
+      getTeam({ data: { leagueId, rosterId: thirdId!, week: league.data!.currentWeek } }),
     enabled: Boolean(thirdId && league.data),
   });
 
@@ -202,7 +195,11 @@ function TradesPage() {
   // Key on the actual ids. Length alone collides when you switch partners
   // with the same roster size, and the new side renders as "—".
   const projectionKey = useMemo(
-    () => projectionInputs.map((p) => p.player_id).sort().join(","),
+    () =>
+      projectionInputs
+        .map((p) => p.player_id)
+        .sort()
+        .join(","),
     [projectionInputs],
   );
   const projectionsQ = useQuery({
@@ -222,8 +219,7 @@ function TradesPage() {
   const projections = (projectionsQ.data ?? {}) as Record<string, Projection>;
 
   const bookRostersReady =
-    bookRosterIds.length === 0 ||
-    bookRosterIds.every((_, i) => bookRosterQueries[i]?.data != null);
+    bookRosterIds.length === 0 || bookRosterIds.every((_, i) => bookRosterQueries[i]?.data != null);
   // Empty map while loading is a false 0.0 — wait for the book when we asked for one.
   const projectionsReady =
     projectionInputs.length === 0 || projectionsQ.isSuccess || projectionsQ.isError;
@@ -327,9 +323,13 @@ function TradesPage() {
   }
 
   const preDraft = picksOpen;
+  // The composer parks a fixed action rail over the bottom of the viewport, so
+  // the page owes it room. Padding the composer alone left the book underneath
+  // it clipped — the rail is fixed to the window, not to its sibling.
+  const composing = Boolean(mineId && !league.data.locked && them != null);
 
   return (
-    <div className="space-y-8">
+    <div className={cn("space-y-8", composing && "pb-28 md:pb-24")}>
       <p className="max-w-xl text-sm text-muted">
         {preDraft
           ? "Draft hasn't happened yet — trade unused picks now. Your first for their first and second, dump a last-rounder, three-teamers. Ownership moves on the board immediately once everyone accepts."
@@ -424,7 +424,7 @@ function TradesPage() {
 
       <section>
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Book</p>
-        {trades.isLoading ? (
+        {trades.data == null && trades.isPending ? (
           <p className="mt-3 text-sm text-muted">Loading…</p>
         ) : !book.length ? (
           <p className="mt-3 text-sm text-muted">No trades yet.</p>
@@ -471,14 +471,10 @@ function TradesPage() {
                   posAfter={posAfter}
                   busy={vote.isPending || pull.isPending}
                   onAccept={
-                    waitingOnMe
-                      ? () => vote.mutate({ tradeId: t.id, accept: true })
-                      : undefined
+                    waitingOnMe ? () => vote.mutate({ tradeId: t.id, accept: true }) : undefined
                   }
                   onDecline={
-                    waitingOnMe
-                      ? () => vote.mutate({ tradeId: t.id, accept: false })
-                      : undefined
+                    waitingOnMe ? () => vote.mutate({ tradeId: t.id, accept: false }) : undefined
                   }
                   onCounter={
                     waitingOnMe

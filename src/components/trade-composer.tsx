@@ -4,13 +4,14 @@ import { X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PlayerStatRow, type PlayerStatRowData } from "@/components/player-stat-row";
+import { ScrollShade } from "@/components/scroll-shade";
 import { TradeRosterAfter } from "@/components/trade-offer-card";
 import { Button } from "@/components/ui/button";
 import type { Projection, RosterPlayer } from "@/lib/data/types";
 import { proposeTrade } from "@/lib/league/fns";
 import { tradeDelta } from "@/lib/league/lineup-value";
 import { readTrade } from "@/lib/league/trade-read";
-import { cn } from "@/lib/utils";
+import { cn, joinBits, lastName } from "@/lib/utils";
 
 /**
  * The proposed card is the compose object.
@@ -1064,12 +1065,12 @@ export function TradeComposer({
   );
 
   const giveBits = [
-    ...youGivePlayers.map(lastNameOf),
+    ...youGivePlayers.map(lastName),
     ...youGivePicks.map((p) => `Pick ${p.label}`),
     ...(youGiveFaab != null && youGiveFaab.amount > 0 ? [`$${youGiveFaab.amount} FAAB`] : []),
   ];
   const getBits = [
-    ...youGetPlayers.map(lastNameOf),
+    ...youGetPlayers.map(lastName),
     ...youGetPicks.map((p) => `Pick ${p.label}`),
     ...(youGetFaab != null && youGetFaab.amount > 0 ? [`$${youGetFaab.amount} FAAB`] : []),
   ];
@@ -1092,9 +1093,7 @@ export function TradeComposer({
           <p className="min-w-0 truncate text-sm text-muted">
             <span className="text-fg">{railLine}</span>
             {railDelta}
-            {three ? (
-              <span className="hidden sm:inline"> · All three must accept.</span>
-            ) : null}
+            {three ? <span className="hidden sm:inline"> · All three must accept.</span> : null}
           </p>
           <Button
             type="button"
@@ -1162,7 +1161,7 @@ export function TradeComposer({
               <p className="mt-3 text-xs text-muted">
                 Also moving:{" "}
                 {[
-                  ...alsoPlayers.map((p) => `${lastNameOf(p)} → ${nameOf(p.to)}`),
+                  ...alsoPlayers.map((p) => `${lastName(p)} → ${nameOf(p.to)}`),
                   ...alsoPicks.map((p) => `Pick ${p.label} → ${nameOf(p.to)}`),
                   ...alsoFaab.map((f) => `$${f.amount} FAAB → ${nameOf(f.to)}`),
                 ].join(" · ")}
@@ -1199,7 +1198,7 @@ export function TradeComposer({
 
   if (!three) {
     return (
-      <div className="mt-5 space-y-5 pb-24 md:pb-20">
+      <div className="mt-5 space-y-5">
         {countering ? <p className="text-xs text-muted">Countering an existing offer.</p> : null}
 
         {dealCard}
@@ -1243,7 +1242,7 @@ export function TradeComposer({
   }
 
   return (
-    <div className="mt-5 space-y-5 pb-24 md:pb-20">
+    <div className="mt-5 space-y-5">
       {countering ? <p className="text-xs text-muted">Countering an existing offer.</p> : null}
 
       {dealCard}
@@ -1360,49 +1359,64 @@ function RosterPanel({
   onFaab?: (raw: string) => void;
   onCycleFaab?: () => void;
 }) {
+  const count = players.length + picks.length;
+
   return (
     <div className="min-w-0">
-      <p className="text-sm font-medium">{title}</p>
-      <ul className="mt-2 max-h-80 space-y-1 overflow-y-auto">
-        {players.map((p) => {
-          const proj = projections[p.player_id];
-          const data: PlayerStatRowData = {
-            player: p,
-            projection: proj?.points ?? null,
-            projectionIsAverage: proj?.reason === "season-avg",
-          };
-          return (
-            <li key={p.player_id}>
-              <PlayerStatRow
-                data={data}
-                dense
-                selected={selectedPlayers.includes(p.player_id)}
-                onSelect={() => onPlayer(p.player_id)}
-              />
-            </li>
-          );
-        })}
-        {picks.map((p) => (
-          <li key={p.pickNo}>
-            <button
-              type="button"
-              onClick={() => onPick(p.pickNo)}
-              className={cn(
-                "flex min-h-11 w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm",
-                selectedPicks.includes(p.pickNo) ? "bg-accent text-accent-fg" : "hover:bg-raised",
-              )}
-            >
-              <span>Pick {p.label}</span>
-              {p.via ? <span className="font-mono text-[11px] opacity-70">via {p.via}</span> : null}
-            </button>
-          </li>
-        ))}
-        {!players.length && !picks.length ? (
-          <li className="px-2 py-2 text-xs text-faint">
-            No assets yet. Unused picks appear after the board is built.
-          </li>
+      <div className="flex items-baseline justify-between gap-2 border-b border-line pb-1.5">
+        <p className="text-sm font-medium">{title}</p>
+        {count > 0 ? (
+          <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
+            {count} {count === 1 ? "asset" : "assets"}
+          </p>
         ) : null}
-      </ul>
+      </div>
+      {/* Height is deliberately off a whole number of rows: the list has to cut
+          one in half, or the sixth player looks like the last player. */}
+      <ScrollShade className="mt-2 max-h-[21rem] pr-1" data-testid="roster-picker">
+        <ul className="space-y-1">
+          {players.map((p) => {
+            const proj = projections[p.player_id];
+            const data: PlayerStatRowData = {
+              player: p,
+              projection: proj?.points ?? null,
+              projectionIsAverage: proj?.reason === "season-avg",
+            };
+            return (
+              <li key={p.player_id}>
+                <PlayerStatRow
+                  data={data}
+                  dense
+                  selected={selectedPlayers.includes(p.player_id)}
+                  onSelect={() => onPlayer(p.player_id)}
+                />
+              </li>
+            );
+          })}
+          {picks.map((p) => (
+            <li key={p.pickNo}>
+              <button
+                type="button"
+                onClick={() => onPick(p.pickNo)}
+                className={cn(
+                  "flex min-h-11 w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm",
+                  selectedPicks.includes(p.pickNo) ? "bg-accent text-accent-fg" : "hover:bg-raised",
+                )}
+              >
+                <span>Pick {p.label}</span>
+                {p.via ? (
+                  <span className="font-mono text-[11px] opacity-70">via {p.via}</span>
+                ) : null}
+              </button>
+            </li>
+          ))}
+          {!players.length && !picks.length ? (
+            <li className="px-2 py-2 text-xs text-faint">
+              No assets yet. Unused picks appear after the board is built.
+            </li>
+          ) : null}
+        </ul>
+      </ScrollShade>
       {onFaab ? (
         <FaabPicker
           title={title}
@@ -1678,17 +1692,4 @@ function countPositions(players: Array<{ position: string | null }>): Record<str
     counts[pos] = (counts[pos] ?? 0) + 1;
   }
   return counts;
-}
-
-function lastNameOf(p: { last_name?: string | null; full_name: string }): string {
-  const last = p.last_name?.trim();
-  if (last) return last;
-  const parts = p.full_name.trim().split(/\s+/);
-  return parts[parts.length - 1] || p.full_name;
-}
-
-function joinBits(bits: string[]): string {
-  if (bits.length <= 1) return bits[0] ?? "";
-  if (bits.length === 2) return `${bits[0]} + ${bits[1]}`;
-  return `${bits.slice(0, -1).join(", ")} + ${bits[bits.length - 1]}`;
 }
