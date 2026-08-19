@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { InviteCard, usePageOrigin } from "@/components/invite-card";
@@ -7,21 +7,13 @@ import { ScheduleDesk } from "@/components/schedule-desk";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { bookFromPreset, SCORING_FIELDS, type ScoringBook } from "@/lib/league/scoring";
-import {
-  countsFromSlots,
-  describeSlots,
-  presetIdOf,
-  ROSTER_PRESETS,
-  SLOT_STEPPERS,
-  slotsFromCounts,
-  type SlotCounts,
-} from "@/lib/league/roster";
 import { getLeagueBundle } from "@/lib/data/fns";
+import { demoAvailable, useDemoStore } from "@/lib/demo/store";
 import {
   addAllowlistEmail,
   advanceWeek,
   claimRoster,
+  deleteLeague,
   getSettings,
   listAllowlist,
   processWaivers,
@@ -29,6 +21,16 @@ import {
   saveSettings,
 } from "@/lib/league/fns";
 import { defaultPlayoffByes, describeBracket } from "@/lib/league/playoffs";
+import {
+  countsFromSlots,
+  describeSlots,
+  presetIdOf,
+  ROSTER_PRESETS,
+  SLOT_STEPPERS,
+  type SlotCounts,
+  slotsFromCounts,
+} from "@/lib/league/roster";
+import { bookFromPreset, SCORING_FIELDS, type ScoringBook } from "@/lib/league/scoring";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$leagueId/settings")({
@@ -40,6 +42,7 @@ const GROUPS = [...new Set(SCORING_FIELDS.map((f) => f.group))];
 function SettingsPage() {
   const { leagueId } = Route.useParams();
   const origin = usePageOrigin();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: ["settings", leagueId],
@@ -142,7 +145,7 @@ function SettingsPage() {
     }));
   }, []);
 
-  if (q.isLoading) return <Skeleton className="h-64" />;
+  if (q.data == null && q.isPending) return <Skeleton className="h-64" />;
   if (q.error || !q.data) {
     return (
       <p className="text-sm text-muted">
@@ -176,7 +179,9 @@ function SettingsPage() {
         className="flex items-center justify-between gap-4 rounded-xl bg-surface px-5 py-4 shadow-[var(--shadow-border)] transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-border-hover)]"
       >
         <span>
-          <span className="block font-display text-lg font-bold tracking-[-0.03em]">Draft room</span>
+          <span className="block font-display text-lg font-bold tracking-[-0.03em]">
+            Draft room
+          </span>
           <span className="mt-0.5 block text-sm text-muted">
             {bundle.data?.draftStatus === "live"
               ? "Live now. Somebody is on the clock."
@@ -185,7 +190,9 @@ function SettingsPage() {
                 : "Not started yet."}
           </span>
         </span>
-        <span className="font-mono text-[11px] uppercase tracking-wide text-accent-strong">Open</span>
+        <span className="font-mono text-[11px] uppercase tracking-wide text-accent-strong">
+          Open
+        </span>
       </Link>
 
       <section>
@@ -228,8 +235,8 @@ function SettingsPage() {
       <section>
         <h2 className="font-display text-2xl">Roster</h2>
         <p className="mt-1 text-sm text-muted">
-          Starters and bench. 3 WR with a W/R and no FLEX is a common 14-team
-          book. Saving re-seats everyone into the new lineup.
+          Starters and bench. 3 WR with a W/R and no FLEX is a common 14-team book. Saving re-seats
+          everyone into the new lineup.
         </p>
         <div className="mt-4 flex flex-wrap gap-1">
           {ROSTER_PRESETS.map((p) => (
@@ -262,15 +269,15 @@ function SettingsPage() {
               >
                 <span>
                   <span className="block text-sm">{row.label}</span>
-                  <span className="block font-mono text-[10px] uppercase text-faint">{row.hint}</span>
+                  <span className="block font-mono text-[10px] uppercase text-faint">
+                    {row.hint}
+                  </span>
                 </span>
                 <span className="flex items-center gap-1">
                   <button
                     type="button"
                     disabled={locked || n <= 0}
-                    onClick={() =>
-                      setCounts((c) => ({ ...c, [row.key]: Math.max(0, n - 1) }))
-                    }
+                    onClick={() => setCounts((c) => ({ ...c, [row.key]: Math.max(0, n - 1) }))}
                     className="grid size-9 place-items-center rounded-sm bg-raised text-muted disabled:opacity-30"
                     aria-label={`Fewer ${row.label}`}
                   >
@@ -298,14 +305,12 @@ function SettingsPage() {
       <section>
         <h2 className="font-display text-2xl">Playoffs</h2>
         <p className="mt-1 text-sm text-muted">
-          How many make it, who sits the first week, and when the dance starts.
-          A 14-team desk usually wants 7 in and the 1-seed on a bye. Later
-          rounds reseed — best leftover vs worst leftover.
+          How many make it, who sits the first week, and when the dance starts. A 14-team desk
+          usually wants 7 in and the 1-seed on a bye. Later rounds reseed — best leftover vs worst
+          leftover.
         </p>
         <div className="mt-4">
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-            Teams in
-          </p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Teams in</p>
           <div className="mt-2 flex flex-wrap gap-1">
             {[4, 5, 6, 7, 8].map((n) => (
               <button
@@ -385,9 +390,9 @@ function SettingsPage() {
       <section>
         <h2 className="font-display text-2xl">Schedule</h2>
         <p className="mt-1 text-sm text-muted">
-          Regular-season pairings. Ledger fills a circle-method slate when the
-          league is created or imported — change any week here. Scored weeks
-          stay put. Playoffs seed from the standings when that week arrives.
+          Regular-season pairings. Ledger fills a circle-method slate when the league is created or
+          imported — change any week here. Scored weeks stay put. Playoffs seed from the standings
+          when that week arrives.
         </p>
         <div className="mt-4">
           <ScheduleDesk leagueId={leagueId} canEdit={q.data.isCommish && !q.data.locked} />
@@ -397,11 +402,10 @@ function SettingsPage() {
       <section>
         <h2 className="font-display text-2xl">Waivers & calendar</h2>
         <p className="mt-1 text-sm text-muted">
-          FAAB default $100, or rolling priority, or straight free agency. Claims
-          sit until Wednesday and clear on their own. The desk follows the NFL
-          regular season — preseason does not move the week, write ties, or
-          lock scores. Once kickoff week starts, scores lock, waivers run, the
-          next slate opens, and playoffs seed from the standings.
+          FAAB default $100, or rolling priority, or straight free agency. Claims sit until
+          Wednesday and clear on their own. The desk follows the NFL regular season — preseason does
+          not move the week, write ties, or lock scores. Once kickoff week starts, scores lock,
+          waivers run, the next slate opens, and playoffs seed from the standings.
         </p>
         <div className="mt-4 flex flex-wrap gap-1">
           {(
@@ -427,7 +431,9 @@ function SettingsPage() {
         </div>
         <div className="mt-4 flex flex-wrap gap-6">
           <label>
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">FAAB $</span>
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+              FAAB $
+            </span>
             <Input
               className="mt-1.5 w-24"
               type="number"
@@ -453,9 +459,7 @@ function SettingsPage() {
             />
           </label>
         </div>
-        {q.data.isCommish && !q.data.locked ? (
-          <CommishClock leagueId={leagueId} />
-        ) : null}
+        {q.data.isCommish && !q.data.locked ? <CommishClock leagueId={leagueId} /> : null}
       </section>
 
       <section>
@@ -540,9 +544,9 @@ function SettingsPage() {
       <section>
         <h2 className="font-display text-2xl">Scoring</h2>
         <p className="mt-1 text-sm text-muted">
-          Every stat Ledger can book — passing through returns. Kick and punt
-          return yards and TDs are on the player, not the D/ST. Finished
-          imported weeks keep their original scores; live weeks use this.
+          Every stat Ledger can book — passing through returns. Kick and punt return yards and TDs
+          are on the player, not the D/ST. Finished imported weeks keep their original scores; live
+          weeks use this.
         </p>
         <div className="mt-4 flex flex-wrap gap-1">
           {(["ppr", "half", "std"] as const).map((id) => (
@@ -578,7 +582,10 @@ function SettingsPage() {
             </h3>
             <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {g.fields.map((f) => (
-                <label key={f.key} className="rounded-lg bg-surface p-3 shadow-[var(--shadow-border)]">
+                <label
+                  key={f.key}
+                  className="rounded-lg bg-surface p-3 shadow-[var(--shadow-border)]"
+                >
                   <span className="block text-xs text-muted">{f.label}</span>
                   <Input
                     className="mt-1.5 h-9"
@@ -636,7 +643,125 @@ function SettingsPage() {
           {q.data.locked ? "Demo desk is locked." : "Only the commissioner can edit scoring."}
         </p>
       )}
+
+      <DemoMode />
+
+      {q.data.isCommish && !q.data.locked ? (
+        <DeleteLeague
+          leagueId={leagueId}
+          name={q.data.name}
+          onGone={() => {
+            void qc.invalidateQueries({ queryKey: ["my-leagues"] });
+            void navigate({ to: "/" });
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * The one switch for everything the app can pretend.
+ *
+ * Not league state — a browser preference, sitting on the league settings page
+ * because that is where people look for switches. Nobody else in the league is
+ * affected by it, which is the point: forcing a phase or unfolding a fake
+ * Sunday changes what you are looking at, not what the league is.
+ *
+ * Absent entirely from a production build.
+ */
+function DemoMode() {
+  const enabled = useDemoStore((s) => s.enabled);
+  const hasHydrated = useDemoStore((s) => s.hasHydrated);
+  const setEnabled = useDemoStore((s) => s.setEnabled);
+  if (!demoAvailable) return null;
+  // The server always renders this off; wait for localStorage rather than
+  // paint the wrong pill and swap it under them.
+  const on = hasHydrated && enabled;
+
+  return (
+    <section className="border-t border-line pt-10">
+      <h2 className="font-display text-2xl">Demo mode</h2>
+      <p className="mt-1 max-w-prose text-sm text-muted">
+        Adds a toolbar in the corner for forcing the week into any phase and unfolding a Sunday play
+        by play from last season&rsquo;s numbers. Everything it shows is made up, so it is off until
+        you ask for it. This browser only &mdash; nobody else in the league sees it, and it never
+        reaches a deployed build.
+      </p>
+      {/* Deliberately below Save: this applies the instant you press it, and
+          sitting inside the form would promise otherwise. */}
+      <div className="mt-4 flex flex-wrap gap-1">
+        {(
+          [
+            [true, "On"],
+            [false, "Off"],
+          ] as const
+        ).map(([id, lab]) => (
+          <button
+            key={String(id)}
+            type="button"
+            disabled={!hasHydrated}
+            onClick={() => setEnabled(id)}
+            className={cn(
+              "h-10 rounded-sm px-4 font-mono text-sm disabled:opacity-50",
+              on === id ? "bg-accent text-accent-fg" : "bg-raised text-muted",
+            )}
+          >
+            {lab}
+          </button>
+        ))}
+      </div>
+      <p className="mt-3 text-xs text-faint">
+        Turning it off stops any simulation in progress and puts the real week back.
+      </p>
+    </section>
+  );
+}
+
+function DeleteLeague({
+  leagueId,
+  name,
+  onGone,
+}: {
+  leagueId: string;
+  name: string;
+  onGone: () => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const kill = useMutation({
+    mutationFn: () => deleteLeague({ data: { leagueId } }),
+    onSuccess: () => {
+      toast("League deleted.");
+      onGone();
+    },
+    onError: (err) => toast(err instanceof Error ? err.message : "Could not delete."),
+  });
+  const match = typed.trim() === name;
+  return (
+    <section className="border-t border-line pt-10">
+      <h2 className="font-display text-2xl">Delete league</h2>
+      <p className="mt-1 text-sm text-muted">
+        Drops the desk, rosters, and book. Type <span className="text-fg">{name}</span> to confirm.
+      </p>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Input
+          className="max-w-xs"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          placeholder={name}
+          aria-label="Type the league name to confirm delete"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          className="text-loss"
+          disabled={!match || kill.isPending}
+          onClick={() => kill.mutate()}
+        >
+          {kill.isPending ? "Deleting…" : "Delete league"}
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -744,15 +869,25 @@ function CommishClock({ leagueId }: { leagueId: string }) {
   });
   return (
     <div className="mt-5 flex flex-wrap gap-2">
-      <Button type="button" variant="outline" onClick={() => waivers.mutate()} disabled={waivers.isPending}>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => waivers.mutate()}
+        disabled={waivers.isPending}
+      >
         {waivers.isPending ? "Processing…" : "Process waivers now"}
       </Button>
-      <Button type="button" variant="outline" onClick={() => next.mutate()} disabled={next.isPending}>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => next.mutate()}
+        disabled={next.isPending}
+      >
         {next.isPending ? "Advancing…" : "Lock week & advance"}
       </Button>
       <p className="basis-full text-xs text-faint">
-        Optional overrides. The league clock runs waivers Wednesday and
-        advances with the NFL regular season — not preseason.
+        Optional overrides. The league clock runs waivers Wednesday and advances with the NFL
+        regular season — not preseason.
       </p>
     </div>
   );

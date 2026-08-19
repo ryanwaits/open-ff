@@ -39,6 +39,13 @@ export const AGENT_TOOLS: AgentTool[] = [
     "workflow",
   ),
   tool(
+    "deleteLeague",
+    "Delete league",
+    "Permanently delete a hosted league the signed-in user commissioners.",
+    "commish",
+    "atomic",
+  ),
+  tool(
     "joinLeague",
     "Join league",
     "Join a league by invite code and claim a seat, plus allowlist if the commish seeded one.",

@@ -12,6 +12,7 @@ If it's not in this table, it is not a tool. Stop. Do not invent a table.
 |----|-------|------|-----------|
 | listMyLeagues | spectator | read | List leagues the signed-in user belongs to. |
 | createLeague | commish | workflow | Create a hosted league and take the first seat. |
+| deleteLeague | commish | atomic | Permanently delete a hosted league the signed-in user commissioners. |
 | joinLeague | manager | atomic | Join a league by invite code and claim a seat, plus allowlist if the commish seeded one. |
 | previewInvite | spectator | read | Preview a league from an invite code. |
 | getDesk | spectator | read | Load the league desk for a week. |

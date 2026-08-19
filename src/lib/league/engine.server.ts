@@ -931,6 +931,49 @@ export async function createLeague(input: { userId: string; name: string; teamNa
 		season
 	};
 }
+
+const LEAGUE_CHILD_TABLES = [
+	"ff_spots",
+	"ff_matchups",
+	"ff_moves",
+	"ff_picks",
+	"ff_claims",
+	"ff_week_results",
+	"ff_queue",
+	"ff_dispatches",
+	"ff_wagers",
+	"ff_pool",
+	"ff_events",
+	"ff_allowlist",
+];
+
+export async function deleteLeague(userId: string, leagueId: string): Promise<void> {
+	await ensureDemo();
+	const sql = await getSql();
+	const row = (await sql`select commish_id, locked from ff_leagues where id = ${leagueId}`)[0];
+	if (!row) throw new Error("No such league.");
+	if (row.commish_id !== userId) throw new Error("Only the commissioner can delete this league.");
+	if (row.locked === 1) throw new Error("This desk is locked.");
+	try {
+		const trades = await sql`select id from ff_trades where league_id = ${leagueId}`;
+		for (const t of trades) {
+			await sql`delete from ff_trade_assets where trade_id = ${t.id}`;
+			await sql`delete from ff_trade_sides where trade_id = ${t.id}`;
+		}
+		await sql`delete from ff_trades where league_id = ${leagueId}`;
+	} catch {
+		/* trades table may not exist on a fresh desk */
+	}
+	for (const table of LEAGUE_CHILD_TABLES) {
+		try {
+			await sql.query(`delete from ${table} where league_id = $1`, [leagueId]);
+		} catch {
+			/* table may not exist yet */
+		}
+	}
+	await sql`delete from ff_leagues where id = ${leagueId}`;
+}
+
 export async function joinLeague(userId: string, code: string, teamName: string, rosterId?: number | null): Promise<{ leagueId: string; season: string; name: string }> {
 	await ensureDemo();
 	const sql = await getSql();
