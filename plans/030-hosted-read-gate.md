@@ -7,8 +7,10 @@
 > in `plans/README.md` — unless a reviewer dispatched you and told you they
 > maintain the index.
 >
-> **Drift check (run first)**: `git diff --stat dd9bc53..HEAD -- src/lib/data/fns.ts src/lib/league/fns.ts src/lib/league/engine.server.ts`
-> Compare excerpts if those files moved.
+> **Drift check (run first)**: `git diff --stat def24a6..HEAD -- src/lib/data/fns.ts src/lib/league/fns.ts src/lib/league/engine.server.ts`
+> Compare excerpts if those files moved. (Reconciled from `dd9bc53`:
+> `playerTeam` for D/ST in live-wire / loadTeam only. The eight GETs
+> below are still ungated.)
 
 ## Status
 
@@ -17,7 +19,9 @@
 - **Risk**: LOW
 - **Depends on**: plans/028-invite-allowlist.md (DONE `fe3d1a6`)
 - **Category**: security
-- **Planned at**: commit `dd9bc53`, 2026-08-19
+- **Planned at**: commit `def24a6`, 2026-08-19
+  (reconciled from `dd9bc53`: D/ST `playerTeam` only)
+- **Landed**: `4fd580c` (not pushed)
 
 ## Why this matters
 

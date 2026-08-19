@@ -28,6 +28,10 @@ Five slices live here. Read the one you are executing from.
 - **030–037 — Close the door, then self-host leftovers** (improve skill,
   2026-08-19, commit `dd9bc53`). Goal: invite-only means the RPCs too;
   the remaining skips and self-host gaps are named instead of rediscovered.
+- **038–040 — Agent can actually use the catalog** (improve skill,
+  2026-08-19, commit `dd9bc53`). Goal: one context dump, pull-ticket
+  parity, and no minted FAAB on trade accept — so a loop over named
+  verbs is honest. 033 (mutating CLI) runs **after** 038, not before.
 
 Execute in the order below. Each executor: read the plan fully, honor STOP
 conditions, update your row when done.
@@ -115,8 +119,21 @@ conditions, update your row when done.
   / facts as reads.
 - **Product name is open-ff.** License is MIT. (025 / 026)
 - **Join stays invite-code.** Allowlist + member reads landed in **028**.
-- **Mutating wager CLI is still off.** 027 closed the mint; 024's catalog
-  lists `placeWager` but `scripts/ledger.mjs` still refuses it from argv.
+- **Mutating wager CLI is still off.** 027 closed the mint; 033 wires
+  `placeWager` behind `--write` **after** 038 (context dump). Do not
+  ship a write CLI that cannot see spendable.
+- **Postgres stays the source of truth.** Files-as-interface from the
+  Every guide is the wrong storage bet for a multi-manager money
+  system. Agents get a legible catalog + a live context dump
+  (`getAgentContext`), not a notes-folder rewrite.
+- **Operator CLI ≠ manager session.** `ledger.mjs` + `DATABASE_URL` +
+  `--user` is the commish-on-the-box path. A friend's Claude talking
+  to a hosted origin still needs the same-origin session (cookie).
+  Do not invent a league API key in this slice. MCP waits until 038
+  + 033 have been used for real.
+- **Conservation is a guardrail, not a workflow tool.** `applyLoss` /
+  `spendable` / execute-trade refusal stay in code. Judgment about
+  *whether* to stake belongs in the prompt.
 
 ## Execution order & status
 
@@ -151,14 +168,17 @@ conditions, update your row when done.
 | 027  | Stop a lost wager from minting FAAB | P1 | M | 022 | DONE `9f512b5` (verified `dd9bc53`: `applyLoss` + `movePool(poolCredit)`) |
 | 028  | Invite-only desk — allowlist emails and member reads | P1 | M | 023 | DONE `fe3d1a6` (verified `dd9bc53`: allowlist + viewer on listed wrappers) |
 | 029  | Exercise the FAAB wager ticket for real | P2 | M | — | DONE `dd9bc53` (verified: `wager-qa.mjs` + testids; preseason no-price) |
-| 030  | Require a seat for every hosted league GET | P1 | S | 028 | TODO |
+| 030  | Require a seat for every hosted league GET | P1 | S | 028 | DONE `4fd580c` (not pushed; eight hosted GETs + source test) |
 | 031  | Prove spendable and atRisk without a live database | P2 | S | 027 | TODO |
 | 032  | Re-run the wager script when a week has a live line | P3 | S | 029 | TODO (ops; no code) |
-| 033  | Let the CLI place a wager when asked in writing | P2 | M | 027 | TODO |
+| 033  | Let the CLI place a wager when asked in writing | P2 | M | 027, 038 | TODO (after 038) |
 | 034  | Let a commish download their league | P2 | M | 025 | TODO |
 | 035  | Optional native Google sign-in for self-host | P2 | M | 025 | TODO |
 | 036  | Let a commish delete a league they run | P2 | M | 034 | TODO |
 | 037  | Web Push after someone actually installs the PWA | P3 | L | 026 | TODO (stop if no install) |
+| 038  | One dump: seat, spendable, facts, verbs | P1 | M | 024 | TODO |
+| 039  | Pull an open ticket from the book list | P1 | S | 024 | TODO |
+| 040  | Refuse a FAAB trade the sender cannot cover | P1 | S | 027 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED
 
@@ -310,12 +330,50 @@ then `016` (client, pure). They meet at `018`.
 
 **Do first:** `030` (hosted RPC gate). Independent of the rest.
 
-**Then any order:** `031` (pure tests) · `033` (CLI write) · `034`
-(backup). `036` after `034`. `035` anytime. `032` only when a week
-has a live line. `037` only after a human installed the PWA.
+**Then any order:** `031` (pure tests) · `034` (backup). `036` after
+`034`. `035` anytime. `032` only when a week has a live line. `037`
+only after a human installed the PWA.
+
+**Do not run 033 yet.** It writes without a context dump. Slice 7
+first.
 
 `030` and `031` do not touch the same files. `034`/`036` share
 settings.tsx — do not run them in parallel on one branch.
+
+## Suggested execution — slice 7 (agent can use it)
+
+**Single executor:** `038` → `040` → `039` → then `033`.
+
+`038` is the Every context.md analog (Postgres, not files). `040`
+closes the remaining mint so a loop cannot invent FAAB. `039` is
+bidirectional parity for `pullWager`. `033` is the first mutating
+CLI dispatch — only after an agent can *see* the purse.
+
+`038` and `040` touch different files (`agent-context.server.ts` vs
+`ops.server.ts`) and can run in parallel. `039` is independent of
+both.
+
+## Findings considered and rejected (038 audit)
+
+- **MCP SDK / in-app chat:** catalog is still not callable. 038 + 033
+  first. MCP wraps the same verbs later; it is not a second engine.
+- **Files as the league source of truth:** multi-manager money. Keep
+  Postgres. Dump + catalog is the spirit of context.md.
+- **`--user` as a hosted manager token:** operator CLI only. A hosted
+  friend still uses Better Auth cookies. No PAT this slice.
+- **Dispatch every catalogued read from argv:** `getAgentContext`
+  covers the turn-start blob. Other reads stay HTTP / later.
+- **Prompt pack / weekly-review feature:** prompts over verbs need
+  verbs that run. After 038+033 have been used once.
+- **Market registry / `total` / free-text props:** WagerKind stays
+  `spread | moneyline` until 040's conservation is in and someone
+  actually stakes.
+- **Rename team / leave / rotate invite / adjust-FAAB / void-wager:**
+  real CRUD holes, not this slice. They do not block sit + add +
+  stake. List them; do not build them to look busy.
+- **Draft / settings / FAAB-on-trade events:** diary is thin. Do not
+  event-source. A later facts pass can add kinds; 038 already returns
+  the last 20 rows as they are.
 
 ## Findings considered and rejected (022–026)
 
@@ -324,4 +382,13 @@ unbrand, per-league icons, SW/push this slice).
 
 ## Open leftovers
 
-Planned as **030–037**. Do not re-audit as unnamed findings.
+Planned as **030–037** (door + self-host) and **038–040** (agent
+runtime). Do not re-audit as unnamed findings.
+
+Still unplanned, still real, still not this backlog:
+
+- Rename team, leave/unclaim, rotate invite, update-bid, commish
+  adjust-FAAB, commish void-wager.
+- Manager-session HTTP (cookie/device flow) for a friend's Claude.
+- Prompt files under `src/lib/agent/prompts/` once 038+033 run.
+- `total` market registry after someone has staked a spread.
