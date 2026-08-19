@@ -168,8 +168,7 @@ export function WagerTicket({
                 <div
                   className={cn(
                     "flex items-baseline rounded-md bg-raised px-3.5 py-1.5 shadow-[var(--shadow-border)] focus-within:shadow-[0_0_0_1px_var(--color-accent-deep)]",
-                    (overFree || overCap || overExposure) &&
-                      "shadow-[0_0_0_1px_var(--color-loss)]",
+                    (overFree || overCap || overExposure) && "shadow-[0_0_0_1px_var(--color-loss)]",
                   )}
                 >
                   <span className="font-mono text-xl font-bold text-faint">$</span>
@@ -179,6 +178,7 @@ export function WagerTicket({
                     autoComplete="off"
                     placeholder="0"
                     aria-label="Stake in FAAB dollars"
+                    data-testid="wager-stake"
                     value={stake == null ? "" : String(stake)}
                     onChange={(e) => {
                       const digits = e.target.value.replace(/[^0-9]/g, "").slice(0, 3);
@@ -229,6 +229,7 @@ export function WagerTicket({
             ) : null}
             <Button
               className="w-full"
+              data-testid="wager-submit"
               disabled={blocked || submit.isPending || placed}
               onClick={() => submit.mutate()}
             >

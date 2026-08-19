@@ -1,5 +1,5 @@
-import type { BookBundle, BookLine } from "@/lib/league/book.server";
 import type { TicketTarget } from "@/components/wager-ticket";
+import type { BookBundle, BookLine } from "@/lib/league/book.server";
 import { cn } from "@/lib/utils";
 
 /**
@@ -25,6 +25,7 @@ export function LinePanel({
   if (!line.live) {
     return (
       <section
+        data-testid="wager-no-price"
         className={cn("rounded-xl bg-surface shadow-[var(--shadow-border)]", className)}
       >
         <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
@@ -52,13 +53,10 @@ export function LinePanel({
     other: home ? line.awayName : line.homeName,
   });
 
-  const allowed = (roster: number) =>
-    line.restrictedTo == null || line.restrictedTo === roster;
+  const allowed = (roster: number) => line.restrictedTo == null || line.restrictedTo === roster;
 
   return (
-    <section
-      className={cn("rounded-xl bg-surface shadow-[var(--shadow-border)]", className)}
-    >
+    <section className={cn("rounded-xl bg-surface shadow-[var(--shadow-border)]", className)}>
       <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
         <h2 className="font-display text-lg font-bold tracking-[-0.03em]">The line</h2>
         <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
@@ -199,6 +197,7 @@ function Price({
   return (
     <button
       type="button"
+      data-testid="wager-price"
       disabled={!on}
       onClick={onClick}
       className={cn(
@@ -207,9 +206,7 @@ function Price({
       )}
     >
       <span className="block font-mono text-sm font-bold tabular-nums">{price}</span>
-      <span className="block font-mono text-[9px] uppercase tracking-wide text-faint">
-        {note}
-      </span>
+      <span className="block font-mono text-[9px] uppercase tracking-wide text-faint">{note}</span>
     </button>
   );
 }

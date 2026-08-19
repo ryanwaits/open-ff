@@ -74,6 +74,22 @@ Sleeper is the player/week pipe (outbound HTTPS). No member needs a
 Sleeper account. ESPN cookies are import-only; they are not used at
 runtime after import.
 
+## Book
+
+Managers can stake FAAB on matchups when the commissioner turns betting **On**
+under **The book** in league settings (then Save). Open Matchups to see the
+line — live prices open the wager ticket; preseason shows an honest “no price”
+empty state.
+
+With `bun run dev` up:
+
+```sh
+bun scripts/wager-qa.mjs
+```
+
+Signs in with the local seed, creates a throwaway league, enables the book, and
+screenshots either a placed ticket or the no-price panel under `screenshots/`.
+
 ## Check
 
 ```sh
