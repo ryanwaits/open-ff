@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Avatar } from "@/components/avatar";
 import { InjuryMark, injuryMark } from "@/components/player-cell";
 import { displayName, headshotFor, type Profile } from "@/lib/data/player-view";
+import { isDefense } from "@/lib/data/teams";
 import type { GameChip, PlayerNote, PlayerScheduleGame, SlimPlayer } from "@/lib/data/types";
 import { cn, formatPts } from "@/lib/utils";
 
@@ -52,7 +53,7 @@ export function ProfileIdentity({
               {role}
             </span>
           ) : null}
-          <InjuryMark status={player.injury_status} />
+          {isDefense(player.position) ? null : <InjuryMark status={player.injury_status} />}
         </div>
         {book.length ? (
           <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
@@ -266,19 +267,41 @@ function noteWhen(raw: string): string {
 
 export function ProfileThisWeek({ p, player, game }: { p: Profile; player: SlimPlayer; game?: GameChip | null }) {
   const bye = p.schedule.find((g) => g.bye)?.week ?? p.byeWeek;
+  const slate = p.schedule.find((g) => g.week === p.slateWeek) ?? null;
+  const opp = game?.opp ?? (slate?.bye ? "Bye" : slate?.opp) ?? "—";
+  const detail = game?.detail || slateDetail(slate);
   const mark = injuryMark(player.injury_status);
+  const def = isDefense(player.position);
   return (
     <Section title="This week">
-      <Row k="Opponent" v={game?.opp ?? "—"} />
-      <Row k="Game" v={game?.detail ?? "Not scheduled"} />
-      <Row
-        k="Status"
-        v={mark?.label ?? player.injury_status ?? "No designation"}
-        tone={mark?.tone}
-      />
+      <Row k="Opponent" v={opp} />
+      <Row k="Game" v={detail} />
+      {def ? null : (
+        <Row
+          k="Status"
+          v={mark?.label ?? player.injury_status ?? "No designation"}
+          tone={mark?.tone}
+        />
+      )}
       <Row k="Bye week" v={bye ? `Week ${bye}` : "Unknown"} />
     </Section>
   );
+}
+
+function slateDetail(slate: PlayerScheduleGame | null): string {
+  if (!slate) return "Not scheduled";
+  if (slate.bye) return "Bye week";
+  if (slate.detail) return slate.detail;
+  if (!slate.date) return "Scheduled";
+  const d = new Date(slate.date);
+  if (Number.isNaN(d.getTime())) return "Scheduled";
+  return d.toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 /**
@@ -292,6 +315,18 @@ const SPLIT_GROUPS: { keys: [string, string][] }[] = [
   { keys: [["rush_yd", "Rushing yards"], ["rush_td", "Rushing TD"]] },
   { keys: [["rec", "Receptions"], ["rec_yd", "Receiving yards"], ["rec_td", "Receiving TD"]] },
   { keys: [["fum_lost", "Fumbles lost"]] },
+  { keys: [["fgm", "Field goals"], ["xpm", "PATs"], ["fgm_50p", "FG 50+"]] },
+  {
+    keys: [
+      ["sack", "Sacks"],
+      ["int", "Interceptions"],
+      ["fum_rec", "Fumble recoveries"],
+      ["def_td", "Defensive TD"],
+      ["blk_kick", "Blocked kicks"],
+      ["pts_allow", "Points allowed"],
+      ["yds_allow", "Yards allowed"],
+    ],
+  },
 ];
 
 export function ProfileSplits({ p }: { p: Profile }) {

@@ -105,6 +105,20 @@ export function dstLabel(abbr: string | null | undefined): string {
   return abbr ? `${abbr} D/ST` : "D/ST";
 }
 
+export function isDefense(pos?: string | null): boolean {
+  return pos === "DEF" || pos === "DST";
+}
+
+/** NFL team for a player. D/ST ids are the team abbreviation. */
+export function playerTeam(
+  player: { position?: string | null; team?: string | null; player_id?: string } | null | undefined,
+): string | null {
+  if (!player) return null;
+  if (player.team) return canonTeam(player.team) ?? player.team;
+  if (isDefense(player.position)) return canonTeam(player.player_id) ?? player.player_id ?? null;
+  return null;
+}
+
 export function playerHeadshot(playerId: string, espnId?: string | number | null): string {
   if (espnId) {
     return `https://a.espncdn.com/i/headshots/nfl/players/full/${espnId}.png`;

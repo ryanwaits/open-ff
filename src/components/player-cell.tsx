@@ -106,7 +106,7 @@ export function PlayerCell({
           )}
         >
           <span className="truncate text-sm font-medium text-fg">{name}</span>
-          <InjuryMark status={player.injury_status} />
+          {isDef ? null : <InjuryMark status={player.injury_status} />}
         </span>
         <span className="block truncate font-mono text-[11px] uppercase tracking-wide text-faint">
           {meta}

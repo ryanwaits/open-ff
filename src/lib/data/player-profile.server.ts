@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { applyBook, type ScoringBook } from "@/lib/league/scoring";
+import { applyBook, presetOf, type ScoringBook } from "@/lib/league/scoring";
 import { byeWeekFor } from "./byes.server";
+import { isDefense, playerTeam } from "./teams";
 import type { PlayerNote, PlayerScheduleGame, SlimPlayer } from "./types";
 import { isHostedLeague } from "./types";
 
@@ -93,19 +94,32 @@ export async function loadPlayerProfile(input: {
   const book = await bookFor(input.leagueId);
   const seed = loadSeasonSeed();
   const mine = seed.find((r) => r.player_id === input.playerId);
+  const team = playerTeam(player);
 
-  // Season totals are recomputed from raw components under the league's own
-  // book, so a half-PPR league never sees a PPR number.
-  const splits = mine ? stripMeta(mine) : {};
-  const points = mine ? applyBook(book, splits) : 0;
-  const gamesPlayed = Number(mine?.gp ?? 0);
+  const live = await import("./live.server");
+  const liveSeason: Record<string, Record<string, number>> = await live
+    .fetchSeasonStats(season)
+    .catch(() => ({}));
+  const liveRow = liveSeason[input.playerId] ?? {};
+  // Seed is offense-only. D/ST and K components come from the live season map.
+  const splits = { ...(mine ? stripMeta(mine) : {}), ...stripMeta(liveRow) };
+  const points = seasonPoints(book, player.position, mine, splits, liveRow);
+  const gamesPlayed = Number(liveRow.gp ?? mine?.gp ?? 0);
 
   // Rank has to be recomputed too: a different book reorders the position.
   let posRank: number | null = null;
   let posRankOf: number | null = null;
   if (player.position) {
     const peers = seed
-      .map((r) => ({ id: r.player_id, p: sleeper.getPlayer(r.player_id), pts: applyBook(book, stripMeta(r)) }))
+      .map((r) => {
+        const p = sleeper.getPlayer(r.player_id);
+        const extra = liveSeason[r.player_id] ?? {};
+        return {
+          id: r.player_id,
+          p,
+          pts: seasonPoints(book, p?.position ?? null, r, { ...stripMeta(r), ...stripMeta(extra) }, extra),
+        };
+      })
       .filter((r) => r.p?.position === player.position);
     peers.sort((a, b) => b.pts - a.pts);
     const idx = peers.findIndex((r) => r.id === input.playerId);
@@ -116,7 +130,7 @@ export async function loadPlayerProfile(input: {
   }
 
   const [byeWeek, slate, actuals] = await Promise.all([
-    byeWeekFor(season, player.team),
+    byeWeekFor(season, team),
     loadSlate(player),
     weeklyLine(season, input.playerId, book),
   ]);
@@ -175,14 +189,13 @@ async function loadSlate(player: SlimPlayer): Promise<{
         ? null
         : await espn.resolveEspnAthleteId(player.full_name);
   const year = Number(season) || new Date().getFullYear();
+  const team = playerTeam(player);
   const rw = await import("./rotowire.server");
   const [stored, espnNotes, schedule, byeWeek] = await Promise.all([
     rw.refreshRotowireFeed().then(() => rw.notesForPlayer(player.player_id)).catch(() => []),
     espnId ? espn.fetchPlayerNotes(espnId, year).catch(() => []) : Promise.resolve([]),
-    player.team
-      ? espn.fetchTeamSchedule(player.team, year).catch(() => [])
-      : Promise.resolve([]),
-    byeWeekFor(season, player.team),
+    team ? espn.fetchTeamSchedule(team, year).catch(() => []) : Promise.resolve([]),
+    byeWeekFor(season, team),
   ]);
   return { news: mergeNotes(stored, espnNotes), schedule, season, week, byeWeek };
 }
@@ -237,12 +250,34 @@ async function ownerOf(
 }
 
 const META_KEYS = new Set(["player_id", "gp", "pts_ppr", "pts_half_ppr", "pts_std", "pos_rank_ppr"]);
-function stripMeta(row: StatSeed): Record<string, number> {
+function stripMeta(row: Record<string, unknown> | StatSeed): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(row)) {
     if (!META_KEYS.has(k) && typeof v === "number") out[k] = v;
   }
   return out;
+}
+
+/** D/ST and K season maps cannot be re-scored from bucket totals. Use the canned line. */
+function seasonPoints(
+  book: ScoringBook,
+  pos: string | null | undefined,
+  seed: StatSeed | undefined,
+  splits: Record<string, number>,
+  live: Record<string, number>,
+): number {
+  const preset = presetOf(book);
+  const canned = Number(
+    seed
+      ? preset === "half"
+        ? seed.pts_half_ppr
+        : preset === "std"
+          ? seed.pts_std
+          : seed.pts_ppr
+      : (live.pts_ppr ?? live.pts_std ?? 0),
+  ) || 0;
+  if (isDefense(pos) || pos === "K") return canned || applyBook(book, splits);
+  return applyBook(book, splits) || canned;
 }
 
 /**

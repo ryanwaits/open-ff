@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getSql } from "@/lib/db";
 import { getPlayer, playerName } from "@/lib/data/sleeper.server";
-import { slotLabel, START_SLOTS } from "@/lib/data/teams";
+import { playerTeam, slotLabel, START_SLOTS } from "@/lib/data/teams";
 import type {
   ActivityItem,
   LeagueBundle,
@@ -640,7 +640,10 @@ function sideFrom(roster, spots, slots, pts, games) {
 			playerId: hit?.player_id ?? null,
 			player,
 			points: hit ? pts[hit.player_id] ?? 0 : null,
-			game: player?.team ? games.get(player.team.toUpperCase()) ?? null : null
+			game: (() => {
+				const team = playerTeam(player);
+				return team ? games.get(team.toUpperCase()) ?? null : null;
+			})()
 		};
 	});
 	return {
@@ -725,7 +728,10 @@ export async function loadTeam(leagueId: string, rosterId: number, week: number)
 			slot: s.slot === "starter" ? "starter" : "bench",
 			starterSlot: s.starter_slot ?? void 0,
 			weekPts: pts[s.player_id] ?? null,
-			game: base.team ? games.get(base.team.toUpperCase()) ?? null : null
+			game: (() => {
+				const team = playerTeam(base);
+				return team ? games.get(team.toUpperCase()) ?? null : null;
+			})()
 		};
 	});
 	players.sort((a, b) => {

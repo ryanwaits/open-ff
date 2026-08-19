@@ -92,6 +92,35 @@ export async function fetchWeekStats(
   return raw;
 }
 
+const seasonCache = new Map<string, { at: number; data: Record<string, Record<string, number>> }>();
+
+/** Full-season Sleeper components. D/ST and K live here; the bundled seed strips them. */
+export async function fetchSeasonStats(
+  season: string,
+  seasonType: string = "regular",
+): Promise<Record<string, Record<string, number>>> {
+  const kind = seasonType === "pre" || seasonType === "post" ? seasonType : "regular";
+  const key = `season:${kind}:${season}`;
+  const hit = seasonCache.get(key);
+  if (hit && Date.now() - hit.at < 6 * 60 * 60 * 1000) return hit.data;
+  const res = await fetch(`https://api.sleeper.app/v1/stats/nfl/${kind}/${season}`, {
+    headers: { accept: "application/json" },
+  });
+  if (!res.ok) return hit?.data ?? {};
+  const raw = ((await res.json()) as Record<string, Record<string, number>>) ?? {};
+  const data: Record<string, Record<string, number>> = {};
+  for (const [id, row] of Object.entries(raw)) {
+    if (!row || id.startsWith("TEAM_")) continue;
+    const nums: Record<string, number> = {};
+    for (const [k, v] of Object.entries(row)) {
+      if (typeof v === "number" && Number.isFinite(v)) nums[k] = v;
+    }
+    data[id] = nums;
+  }
+  seasonCache.set(key, { at: Date.now(), data });
+  return data;
+}
+
 const boardCache = new Map<string, { at: number; data: Awaited<ReturnType<typeof weekBoardUncached>> }>();
 
 async function weekBoardUncached(season: string, week: number, seasonType?: string | null) {

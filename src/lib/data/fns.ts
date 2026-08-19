@@ -62,6 +62,7 @@ export const getLiveWire = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const sleeper = await import("./sleeper.server");
     const live = await import("./live.server");
+    const { playerTeam } = await import("./teams");
     const state = await sleeper.fetchNflState();
     const kind =
       data.kind ??
@@ -81,7 +82,7 @@ export const getLiveWire = createServerFn({ method: "GET" })
           name: p?.full_name ?? (p?.team ? `${p.team} D/ST` : id),
           pos: p?.position ?? null,
           team: p?.team ?? null,
-          game: live.gameForTeam(board.index, p?.team),
+          game: live.gameForTeam(board.index, playerTeam(p)),
         };
       })
       .sort((a, b) => b.points - a.points)
