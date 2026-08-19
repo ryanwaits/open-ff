@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { authClient, authEnabled, signIn } from "@/lib/auth/client";
 import { LOCAL_SEED } from "@/lib/auth/local-seed";
 import { configuredGrokProviders } from "@/lib/auth/providers";
+import { getQueryClient } from "@/lib/query-client";
 import { brand } from "@/skin/brand";
 
 type Search = { redirect?: string };
@@ -52,6 +53,8 @@ function Login() {
         const res = await authClient.signIn.email({ email, password });
         if (res.error) throw new Error(res.error.message ?? "Sign-in failed");
       }
+      await authClient.getSession();
+      getQueryClient().removeQueries({ queryKey: ["my-leagues"] });
       void navigate({ to: dest });
     } catch (err) {
       toast(err instanceof Error ? err.message : "Could not sign in");

@@ -14,13 +14,18 @@ export const Route = createFileRoute("/")({
 
 function Home() {
   const remember = useLeagueStore((s) => s.remember);
-  const { user, isPending } = useCurrentUserState();
+  const { user, isPending: sessionPending } = useCurrentUserState();
   const mine = useQuery({
-    queryKey: ["my-leagues"],
+    // Guest fetch returns [] and is persisted — same key after login would
+    // keep that empty hit for staleTime (30s). Key by user so sign-in is a miss.
+    queryKey: ["my-leagues", user?.id ?? "anon"],
     queryFn: () => listMyLeagues(),
+    enabled: !sessionPending && Boolean(user),
+    placeholderData: undefined,
   });
 
   const seats = mine.data ?? [];
+  const waiting = sessionPending || (Boolean(user) && mine.data == null && !mine.isError);
 
   return (
     <Shell center>
@@ -77,7 +82,7 @@ function Home() {
             )}
           </div>
         </section>
-      ) : isPending || mine.data == null ? (
+      ) : waiting ? (
         <div className="mt-8 h-24 w-full max-w-sm animate-pulse rounded-xl bg-surface" />
       ) : !user ? (
         <div className="mt-8 flex w-full max-w-sm flex-col gap-2">
