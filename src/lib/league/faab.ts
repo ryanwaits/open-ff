@@ -17,3 +17,13 @@ export function tradeTake(spendable: number, amount: number): number {
   const have = Math.max(0, spendable);
   return want > have ? -1 : want;
 }
+
+/** Sum of live stakes (negative entries ignored). */
+export function atRiskFrom(stakes: number[]): number {
+  return stakes.reduce((n, s) => n + Math.max(0, s), 0);
+}
+
+/** Headline purse minus reserved stakes. */
+export function spendableFrom(remaining: number, atRisk: number): number {
+  return Math.max(0, remaining - Math.max(0, atRisk));
+}

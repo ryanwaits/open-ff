@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyLoss, tradeTake } from "./faab.ts";
-import { atRisk, payoutMultiplier, spendable } from "./wagers.server.ts";
+import { applyLoss, atRiskFrom, spendableFrom, tradeTake } from "./faab.ts";
+import { payoutMultiplier } from "./wagers.server.ts";
 
-// Pure book math runs without a DB. spendable / atRisk / placeWager / settleWeek
-// all call getSql(); bun has no import.meta.glob so PGLite migrate cannot boot
-// without Vite. Live conservation cases stay skipped — needs PGLite fixture.
+// Pure book math runs without a DB. SQL wrappers for spendable / atRisk still
+// need a PGLite fixture; the math itself is proven via spendableFrom / atRiskFrom.
 
 test("payoutMultiplier is the fair inverse, clamped to [0.05, 0.95]", () => {
   assert.equal(payoutMultiplier(0.25), 3);
@@ -14,14 +13,14 @@ test("payoutMultiplier is the fair inverse, clamped to [0.05, 0.95]", () => {
   assert.equal(payoutMultiplier(0.99), payoutMultiplier(0.95));
 });
 
-test.skip("spendable subtracts live stakes from the headline purse", () => {
-  // needs PGLite fixture
-  void spendable;
+test("spendable subtracts live stakes from the headline purse", () => {
+  // Live SQL still needs a PGLite fixture; the math is no longer skipped.
+  assert.equal(spendableFrom(100, 70), 30);
 });
 
-test.skip("atRisk sums placed-wager stakes", () => {
-  // needs PGLite fixture
-  void atRisk;
+test("atRisk sums placed-wager stakes", () => {
+  // Live SQL still needs a PGLite fixture; the math is no longer skipped.
+  assert.equal(atRiskFrom([70, 10]), 80);
 });
 
 test("lost wager pools only what the purse had (no mint)", () => {

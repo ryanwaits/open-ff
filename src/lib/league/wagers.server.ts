@@ -1,6 +1,6 @@
 import { getSql } from "@/lib/db";
 import { recordEvent } from "./events.server";
-import { applyLoss } from "./faab";
+import { applyLoss, atRiskFrom, spendableFrom } from "./faab";
 import { normalCdf, type PlayerOutlook, winProbability } from "./win-probability";
 
 /**
@@ -345,7 +345,7 @@ export async function spendable(
     )[0];
     purse = row?.faab_remaining ?? row?.faab_budget ?? 100;
   }
-  return Math.max(0, (purse ?? 0) - (await atRisk(leagueId, rosterId)));
+  return spendableFrom(purse ?? 0, await atRisk(leagueId, rosterId));
 }
 
 /** Total staked on wagers that have not settled. */
@@ -359,7 +359,7 @@ export async function atRisk(leagueId: string, rosterId: number): Promise<number
         where league_id = ${leagueId} and roster_id = ${rosterId} and status = ${"placed"}
       `
     )[0];
-    return row?.n ?? 0;
+    return atRiskFrom([row?.n ?? 0]);
   } catch {
     return 0;
   }
