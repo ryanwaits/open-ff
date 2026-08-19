@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getLeagueBundle, getTeam } from "@/lib/data/fns";
 import type { LeagueBundle, RosterPlayer } from "@/lib/data/types";
 import { sitPlayer, startPlayer } from "@/lib/league/fns";
+import { invalidateAfterLineup } from "@/lib/league/lineup-cache";
 import { labeledStartSlots, slotAccepts } from "@/lib/league/roster";
 import { cn, fmtRecord, formatPts } from "@/lib/utils";
 
@@ -44,22 +45,24 @@ function TeamPage() {
   const isMine = league.data?.myRosterId === Number(rosterId);
   const mine = false as boolean;
 
-  function invalidate() {
-    setPending(null);
-    void qc.invalidateQueries({ queryKey: ["team", leagueId, rosterId] });
-    void qc.invalidateQueries({ queryKey: ["league", leagueId] });
-    void qc.invalidateQueries({ queryKey: ["matchups", leagueId] });
-  }
-
   const start = useMutation({
-    mutationFn: (input: { playerId: string; replaceId?: string | null; slot?: string | null }) =>
-      startPlayer({ data: { leagueId, ...input } }),
-    onSuccess: invalidate,
+    mutationFn: async (input: {
+      playerId: string;
+      replaceId?: string | null;
+      slot?: string | null;
+    }) => {
+      await startPlayer({ data: { leagueId, ...input } });
+      await invalidateAfterLineup(qc, leagueId);
+    },
+    onSuccess: () => setPending(null),
     onError: (e) => toast(e instanceof Error ? e.message : "Could not start"),
   });
   const sit = useMutation({
-    mutationFn: (playerId: string) => sitPlayer({ data: { leagueId, playerId } }),
-    onSuccess: invalidate,
+    mutationFn: async (playerId: string) => {
+      await sitPlayer({ data: { leagueId, playerId } });
+      await invalidateAfterLineup(qc, leagueId);
+    },
+    onSuccess: () => setPending(null),
     onError: (e) => toast(e instanceof Error ? e.message : "Could not sit"),
   });
 

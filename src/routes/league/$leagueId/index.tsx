@@ -23,6 +23,7 @@ import { baseSlotLabel } from "@/lib/data/teams";
 import { useDemoOn } from "@/lib/demo/store";
 import { planAutoFill } from "@/lib/league/autofill";
 import { sitPlayer, startPlayer } from "@/lib/league/fns";
+import { invalidateAfterLineup } from "@/lib/league/lineup-cache";
 import { lineupHealth, resolvePhase } from "@/lib/league/phase";
 import { applyPrototype } from "@/lib/league/prototype";
 import { cn, fmtRecord, formatPts } from "@/lib/utils";
@@ -106,30 +107,29 @@ function MyTeamPage() {
     team.data?.players.filter((p) => p.slot === "starter").map((p) => p.player_id),
   );
 
-  function invalidate() {
-    void qc.invalidateQueries({ queryKey: ["team", leagueId] });
-    void qc.invalidateQueries({ queryKey: ["league", leagueId] });
-    void qc.invalidateQueries({ queryKey: ["matchups", leagueId] });
-  }
   const start = useMutation({
-    mutationFn: (input: {
+    mutationFn: async (input: {
       playerId: string;
       replaceId?: string | null;
       slot?: string | null;
       name?: string;
       into?: string;
-    }) => startPlayer({ data: { leagueId, ...input } }),
+    }) => {
+      await startPlayer({ data: { leagueId, ...input } });
+      // Inside mutationFn so a fast Home → Matchups click cannot skip this.
+      await invalidateAfterLineup(qc, leagueId);
+    },
     onSuccess: (_r, vars) => {
-      invalidate();
       if (vars.name) toast.success(`${vars.name} starts${vars.into ? ` at ${vars.into}` : ""}`);
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not start"),
   });
   const sit = useMutation({
-    mutationFn: (input: { playerId: string; name?: string }) =>
-      sitPlayer({ data: { leagueId, playerId: input.playerId } }),
+    mutationFn: async (input: { playerId: string; name?: string }) => {
+      await sitPlayer({ data: { leagueId, playerId: input.playerId } });
+      await invalidateAfterLineup(qc, leagueId);
+    },
     onSuccess: (_r, vars) => {
-      invalidate();
       if (vars.name) toast(`${vars.name} moved to the bench`);
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not sit"),
@@ -149,10 +149,10 @@ function MyTeamPage() {
           },
         });
       }
+      await invalidateAfterLineup(qc, leagueId);
       return swaps;
     },
     onSuccess: (swaps) => {
-      invalidate();
       if (swaps.length === 0) return;
       const first = swaps[0]!;
       toast.success(
