@@ -105,11 +105,18 @@ function createNeonSql(): Promise<Sql> {
 
 async function createPgliteSql(): Promise<Sql> {
   // Embedded Postgres, imported on demand so it never loads on the Neon path.
-  // One in-memory instance per process, shared across HMR module instances, so
-  // data survives source edits (it resets on dev-server restart).
+  // One instance per process, shared across HMR. Default is on-disk
+  // (`data/pglite`, or `PGLITE_DATA_DIR`) so a reboot keeps the league.
+  // `PGLITE_EPHEMERAL=1` keeps the old RAM-only behavior.
   globalRef.__pgliteInstance__ ??= (async () => {
     const { PGlite } = await import("@electric-sql/pglite");
+    const ephemeral = process.env.PGLITE_EPHEMERAL === "1";
+    const dataDir = ephemeral
+      ? undefined
+      : process.env.PGLITE_DATA_DIR?.trim() ||
+        new URL("../../data/pglite", import.meta.url).pathname;
     const pg = new PGlite({
+      ...(dataDir ? { dataDir } : {}),
       parsers: {
         [OID_INT8]: Number,
         [OID_DATE]: identity,
@@ -215,8 +222,9 @@ export async function getPglite(): Promise<import("@electric-sql/pglite").PGlite
 /**
  * Finish DB bootstrap before the server handles traffic.
  *
- * - **PGLite** (preview / no `DATABASE_URL`): open the in-memory DB and apply
- *   `migrations/*.sql`. Idempotent — concurrent callers share one promise.
+ * - **PGLite** (preview / no `DATABASE_URL`): open the on-disk DB (or
+ *   in-memory when `PGLITE_EPHEMERAL=1`) and apply `migrations/*.sql`.
+ *   Idempotent — concurrent callers share one promise.
  * - **Neon**: no-op (pool is created lazily on first query).
  *
  * Vite `configureServer` awaits this at dev startup; production imports of this

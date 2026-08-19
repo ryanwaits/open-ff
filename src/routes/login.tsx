@@ -1,24 +1,39 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { createServerFn } from "@tanstack/react-start";
+import { type FormEvent, useState } from "react";
 import { toast } from "sonner";
-import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
-import { LOCAL_SEED } from "@/lib/auth/local-seed";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { authClient, authEnabled, signIn } from "@/lib/auth/client";
+import { LOCAL_SEED } from "@/lib/auth/local-seed";
+import { configuredGrokProviders } from "@/lib/auth/providers";
 
 type Search = { redirect?: string };
+
+const loadSocialProviders = createServerFn({ method: "GET" }).handler(async () => {
+  const { getRequest } = await import("@tanstack/react-start/server");
+  const req = getRequest();
+  const raw = req?.headers.get("x-forwarded-host") ?? req?.headers.get("host") ?? "";
+  const host = raw.split(":")[0] ?? "";
+  return configuredGrokProviders(host).map((p) => ({
+    providerId: p.providerId,
+    label: p.label,
+  }));
+});
 
 export const Route = createFileRoute("/login")({
   validateSearch: (s: Record<string, unknown>): Search => ({
     redirect: typeof s.redirect === "string" ? s.redirect : undefined,
   }),
+  loader: () => loadSocialProviders(),
   component: Login,
 });
 
 function Login() {
   const { redirect } = Route.useSearch();
+  const social = Route.useLoaderData();
   const navigate = useNavigate();
-  const dest = redirect && redirect.startsWith("/") ? redirect : "/";
+  const dest = redirect?.startsWith("/") ? redirect : "/";
   const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState<string>(LOCAL_SEED.email);
   const [password, setPassword] = useState<string>(LOCAL_SEED.password);
@@ -48,20 +63,20 @@ function Login() {
     <main className="grid min-h-dvh place-items-center bg-bg px-6 text-fg">
       <div className="w-full max-w-sm">
         <Link to="/" className="font-display text-3xl tracking-tight">
-          Ledger
+          open-ff
         </Link>
         <p className="mt-2 text-sm text-muted">
-          This is your Ledger account — not Sleeper, not ESPN. Email works
-          here with nothing else to set up. Google and X use the same login.
+          This is your open-ff account — not Sleeper, not ESPN. Email works here with nothing else
+          to set up.
+          {social.length > 0 ? " Google and X are available on this host." : ""}
         </p>
         <p className="mt-2 text-xs text-faint">
-          Local seed is {LOCAL_SEED.email} / {LOCAL_SEED.password}. Restart
-          wipes the in-memory DB and reseeds that account. A hosted database
-          keeps whatever you create.
+          Local seed is {LOCAL_SEED.email} / {LOCAL_SEED.password}. Without a hosted database the
+          league lives on disk in data/pglite and survives restart.
         </p>
         <div className="mt-8 space-y-2">
           {authEnabled ? (
-            GROK_PROVIDERS.map((p) => (
+            social.map((p) => (
               <Button
                 key={p.providerId}
                 type="button"

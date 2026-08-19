@@ -29,3 +29,20 @@ export const GROK_PROVIDERS: readonly GrokProvider[] = [
   { providerId: "grok-google", idp: "google", label: "Google" },
   { providerId: "grok-x", idp: "twitter", label: "X" },
 ];
+
+/**
+ * Google/X work only when this host has a real broker client, or when the
+ * request is the Grok live preview (`*.grok-sandbox.com`). Self-host without
+ * `GROK_AUTH_CLIENT_ID` must not offer those buttons.
+ */
+export function grokBrokerConfigured(host = ""): boolean {
+  const clientId = typeof process !== "undefined" ? process.env.GROK_AUTH_CLIENT_ID?.trim() : "";
+  if (clientId) return true;
+  const h = host || (typeof window !== "undefined" ? window.location.hostname : "");
+  return h === "grok-sandbox.com" || h.endsWith(".grok-sandbox.com");
+}
+
+/** Providers the login page may actually render. */
+export function configuredGrokProviders(host = ""): readonly GrokProvider[] {
+  return grokBrokerConfigured(host) ? GROK_PROVIDERS : [];
+}

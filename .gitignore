@@ -3,6 +3,10 @@ node_modules/
 .github_repo
 .env
 .env.*
+!.env.example
+
+# Local PGLite data dir (default when DATABASE_URL is unset).
+data/pglite/
 
 # Build output. `vite build` regenerates all of it; 136 files of it were
 # tracked, which made every build look like a 6MB diff.
