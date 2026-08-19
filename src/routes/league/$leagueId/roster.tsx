@@ -1,24 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/avatar";
 import { LineupBoard } from "@/components/lineup-board";
 import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
+import { TradeSpineRow } from "@/components/trade-spine";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getActivity, getByeWeeks, getLeagueBundle, getProjections, getTeam } from "@/lib/data/fns";
 import { prefetchPlayerProfile, useWarmRosterProfiles } from "@/lib/data/player-view";
 import { baseSlotLabel } from "@/lib/data/teams";
-import {
-  getActivity,
-  getByeWeeks,
-  getLeagueBundle,
-  getProjections,
-  getTeam,
-} from "@/lib/data/fns";
 import type { RosterPlayer } from "@/lib/data/types";
-import { cancelClaim, getClaims, getTrades, sitPlayer, startPlayer, voteTrade } from "@/lib/league/fns";
+import {
+  cancelClaim,
+  cancelTradeFn,
+  getClaims,
+  getTrades,
+  sitPlayer,
+  startPlayer,
+  voteTrade,
+} from "@/lib/league/fns";
+import { invalidateAfterLineup } from "@/lib/league/lineup-cache";
 import { cn, fmtRecord, formatPts } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$leagueId/roster")({
@@ -36,6 +40,7 @@ export const Route = createFileRoute("/league/$leagueId/roster")({
 function MyTeamPage() {
   const { leagueId } = Route.useParams();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
 
   function openPlayer(p: RosterPlayer) {
@@ -52,7 +57,9 @@ function MyTeamPage() {
       game: p.game ?? null,
       context: {
         label: shelf,
-        rows: [["Slot", baseSlotLabel(p.starterSlot) || (p.slot === "starter" ? "Starter" : p.slot)]],
+        rows: [
+          ["Slot", baseSlotLabel(p.starterSlot) || (p.slot === "starter" ? "Starter" : p.slot)],
+        ],
       },
     });
   }
@@ -121,26 +128,30 @@ function MyTeamPage() {
     void qc.invalidateQueries({ queryKey: ["league", leagueId] });
     void qc.invalidateQueries({ queryKey: ["claims", leagueId] });
     void qc.invalidateQueries({ queryKey: ["trades", leagueId] });
+    void qc.invalidateQueries({ queryKey: ["matchups", leagueId], refetchType: "all" });
   }
   const start = useMutation({
-    mutationFn: (input: {
+    mutationFn: async (input: {
       playerId: string;
       replaceId?: string | null;
       slot?: string | null;
       name?: string;
       into?: string;
-    }) => startPlayer({ data: { leagueId, ...input } }),
+    }) => {
+      await startPlayer({ data: { leagueId, ...input } });
+      await invalidateAfterLineup(qc, leagueId);
+    },
     onSuccess: (_r, v) => {
-      invalidate();
       if (v.name) toast.success(`${v.name} starts${v.into ? ` at ${v.into}` : ""}`);
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not start"),
   });
   const sit = useMutation({
-    mutationFn: (input: { playerId: string; name?: string }) =>
-      sitPlayer({ data: { leagueId, playerId: input.playerId } }),
+    mutationFn: async (input: { playerId: string; name?: string }) => {
+      await sitPlayer({ data: { leagueId, playerId: input.playerId } });
+      await invalidateAfterLineup(qc, leagueId);
+    },
     onSuccess: (_r, v) => {
-      invalidate();
       if (v.name) toast(`${v.name} moved to the bench`);
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not sit"),
@@ -161,6 +172,14 @@ function MyTeamPage() {
       toast(v.accept ? "Trade accepted" : "Trade rejected");
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not respond"),
+  });
+  const pull = useMutation({
+    mutationFn: (tradeId: string) => cancelTradeFn({ data: { leagueId, tradeId } }),
+    onSuccess: () => {
+      invalidate();
+      toast("Offer withdrawn");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not withdraw"),
   });
 
   const byeStack = useMemo(() => {
@@ -219,9 +238,7 @@ function MyTeamPage() {
   const seed = league.data.standings.findIndex((s) => s.rosterId === rosterId) + 1;
   // Only live claims. A cancelled or settled one is finished business and
   // belongs in Your moves, not in a card headed "what is still in".
-  const myClaims = (claims.data?.items ?? []).filter(
-    (c) => c.mine && c.status === "pending",
-  );
+  const myClaims = (claims.data?.items ?? []).filter((c) => c.mine && c.status === "pending");
   const myTrades = (trades.data ?? []).filter(
     (t2) => t2.status === "proposed" && t2.sides.some((s) => s.rosterId === rosterId),
   );
@@ -233,7 +250,13 @@ function MyTeamPage() {
     <div className="flex flex-col gap-5">
       <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
         <div className="flex flex-wrap items-center gap-4 p-5">
-          <Avatar src={t.avatar} name={t.teamName} className="size-16" textClassName="text-lg" tint />
+          <Avatar
+            src={t.avatar}
+            name={t.teamName}
+            className="size-16"
+            textClassName="text-lg"
+            tint
+          />
           <div className="min-w-0 flex-1 basis-48">
             <h1 className="font-display text-3xl font-extrabold tracking-[-0.035em]">
               {t.teamName}
@@ -269,10 +292,7 @@ function MyTeamPage() {
           ) : null}
           {ops ? <Chip k="Trade deadline" v={`Week ${ops.tradeDeadlineWeek}`} /> : null}
           {ops ? (
-            <Chip
-              k="Waivers"
-              v={ops.waiversOpen ? "open" : `week ${ops.lastWaiverWeek}`}
-            />
+            <Chip k="Waivers" v={ops.waiversOpen ? "open" : `week ${ops.lastWaiverWeek}`} />
           ) : null}
         </div>
       </section>
@@ -391,46 +411,39 @@ function MyTeamPage() {
               {myTrades.length === 0 ? (
                 <p className="px-5 pb-5 text-sm text-muted">Nothing on the table.</p>
               ) : (
-                <ul>
+                <ul className="mt-1">
                   {myTrades.map((tr) => {
-                    const waiting = tr.sides.some((s) => s.rosterId === rosterId && !s.accepted);
+                    // An offer you sent is already accepted on your side, so the
+                    // only move it leaves you is pulling it back.
+                    const iSent = tr.proposerRoster === rosterId;
+                    const yourMove = tr.sides.some((s) => s.rosterId === rosterId && !s.accepted);
                     return (
-                      <li key={tr.id} className="border-b border-line px-5 py-3 last:border-0">
-                        <p className="text-sm font-semibold">
-                          {tr.sides.map((s) => s.teamName).join(" ↔ ")}
-                        </p>
-                        <ul className="mt-1 space-y-0.5">
-                          {tr.assets.map((asset, i) => (
-                            <li key={i} className="text-[13px] text-muted">
-                              {asset.fromName} → {asset.toName}:{" "}
-                              {asset.kind === "player" ? asset.playerName : asset.pickLabel}
-                            </li>
-                          ))}
-                        </ul>
-                        {waiting ? (
-                          <div className="mt-3 flex gap-2">
-                            <Button
-                              size="sm"
-                              disabled={vote.isPending}
-                              onClick={() => vote.mutate({ tradeId: tr.id, accept: true })}
-                            >
-                              Accept
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={vote.isPending}
-                              onClick={() => vote.mutate({ tradeId: tr.id, accept: false })}
-                            >
-                              Decline
-                            </Button>
-                          </div>
-                        ) : (
-                          <p className="mt-2 font-mono text-[10px] uppercase tracking-wide text-faint">
-                            Waiting on them
-                          </p>
-                        )}
-                      </li>
+                      <TradeSpineRow
+                        key={tr.id}
+                        trade={tr}
+                        myRosterId={rosterId}
+                        leagueId={leagueId}
+                        busy={vote.isPending || pull.isPending}
+                        onAccept={
+                          yourMove ? () => vote.mutate({ tradeId: tr.id, accept: true }) : undefined
+                        }
+                        onDecline={
+                          yourMove
+                            ? () => vote.mutate({ tradeId: tr.id, accept: false })
+                            : undefined
+                        }
+                        onCounter={
+                          yourMove
+                            ? () =>
+                                void navigate({
+                                  to: "/league/$leagueId/trades",
+                                  params: { leagueId },
+                                  search: { counter: tr.id },
+                                })
+                            : undefined
+                        }
+                        onWithdraw={iSent && !yourMove ? () => pull.mutate(tr.id) : undefined}
+                      />
                     );
                   })}
                 </ul>

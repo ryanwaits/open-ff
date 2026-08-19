@@ -272,16 +272,17 @@ function summarise(
   outgoing: TradeOfferAsset[],
   involved: boolean,
 ): string {
-  const get = incoming.map(labelAsset).filter(Boolean);
+  const get = incoming.map(tradeAssetLabel).filter(Boolean);
   if (!involved) return get.length ? joinBits(get) : "No assets";
-  const give = outgoing.map(labelAsset).filter(Boolean);
+  const give = outgoing.map(tradeAssetLabel).filter(Boolean);
   if (give.length && get.length) return `${joinBits(give)} \u2192 ${joinBits(get)}`;
   if (get.length) return `for ${joinBits(get)}`;
   if (give.length) return `gives ${joinBits(give)}`;
   return "No assets";
 }
 
-function labelAsset(a: TradeOfferAsset): string {
+/** One asset in as few words as it can be said: "Pollard", "Pick 2.04", "$14". */
+export function tradeAssetLabel(a: TradeOfferAsset): string {
   if (a.kind === "pick") return `Pick ${a.pickLabel ?? a.pickNo}`;
   if (a.kind === "faab") return `$${a.amount ?? 0}`;
   return a.playerName ? lastName({ full_name: a.playerName }) : "Player";
