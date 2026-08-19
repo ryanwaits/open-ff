@@ -1,6 +1,7 @@
 import { getPlayer, playerName } from "@/lib/data/sleeper.server";
 import { getSql } from "@/lib/db";
 import { recordEvent } from "./events.server";
+import { tradeTake } from "./faab";
 import { clampPlayoffByes, defaultPlayoffByes, firstRoundSeeds } from "./playoffs";
 import { leagueWaiversOpen, reverseStandingsOrder, rotateRollingOrder } from "./waivers";
 
@@ -843,6 +844,19 @@ async function executeTrade(leagueId: string, tradeId: string): Promise<void> {
       }
     }
   }
+  // Purse may have moved since propose (stake/claim). Refuse short FAAB before
+  // any player/pick writes so a mixed deal cannot half-apply.
+  {
+    const { spendable } = await import("./wagers.server");
+    for (const a of assets) {
+      if (a.kind === "faab" && a.amount) {
+        const free = await spendable(leagueId, a.from_roster);
+        if (tradeTake(free, a.amount) === -1) {
+          throw new Error(`That team only has $${free} to trade.`);
+        }
+      }
+    }
+  }
   const league = await leagueOf(leagueId);
   for (const a of assets) {
     if (a.kind === "player" && a.player_id) {
@@ -860,14 +874,14 @@ async function executeTrade(leagueId: string, tradeId: string): Promise<void> {
         values (${nid("mv_", 12)}, ${leagueId}, ${league.current_week}, ${a.to_roster}, ${"trade"}, ${a.player_id}, ${null})
       `;
     } else if (a.kind === "faab" && a.amount) {
-      // Manager to manager. The league's total is untouched — this is the one
-      // route by which a manager who has spent everything can get liquid again.
+      // Pre-pass already required spendable >= amount; debit/credit that take only.
+      const take = a.amount;
       await sql`
-        update ff_rosters set faab_remaining = greatest(0, coalesce(faab_remaining, 0) - ${a.amount})
+        update ff_rosters set faab_remaining = coalesce(faab_remaining, 0) - ${take}
         where league_id = ${leagueId} and roster_id = ${a.from_roster}
       `;
       await sql`
-        update ff_rosters set faab_remaining = coalesce(faab_remaining, 0) + ${a.amount}
+        update ff_rosters set faab_remaining = coalesce(faab_remaining, 0) + ${take}
         where league_id = ${leagueId} and roster_id = ${a.to_roster}
       `;
     } else if (a.kind === "pick" && a.pick_no) {

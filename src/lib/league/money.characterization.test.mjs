@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyLoss } from "./faab.ts";
+import { applyLoss, tradeTake } from "./faab.ts";
 import { atRisk, payoutMultiplier, spendable } from "./wagers.server.ts";
 
 // Pure book math runs without a DB. spendable / atRisk / placeWager / settleWeek
@@ -36,4 +36,11 @@ test("lost wager pools only what the purse had (no mint)", () => {
   assert.equal(poolCredit, 20);
   assert.equal(remaining, 0);
   assert.equal(remaining + (pool + poolCredit) + burned, genesis);
+});
+
+test("FAAB trade refuses when sender cannot cover (no mint)", () => {
+  // Was: propose $30 while spendable was 30, then stake/claim left remaining
+  // $20; execute debited greatest(0, 20-30)=0 and credited +30 → genesis +10.
+  // tradeTake refuses; executeTrade pre-pass throws before any asset writes.
+  assert.equal(tradeTake(20, 30), -1);
 });
