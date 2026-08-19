@@ -7,7 +7,9 @@ export const getPulse = createServerFn({ method: "GET" }).handler(async () => {
   const sleeper = await import("./sleeper.server");
   const espn = await import("./espn.server");
   // Map refresh is daily and large — don't block the pulse on it.
-  void import("./player-refresh.server").then((m) => m.refreshPlayerStatus()).catch(() => undefined);
+  void import("./player-refresh.server")
+    .then((m) => m.refreshPlayerStatus())
+    .catch(() => undefined);
   const [state, board, news, trending] = await Promise.all([
     sleeper.fetchNflState(),
     espn.fetchScoreboard(),
@@ -122,10 +124,12 @@ export const getLeagueBundle = createServerFn({ method: "GET" })
   });
 
 export const getMatchups = createServerFn({ method: "GET" })
+  .middleware([optionalAuthMiddleware])
   .validator(z.object({ leagueId: z.string(), week: z.number() }))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     if (isHostedLeague(data.leagueId)) {
       const eng = await import("@/lib/league/engine.server");
+      await eng.assertLeagueViewer(data.leagueId, context.userId);
       return eng.loadMatchups(data.leagueId, data.week);
     }
     const sleeper = await import("./sleeper.server");
@@ -133,6 +137,7 @@ export const getMatchups = createServerFn({ method: "GET" })
   });
 
 export const getTeam = createServerFn({ method: "GET" })
+  .middleware([optionalAuthMiddleware])
   .validator(
     z.object({
       leagueId: z.string(),
@@ -140,24 +145,25 @@ export const getTeam = createServerFn({ method: "GET" })
       week: z.number(),
     }),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    if (isHostedLeague(data.leagueId)) {
+      const eng = await import("@/lib/league/engine.server");
+      await eng.assertLeagueViewer(data.leagueId, context.userId);
+    }
     const team = isHostedLeague(data.leagueId)
       ? await (await import("@/lib/league/engine.server")).loadTeam(
           data.leagueId,
           data.rosterId,
           data.week,
         )
-      : await (await import("./sleeper.server")).loadTeam(
-          data.leagueId,
-          data.rosterId,
-          data.week,
-        );
+      : await (await import("./sleeper.server")).loadTeam(data.leagueId, data.rosterId, data.week);
     const { decorateRoster } = await import("./player-refresh.server");
     await decorateRoster(team.players);
     return team;
   });
 
 export const getWire = createServerFn({ method: "GET" })
+  .middleware([optionalAuthMiddleware])
   .validator(
     z.object({
       leagueId: z.string(),
@@ -166,10 +172,11 @@ export const getWire = createServerFn({ method: "GET" })
       scope: z.enum(["all", "available", "free_agent"]).optional(),
     }),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const scope = data.scope ?? "available";
     if (isHostedLeague(data.leagueId)) {
       const eng = await import("@/lib/league/engine.server");
+      await eng.assertLeagueViewer(data.leagueId, context.userId);
       return eng.loadWire(data.leagueId, data.position, data.query, scope);
     }
     const sleeper = await import("./sleeper.server");
@@ -177,10 +184,12 @@ export const getWire = createServerFn({ method: "GET" })
   });
 
 export const getActivity = createServerFn({ method: "GET" })
+  .middleware([optionalAuthMiddleware])
   .validator(z.object({ leagueId: z.string(), week: z.number() }))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     if (isHostedLeague(data.leagueId)) {
       const eng = await import("@/lib/league/engine.server");
+      await eng.assertLeagueViewer(data.leagueId, context.userId);
       return eng.loadActivity(data.leagueId, data.week);
     }
     const sleeper = await import("./sleeper.server");
@@ -217,6 +226,7 @@ export const getProjections = createServerFn({ method: "GET" })
 
 /** Whole-week starter (+ rostered) projections. Avoids a fat GET of every player. */
 export const getWeekProjections = createServerFn({ method: "GET" })
+  .middleware([optionalAuthMiddleware])
   .validator(
     z.object({
       leagueId: z.string(),
@@ -224,7 +234,7 @@ export const getWeekProjections = createServerFn({ method: "GET" })
       week: z.number(),
     }),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { isHostedLeague } = await import("./types");
     const sleeper = await import("./sleeper.server");
     const seen = new Set<string>();
@@ -255,6 +265,7 @@ export const getWeekProjections = createServerFn({ method: "GET" })
 
     if (isHostedLeague(data.leagueId)) {
       const eng = await import("@/lib/league/engine.server");
+      await eng.assertLeagueViewer(data.leagueId, context.userId);
       const { getSql } = await import("@/lib/db");
       const [pairs, spots] = await Promise.all([
         eng.loadMatchups(data.leagueId, data.week),
@@ -322,10 +333,12 @@ export const getPlayerSearch = createServerFn({ method: "GET" })
   });
 
 export const getRecap = createServerFn({ method: "GET" })
+  .middleware([optionalAuthMiddleware])
   .validator(z.object({ leagueId: z.string(), week: z.number() }))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     if (isHostedLeague(data.leagueId)) {
       const eng = await import("@/lib/league/engine.server");
+      await eng.assertLeagueViewer(data.leagueId, context.userId);
       return eng.loadDispatch(data.leagueId, data.week);
     }
     const sleeper = await import("./sleeper.server");

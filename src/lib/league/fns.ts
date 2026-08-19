@@ -112,7 +112,9 @@ export const getDraft = createServerFn({ method: "GET" })
 export const getMockPool = createServerFn({ method: "GET" })
   .middleware([optionalAuthMiddleware])
   .validator(z.object({ leagueId: z.string() }))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    const eng = await import("./engine.server");
+    await eng.assertLeagueViewer(data.leagueId, context.userId);
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const { scoringBookFor, perGameUnder } = await import("@/lib/data/projections.server");
@@ -503,7 +505,9 @@ export const getTrades = createServerFn({ method: "GET" })
 export const getTradablePicks = createServerFn({ method: "GET" })
   .middleware([optionalAuthMiddleware])
   .validator(z.object({ leagueId: z.string() }))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    const eng = await import("./engine.server");
+    await eng.assertLeagueViewer(data.leagueId, context.userId);
     const ops = await import("./ops.server");
     return ops.listTradablePicks(data.leagueId);
   });
