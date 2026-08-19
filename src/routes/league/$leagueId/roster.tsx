@@ -8,6 +8,7 @@ import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { prefetchPlayerProfile, useWarmRosterProfiles } from "@/lib/data/player-view";
 import { baseSlotLabel } from "@/lib/data/teams";
 import {
   getActivity,
@@ -77,6 +78,10 @@ function MyTeamPage() {
     staleTime: 12 * 60 * 60 * 1000,
   });
   const players = team.data?.players;
+  useWarmRosterProfiles(
+    leagueId,
+    players?.map((p) => p.player_id),
+  );
   const projections = useQuery({
     queryKey: ["projections", leagueId, week, players?.length ?? 0],
     queryFn: () =>
@@ -282,6 +287,7 @@ function MyTeamPage() {
             week={week}
             projections={projections.data}
             busy={start.isPending || sit.isPending}
+            onIntentPlayer={(p) => void prefetchPlayerProfile(qc, leagueId, p.player_id)}
             onOpenPlayer={openPlayer}
             onStart={(playerId, replaceId, slot, name, into) =>
               start.mutate({ playerId, replaceId, slot, name, into })
@@ -306,6 +312,9 @@ function MyTeamPage() {
                     <button
                       type="button"
                       className="min-w-0 flex-1 truncate rounded-md text-left text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                      onPointerEnter={() => void prefetchPlayerProfile(qc, leagueId, p.player_id)}
+                      onPointerDown={() => void prefetchPlayerProfile(qc, leagueId, p.player_id)}
+                      onFocus={() => void prefetchPlayerProfile(qc, leagueId, p.player_id)}
                       onClick={() => openPlayer(p)}
                     >
                       {p.full_name}

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { ClaimButton } from "@/components/claim-button";
@@ -14,19 +14,30 @@ import {
 } from "@/components/player-profile";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getLeagueBundle, getTeam } from "@/lib/data/fns";
-import { displayName, headshotFor, usePlayerProfile } from "@/lib/data/player-view";
+import {
+  displayName,
+  findCachedSlimPlayer,
+  headshotFor,
+  profileQueryOptions,
+  usePlayerProfile,
+} from "@/lib/data/player-view";
+import { baseSlotLabel } from "@/lib/data/teams";
 import { useClaim } from "@/lib/league/use-claim";
 import { fmtRecord } from "@/lib/utils";
-import { baseSlotLabel } from "@/lib/data/teams";
 
 export const Route = createFileRoute("/league/$leagueId/player/$playerId")({
+  loader: ({ context, params }) => {
+    void context.queryClient.prefetchQuery(profileQueryOptions(params.leagueId, params.playerId));
+  },
   component: PlayerPage,
 });
 
 function PlayerPage() {
   const { leagueId, playerId } = Route.useParams();
   const router = useRouter();
+  const qc = useQueryClient();
   const q = usePlayerProfile(leagueId, playerId);
+  const seed = q.data?.player ?? findCachedSlimPlayer(qc, leagueId, playerId);
 
   const league = useQuery({
     queryKey: ["league", leagueId],
@@ -38,7 +49,7 @@ function PlayerPage() {
   const myTeam = useQuery({
     queryKey: ["team", leagueId, rosterId, week],
     queryFn: () => getTeam({ data: { leagueId, rosterId: Number(rosterId), week } }),
-    enabled: rosterId != null && Boolean(league.data),
+    enabled: rosterId != null,
   });
 
   const p = q.data;
@@ -48,22 +59,25 @@ function PlayerPage() {
   const waiversOpen = Boolean(league.data?.ops?.waiversOpen);
   const waiverType = league.data?.ops?.waiverType ?? "faab";
 
-  if (q.isLoading) {
-    return (
-      <div className="space-y-5">
-        <Skeleton className="h-28 rounded-xl" />
-        <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
-          <Skeleton className="h-80 rounded-xl" />
-          <Skeleton className="h-64 rounded-xl" />
+  if (!p && !seed) {
+    if (q.data == null && q.isPending) {
+      return (
+        <div className="space-y-5">
+          <Skeleton className="h-28 rounded-xl" />
+          <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
+            <Skeleton className="h-80 rounded-xl" />
+            <Skeleton className="h-64 rounded-xl" />
+          </div>
         </div>
-      </div>
-    );
-  }
-  if (!p) {
+      );
+    }
     return <p className="text-sm text-muted">No profile for this player.</p>;
   }
 
-  const player = p.player;
+  const player = p?.player ?? seed;
+  if (!player) {
+    return <p className="text-sm text-muted">No profile for this player.</p>;
+  }
   const myRecord =
     league.data && rosterId != null
       ? (() => {
@@ -125,10 +139,10 @@ function PlayerPage() {
           <ProfileIdentity player={player} size="lg" context={context}>
             <div className="shrink-0">
               <ClaimButton
-                verdict={claim.verdictFor(playerId, p.ownedBy)}
+                verdict={claim.verdictFor(playerId, p?.ownedBy)}
                 leagueId={leagueId}
                 playerId={playerId}
-                ownerRosterId={p.ownedBy?.rosterId}
+                ownerRosterId={p?.ownedBy?.rosterId}
                 onClaim={() =>
                   claim.setTarget({
                     player,
@@ -142,32 +156,39 @@ function PlayerPage() {
           </ProfileIdentity>
         </div>
         <div className="border-t border-line">
-          <ProfileStats p={p} player={player} />
+          {p ? <ProfileStats p={p} player={player} /> : <Skeleton className="h-20" />}
         </div>
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr] lg:items-start">
-        <div className="flex min-w-0 flex-col gap-5">
-          <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
-            <ProfileNews notes={p.news} />
-          </section>
-          <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
-            <ProfileGameLog weekly={p.weekly} bye={p.byeWeek} perGame={p.perGame} tall />
-          </section>
-          <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
-            <ProfileSplits p={p} />
-          </section>
-        </div>
+      {p ? (
+        <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr] lg:items-start">
+          <div className="flex min-w-0 flex-col gap-5">
+            <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+              <ProfileNews notes={p.news} />
+            </section>
+            <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+              <ProfileGameLog weekly={p.weekly} bye={p.byeWeek} perGame={p.perGame} tall />
+            </section>
+            <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+              <ProfileSplits p={p} />
+            </section>
+          </div>
 
-        <div className="flex min-w-0 flex-col gap-5">
-          <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
-            <ProfileThisWeek p={p} player={player} game={mine?.game} />
-          </section>
-          <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
-            <ProfileSchedule games={p.schedule} week={p.slateWeek} />
-          </section>
+          <div className="flex min-w-0 flex-col gap-5">
+            <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+              <ProfileThisWeek p={p} player={player} game={mine?.game} />
+            </section>
+            <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+              <ProfileSchedule games={p.schedule} week={p.slateWeek} />
+            </section>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
+          <Skeleton className="h-80 rounded-xl" />
+          <Skeleton className="h-64 rounded-xl" />
+        </div>
+      )}
 
       <ClaimDialog
         open={claim.open}

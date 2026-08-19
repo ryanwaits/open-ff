@@ -23,6 +23,7 @@ export function LineupBoard({
   busy,
   showBench = true,
   onOpenPlayer,
+  onIntentPlayer,
   onStart,
   onSit,
 }: {
@@ -40,6 +41,7 @@ export function LineupBoard({
    */
   showBench?: boolean;
   onOpenPlayer?: (p: RosterPlayer) => void;
+  onIntentPlayer?: (p: RosterPlayer) => void;
   onStart: (
     playerId: string,
     replaceId: string | null,
@@ -175,6 +177,9 @@ export function LineupBoard({
                 <button
                   type="button"
                   className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                  onPointerEnter={() => onIntentPlayer?.(p)}
+                  onPointerDown={() => onIntentPlayer?.(p)}
+                  onFocus={() => onIntentPlayer?.(p)}
                   onClick={() => onOpenPlayer?.(p)}
                 >
                   <PlayerCell player={p} compact game={p.game} />
@@ -247,6 +252,9 @@ export function LineupBoard({
               <button
                 type="button"
                 className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                onPointerEnter={() => onIntentPlayer?.(p)}
+                onPointerDown={() => onIntentPlayer?.(p)}
+                onFocus={() => onIntentPlayer?.(p)}
                 onClick={() => onOpenPlayer?.(p)}
               >
                 <PlayerCell player={p} compact game={p.game} />

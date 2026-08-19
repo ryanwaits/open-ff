@@ -10,10 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getLeagueBundle, getWire } from "@/lib/data/fns";
-import { headshotFor } from "@/lib/data/player-view";
+import { headshotFor, prefetchPlayerProfile, useWarmRosterProfiles } from "@/lib/data/player-view";
 import type { WirePlayer, WireScope } from "@/lib/data/types";
 import { cancelClaim, getClaims } from "@/lib/league/fns";
 import { useClaim } from "@/lib/league/use-claim";
+import { warmQuery } from "@/lib/query-client";
 import { cn, formatPts } from "@/lib/utils";
 
 const POS = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"] as const;
@@ -31,6 +32,18 @@ type WireSearch = {
 };
 
 export const Route = createFileRoute("/league/$leagueId/wire")({
+  loaderDeps: ({ search }) => search,
+  loader: ({ context, params, deps }) => {
+    const scope = deps.scope ?? "available";
+    const pos = deps.pos ?? "ALL";
+    return warmQuery(context.queryClient, {
+      queryKey: ["wire", params.leagueId, pos, scope],
+      queryFn: () =>
+        getWire({
+          data: { leagueId: params.leagueId, position: pos, query: "", scope },
+        }),
+    });
+  },
   validateSearch: (s: Record<string, unknown>): WireSearch => {
     const out: WireSearch = {};
     if (s.scope === "all" || s.scope === "available" || s.scope === "free_agent") {
@@ -68,8 +81,6 @@ function WirePage() {
       getWire({
         data: { leagueId, position: pos, query: "", scope },
       }),
-    // A leftover All list under Free agent is worse than a brief skeleton.
-    placeholderData: undefined,
   });
   const needle = q.trim().toLowerCase();
   const rows = (wire.data ?? []).filter((p) => {
@@ -97,6 +108,10 @@ function WirePage() {
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const page = Math.min(search.page ?? 1, pageCount);
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useWarmRosterProfiles(
+    leagueId,
+    pageRows.map((p) => p.player_id),
+  );
 
   function setSearch(next: Partial<WireSearch>) {
     void navigate({
@@ -213,7 +228,7 @@ function WirePage() {
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={cn(wire.isFetching && wire.isPlaceholderData && "opacity-50")}>
             {wire.data == null ? (
               ["a", "b", "c", "d", "e", "f", "g", "h"].map((key) => (
                 <tr key={key} className="border-b border-line">
@@ -235,7 +250,11 @@ function WirePage() {
                     <Link
                       to="/league/$leagueId/player/$playerId"
                       params={{ leagueId, playerId: p.player_id }}
+                      preload="intent"
                       className="rounded-md"
+                      onPointerEnter={() => void prefetchPlayerProfile(qc, leagueId, p.player_id)}
+                      onPointerDown={() => void prefetchPlayerProfile(qc, leagueId, p.player_id)}
+                      onFocus={() => void prefetchPlayerProfile(qc, leagueId, p.player_id)}
                     >
                       <PlayerCell player={p} compact />
                     </Link>
