@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
+import { InstallCoach } from "@/components/install-coach";
 import { Shell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -47,9 +48,7 @@ function Home() {
                   to="/league/$leagueId"
                   params={{ leagueId: l.leagueId }}
                   preload="intent"
-                  onClick={() =>
-                    remember({ leagueId: l.leagueId, name: l.name, season: l.season })
-                  }
+                  onClick={() => remember({ leagueId: l.leagueId, name: l.name, season: l.season })}
                   className="group flex w-full items-center justify-between gap-3 rounded-xl bg-surface px-4 py-4 text-left shadow-[var(--shadow-border)] transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-border-hover)]"
                 >
                   <span>
@@ -105,6 +104,8 @@ function Home() {
           </Link>
         </div>
       )}
+
+      <InstallCoach />
     </Shell>
   );
 }

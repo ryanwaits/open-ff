@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import { InstallCoach } from "@/components/install-coach";
 import { Shell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,14 +49,28 @@ function JoinLeague() {
     onError: (err) => {
       const msg = err instanceof Error ? err.message : "Could not join.";
       if (msg === "Unauthorized") {
-        void navigate({ to: "/login", search: { redirect: "/join" } });
+        void navigate({
+          to: "/login",
+          search: {
+            redirect: code.trim() ? `/join?code=${encodeURIComponent(code.trim())}` : "/join",
+          },
+        });
         return;
       }
       toast(msg);
     },
   });
 
-  if (!isPending && !user) return <Navigate to="/login" search={{ redirect: "/join" }} />;
+  if (!isPending && !user) {
+    return (
+      <Navigate
+        to="/login"
+        search={{
+          redirect: code.trim() ? `/join?code=${encodeURIComponent(code.trim())}` : "/join",
+        }}
+      />
+    );
+  }
 
   const pack = preview.data;
 
@@ -129,6 +144,7 @@ function JoinLeague() {
           </Link>
         </div>
       </form>
+      <InstallCoach />
     </Shell>
   );
 }

@@ -3,10 +3,11 @@ import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tan
 import { BarChart3, House, Search, Settings, Shield, Swords } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { InviteCard, usePageOrigin } from "@/components/invite-card";
 import { Shell } from "@/components/shell";
-import { WeekPicker } from "@/components/week-picker";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WeekPicker } from "@/components/week-picker";
 import { getLeagueBundle, getMatchups, getTeam } from "@/lib/data/fns";
 import { joinLeague } from "@/lib/league/fns";
 import { useLeagueStore } from "@/lib/store";
@@ -87,6 +88,7 @@ const TABS = [
 
 function LeagueLayout() {
   const { leagueId } = Route.useParams();
+  const origin = usePageOrigin();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const search = useRouterState({ select: (s) => s.location.search as { week?: number } });
   const navigate = useNavigate();
@@ -190,10 +192,12 @@ function LeagueLayout() {
             ) : null}
           </div>
           {q.data.isCommish && q.data.inviteCode ? (
-            <p className="mt-2 font-mono text-xs text-faint">
-              Invite {q.data.inviteCode}
-              {q.data.locked ? " · locked demo" : ""}
-            </p>
+            <div>
+              <InviteCard code={q.data.inviteCode} origin={origin} />
+              {q.data.locked ? (
+                <p className="mt-1 font-mono text-xs text-faint">locked demo</p>
+              ) : null}
+            </div>
           ) : null}
         </header>
       ) : null}

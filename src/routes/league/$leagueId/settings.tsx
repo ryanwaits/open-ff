@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { InviteCard, usePageOrigin } from "@/components/invite-card";
+import { ScheduleDesk } from "@/components/schedule-desk";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,7 +21,6 @@ import { getLeagueBundle } from "@/lib/data/fns";
 import { claimRoster, getSettings, saveSettings, processWaivers, advanceWeek } from "@/lib/league/fns";
 import { defaultPlayoffByes, describeBracket } from "@/lib/league/playoffs";
 import { cn } from "@/lib/utils";
-import { ScheduleDesk } from "@/components/schedule-desk";
 
 export const Route = createFileRoute("/league/$leagueId/settings")({
   component: SettingsPage,
@@ -29,6 +30,7 @@ const GROUPS = [...new Set(SCORING_FIELDS.map((f) => f.group))];
 
 function SettingsPage() {
   const { leagueId } = Route.useParams();
+  const origin = usePageOrigin();
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: ["settings", leagueId],
@@ -201,9 +203,7 @@ function SettingsPage() {
             />
           </label>
         </div>
-        {q.data.inviteCode ? (
-          <p className="mt-3 font-mono text-xs text-faint">Invite {q.data.inviteCode}</p>
-        ) : null}
+        {q.data.inviteCode ? <InviteCard code={q.data.inviteCode} origin={origin} /> : null}
       </section>
 
       <section>

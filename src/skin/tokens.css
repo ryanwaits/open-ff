@@ -1,0 +1,122 @@
+/* Host-level skin. Literal hex / shadow values only. Tailwind @theme stays
+   in styles.css and references these names. */
+
+:root {
+  /* surface */
+  --paper: #f7f4ea;
+  --paper-raised: #fffdf7;
+  --paper-sunken: #f0ece0;
+  --band: #f2eee2;
+
+  /* ink */
+  --ink: #17191d;
+  --ink-2: #5b5e60;
+  --ink-3: #8a8b83;
+
+  /* structure */
+  --hairline: #e4dfd1;
+  --hairline-strong: #d2ccba;
+
+  /* identity — green */
+  --brand: #6fdc93;
+  --brand-deep: #3fa765;
+  --brand-strong: #1d7a45;
+  --brand-ink: #12251a;
+  --highlight: #a9e9bd;
+
+  /* the only alarm colour. Wins are not coloured: winning is the default
+     state, losing is the exception that gets marked. */
+  --alarm: #c8503a;
+  --caution: #c4921a;
+
+  --lift: 0 10px 26px -16px rgb(23 25 29 / 0.3);
+  --lift-hover: 0 16px 34px -18px rgb(23 25 29 / 0.4);
+  --press-cast: rgb(63 167 101 / 0.4);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14161a;
+    --paper-raised: #1b1e22;
+    --paper-sunken: #23272c;
+    --band: #1a1d21;
+
+    --ink: #f2f1ea;
+    --ink-2: #a8aba6;
+    --ink-3: #7a7e7b;
+
+    --hairline: #2b2f34;
+    --hairline-strong: #3a3f45;
+
+    --brand: #64d68c;
+    --brand-deep: #2f8f55;
+    --brand-strong: #7fe3a2;
+    --brand-ink: #0e1f15;
+    --highlight: #2c5c3e;
+
+    --alarm: #e4705a;
+    --caution: #e3b341;
+
+    --lift: 0 10px 26px -16px rgb(0 0 0 / 0.7);
+    --lift-hover: 0 16px 34px -18px rgb(0 0 0 / 0.8);
+    --press-cast: rgb(0 0 0 / 0.5);
+  }
+}
+
+[data-theme="dark"] {
+  --paper: #14161a;
+  --paper-raised: #1b1e22;
+  --paper-sunken: #23272c;
+  --band: #1a1d21;
+
+  --ink: #f2f1ea;
+  --ink-2: #a8aba6;
+  --ink-3: #7a7e7b;
+
+  --hairline: #2b2f34;
+  --hairline-strong: #3a3f45;
+
+  --brand: #64d68c;
+  --brand-deep: #2f8f55;
+  --brand-strong: #7fe3a2;
+  --brand-ink: #0e1f15;
+  --highlight: #2c5c3e;
+
+  --alarm: #e4705a;
+  --caution: #e3b341;
+
+  --lift: 0 10px 26px -16px rgb(0 0 0 / 0.7);
+  --lift-hover: 0 16px 34px -18px rgb(0 0 0 / 0.8);
+  --press-cast: rgb(0 0 0 / 0.5);
+}
+
+/* --- accent ramp: blue ---------------------------------------------------- */
+
+[data-accent="blue"] {
+  --brand: #74bdf6;
+  --brand-deep: #3b8fce;
+  --brand-strong: #14639f;
+  --brand-ink: #0b2439;
+  --highlight: #b0dcfa;
+  --press-cast: rgb(59 143 206 / 0.4);
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-accent="blue"]:not([data-theme="light"]) {
+    --brand: #6bb6f2;
+    --brand-deep: #2e76b4;
+    --brand-strong: #93cdf8;
+    --brand-ink: #08192a;
+    --highlight: #234a6b;
+    --press-cast: rgb(0 0 0 / 0.5);
+  }
+}
+
+[data-accent="blue"][data-theme="dark"] {
+  --brand: #6bb6f2;
+  --brand-deep: #2e76b4;
+  --brand-strong: #93cdf8;
+  --brand-ink: #08192a;
+  --highlight: #234a6b;
+  --press-cast: rgb(0 0 0 / 0.5);
+}

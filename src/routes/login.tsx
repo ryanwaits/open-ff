@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { authClient, authEnabled, signIn } from "@/lib/auth/client";
 import { LOCAL_SEED } from "@/lib/auth/local-seed";
 import { configuredGrokProviders } from "@/lib/auth/providers";
+import { brand } from "@/skin/brand";
 
 type Search = { redirect?: string };
 
@@ -63,7 +64,7 @@ function Login() {
     <main className="grid min-h-dvh place-items-center bg-bg px-6 text-fg">
       <div className="w-full max-w-sm">
         <Link to="/" className="font-display text-3xl tracking-tight">
-          open-ff
+          {brand.name}
         </Link>
         <p className="mt-2 text-sm text-muted">
           This is your open-ff account — not Sleeper, not ESPN. Email works here with nothing else

@@ -1,18 +1,14 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import {
-  createRootRouteWithContext,
-  HeadContent,
-  Outlet,
-  Scripts,
-} from "@tanstack/react-router";
+import { createRootRouteWithContext, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { Toaster } from "sonner";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { AuthProvider } from "@/lib/auth/provider";
 import type { RouterContext } from "@/lib/query-client";
 import { NO_FLASH_SCRIPT, useTheme } from "@/lib/theme";
+import { brand } from "@/skin/brand";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "Ledger";
+const APP_NAME = brand.name;
 const host = import.meta.env.VITE_PUBLIC_HOSTNAME;
 const ogImage = host
   ? `https://og.grok.me/v1/card.png?host=${encodeURIComponent(host)}&title=${encodeURIComponent(APP_NAME)}`
@@ -22,11 +18,12 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: APP_NAME },
       {
         name: "description",
-        content: "A custom fantasy football desk for your leagues — standings, matchups, scores, and weekly recaps.",
+        content:
+          "A custom fantasy football desk for your leagues — standings, matchups, scores, and weekly recaps.",
       },
       { name: "apple-mobile-web-app-title", content: APP_NAME },
       { name: "theme-color", media: "(prefers-color-scheme: light)", content: "#f7f4ea" },
