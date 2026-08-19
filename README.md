@@ -18,7 +18,8 @@ Open [http://127.0.0.1:8080](http://127.0.0.1:8080).
 2. Go to `/new`, make a league, and invite friends to this origin.
 3. Without `DATABASE_URL`, the league lives in `data/pglite` and survives
    restart. For Postgres, set `DATABASE_URL=postgres://…` and run
-   `bun run db:migrate`.
+   `bun run db:migrate`. If `bun run dev` dies with a PGLite `Aborted()`
+   WASM panic, the WAL checkpoint is corrupt — `bun run db:repair`.
 
 A local seed account is created on an empty email table. Copy
 `.env.example` to `.env` and fill only what you need.

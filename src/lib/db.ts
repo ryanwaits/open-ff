@@ -46,6 +46,8 @@ const globalRef = globalThis as typeof globalThis & {
   __pgSqlPromise__?: Promise<Sql>;
   __pgliteInstance__?: Promise<import("@electric-sql/pglite").PGlite>;
   __pgliteMigrateChain__?: Promise<void>;
+  __pgliteShutdownInstalled__?: boolean;
+  __pgliteClosing__?: boolean;
 };
 
 /**
@@ -124,13 +126,14 @@ async function createPgliteSql(): Promise<Sql> {
       },
     });
     await pg.waitReady;
+    installPgliteShutdownHooks();
     await pg.exec(
       "create table if not exists _migrations (name text primary key, applied_at timestamptz not null default now())",
     );
     return pg;
   })().catch((err) => {
     globalRef.__pgliteInstance__ = undefined;
-    throw err;
+    throw wrapPgliteBootError(err);
   });
   const pg = await globalRef.__pgliteInstance__;
 
@@ -233,6 +236,60 @@ export async function getPglite(): Promise<import("@electric-sql/pglite").PGlite
 export function ensureDbReady(): Promise<void> {
   if (dbSource !== "pglite") return Promise.resolve();
   return getSql().then(() => undefined);
+}
+
+/**
+ * Flush and close the on-disk PGLite instance. Unclean process death leaves a
+ * corrupt WAL checkpoint (`PANIC: could not locate a valid checkpoint record`)
+ * that bricks `bun run dev` until `bun run db:repair`.
+ */
+export async function closePglite(): Promise<void> {
+  if (dbSource !== "pglite") return;
+  if (globalRef.__pgliteClosing__) return;
+  globalRef.__pgliteClosing__ = true;
+  const pending = globalRef.__pgliteInstance__;
+  globalRef.__pgliteInstance__ = undefined;
+  globalRef.__pgliteMigrateChain__ = undefined;
+  globalRef.__pgSqlPromise__ = undefined;
+  sqlPromise = null;
+  globalBoot.__pgBootstrapPromise__ = undefined;
+  try {
+    if (pending) await (await pending).close();
+  } catch {
+    // already dead / never finished opening
+  } finally {
+    globalRef.__pgliteClosing__ = false;
+  }
+}
+
+function wrapPgliteBootError(err: unknown): Error {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (!/Aborted/i.test(msg)) {
+    return err instanceof Error ? err : new Error(msg);
+  }
+  return new Error(
+    "PGLite data dir failed to open (corrupt WAL after an unclean shutdown). " +
+      "Your files are still in data/pglite. Repair with: bun run db:repair",
+    { cause: err },
+  );
+}
+
+function installPgliteShutdownHooks(): void {
+  if (globalRef.__pgliteShutdownInstalled__) return;
+  globalRef.__pgliteShutdownInstalled__ = true;
+  process.once("beforeExit", () => {
+    void closePglite();
+  });
+  // Vite owns SIGINT during `bun run dev` and wraps `server.close` to await
+  // closePglite(). Standalone bun/node importers must close+exit themselves —
+  // a SIGINT listener without exit() would swallow Ctrl-C.
+  const viteDev = process.argv.some((a) => /vite/.test(a));
+  if (viteDev) return;
+  const stop = (code: number) => {
+    void closePglite().finally(() => process.exit(code));
+  };
+  process.once("SIGINT", () => stop(130));
+  process.once("SIGTERM", () => stop(143));
 }
 
 // Server-only eager start: kick PGLite bootstrap as soon as this module loads in

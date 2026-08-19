@@ -20,10 +20,21 @@ function pgliteBootstrapPlugin(): Plugin {
       try {
         const mod = (await server.ssrLoadModule("/src/lib/db.ts")) as {
           ensureDbReady?: () => Promise<void>;
+          closePglite?: () => Promise<void>;
         };
         if (typeof mod.ensureDbReady === "function") {
           await mod.ensureDbReady();
         }
+        // Await close on Vite teardown so Ctrl-C flushes the WAL checkpoint.
+        // A SIGINT that process.exit()s first leaves `data/pglite` unopenable.
+        const origClose = server.close.bind(server);
+        server.close = async () => {
+          try {
+            await origClose();
+          } finally {
+            await mod.closePglite?.();
+          }
+        };
       } catch (err) {
         console.error("[app-builder] DB bootstrap failed:", err);
         throw err;
