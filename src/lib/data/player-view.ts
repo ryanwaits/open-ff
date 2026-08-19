@@ -49,6 +49,15 @@ export function findCachedSlimPlayer(
   leagueId: string,
   playerId: string,
 ): SlimPlayer | null {
+  return findCachedWirePlayer(client, leagueId, playerId);
+}
+
+/** Wire row already has season pts + pos rank — enough to paint the stats strip. */
+export function findCachedWirePlayer(
+  client: QueryClient,
+  leagueId: string,
+  playerId: string,
+): SlimPlayer | WirePlayer | null {
   const profile = client.getQueryData<Profile>(profileQueryKey(leagueId, playerId));
   if (profile?.player) return profile.player;
   for (const q of client.getQueryCache().findAll({ queryKey: ["team", leagueId] })) {
@@ -64,6 +73,10 @@ export function findCachedSlimPlayer(
   return null;
 }
 
+export function isWirePlayer(p: SlimPlayer | WirePlayer | null): p is WirePlayer {
+  return Boolean(p && "pts" in p);
+}
+
 /** Background-warm the lineup so the drawer is a cache hit. Stagger so paint stays first. */
 export function useWarmRosterProfiles(leagueId: string, playerIds: string[] | undefined) {
   const qc = useQueryClient();
@@ -72,12 +85,9 @@ export function useWarmRosterProfiles(leagueId: string, playerIds: string[] | un
     if (!key || typeof window === "undefined") return;
     const ids = key.split("\0");
     const timers = ids.slice(0, 16).map((id, i) =>
-      window.setTimeout(
-        () => {
-          void prefetchPlayerProfile(qc, leagueId, id);
-        },
-        250 + i * 90,
-      ),
+      window.setTimeout(() => {
+        void prefetchPlayerProfile(qc, leagueId, id);
+      }, i * 80),
     );
     return () => {
       for (const t of timers) window.clearTimeout(t);

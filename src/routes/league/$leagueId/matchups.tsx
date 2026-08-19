@@ -13,6 +13,7 @@ import { type TicketTarget, WagerTicket } from "@/components/wager-ticket";
 import { fantasyStatKind } from "@/lib/data/calendar";
 import { getLeagueBundle, getMatchups, getWeekProjections, getWeekStats } from "@/lib/data/fns";
 import { liveStatLine, paintMatchups, pairIsProjected } from "@/lib/data/matchup-view";
+import { useWarmRosterProfiles } from "@/lib/data/player-view";
 import { baseSlotLabel } from "@/lib/data/teams";
 import { useDemoStore, useSimPhase } from "@/lib/demo/store";
 import { getBook, getClaims } from "@/lib/league/fns";
@@ -174,6 +175,15 @@ function MatchupsPage() {
   const [picked, setPicked] = useState<number | null>(null);
   const selected = picked != null && picked < shown.length ? picked : defaultIndex;
   const pair = shown[selected] ?? null;
+  useWarmRosterProfiles(
+    leagueId,
+    pair
+      ? [pair.home, pair.away]
+          .flatMap((side) => side?.starters ?? [])
+          .map((s) => s.playerId)
+          .filter((id): id is string => Boolean(id))
+      : undefined,
+  );
 
   useEffect(() => {
     setPicked(null);
@@ -393,6 +403,7 @@ function MatchupsPage() {
                             liveHome={rawShown[selected]?.home.points ?? 0}
                             liveAway={rawShown[selected]?.away?.points ?? 0}
                             stats={displayStats}
+                            leagueId={leagueId}
                             onPlayer={(line, side) =>
                               openPlayer(
                                 watchFromLine(

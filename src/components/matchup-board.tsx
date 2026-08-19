@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { PlayerCell } from "@/components/player-cell";
@@ -5,6 +6,7 @@ import type { WatchTarget } from "@/components/player-watch";
 import { watchFromLine } from "@/components/player-watch";
 import { SlotPts, TeamTotal } from "@/components/slot-pts";
 import { liveStatLine, sideIsProjected } from "@/lib/data/matchup-view";
+import { profileIntent } from "@/lib/data/player-view";
 import { baseSlotLabel } from "@/lib/data/teams";
 import type { MatchupSide, StarterLine } from "@/lib/data/types";
 import { cn, formatPts } from "@/lib/utils";
@@ -133,6 +135,7 @@ export function MatchupBoard({
               prev={prevHome?.starters[i] ?? null}
               bag={r.aBag}
               statLine={r.aLine}
+              leagueId={leagueId}
               onPlayer={onPlayer}
             />
             <span className="flex items-center justify-center border-x border-line bg-raised/45">
@@ -146,6 +149,7 @@ export function MatchupBoard({
               prev={prevAway?.starters[i] ?? null}
               bag={r.bBag}
               statLine={r.bLine}
+              leagueId={leagueId}
               onPlayer={onPlayer}
               flip
             />
@@ -209,6 +213,7 @@ function Half({
   prev,
   bag,
   statLine,
+  leagueId,
   onPlayer,
   flip = false,
 }: {
@@ -217,15 +222,19 @@ function Half({
   prev: StarterLine | null;
   bag: Record<string, number> | undefined;
   statLine: string | null;
+  leagueId: string;
   onPlayer: (t: WatchTarget | null) => void;
   flip?: boolean;
 }) {
+  const qc = useQueryClient();
   const bump = line && !line.forecast ? (line.points ?? 0) - (prev?.points ?? 0) : 0;
+  const intent = line?.player ? profileIntent(qc, leagueId, line.player.player_id) : {};
 
   return (
     <button
       type="button"
       disabled={!line?.player || !side}
+      {...intent}
       onClick={() => line && side && onPlayer(watchFromLine(line, side.teamName, statLine, bag))}
       className={cn(
         "flex min-w-0 items-center gap-2 px-5 py-2 text-left transition-colors duration-300",

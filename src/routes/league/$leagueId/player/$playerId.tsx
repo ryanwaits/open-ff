@@ -16,8 +16,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getLeagueBundle, getTeam } from "@/lib/data/fns";
 import {
   displayName,
-  findCachedSlimPlayer,
+  findCachedWirePlayer,
   headshotFor,
+  isWirePlayer,
   profileQueryOptions,
   usePlayerProfile,
 } from "@/lib/data/player-view";
@@ -37,7 +38,7 @@ function PlayerPage() {
   const router = useRouter();
   const qc = useQueryClient();
   const q = usePlayerProfile(leagueId, playerId);
-  const seed = q.data?.player ?? findCachedSlimPlayer(qc, leagueId, playerId);
+  const seed = q.data?.player ?? findCachedWirePlayer(qc, leagueId, playerId);
 
   const league = useQuery({
     queryKey: ["league", leagueId],
@@ -55,7 +56,7 @@ function PlayerPage() {
   const p = q.data;
   const mine = myTeam.data?.players.find((r) => r.player_id === playerId);
   const claim = useClaim(leagueId);
-  const ownedBy = p?.ownedBy ?? null;
+  const ownedBy = p?.ownedBy ?? (isWirePlayer(seed) ? seed.ownedBy : null);
   const waiversOpen = Boolean(league.data?.ops?.waiversOpen);
   const waiverType = league.data?.ops?.waiverType ?? "faab";
 
@@ -156,7 +157,19 @@ function PlayerPage() {
           </ProfileIdentity>
         </div>
         <div className="border-t border-line">
-          {p ? <ProfileStats p={p} player={player} /> : <Skeleton className="h-20" />}
+          <ProfileStats
+            p={p}
+            player={player}
+            hint={
+              isWirePlayer(seed)
+                ? {
+                    season: league.data?.league.season,
+                    points: seed.pts,
+                    posRank: seed.rank,
+                  }
+                : undefined
+            }
+          />
         </div>
       </section>
 

@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowUpRight, X } from "lucide-react";
 import { useEffect } from "react";
@@ -11,8 +12,13 @@ import {
   ProfileStats,
   ProfileThisWeek,
 } from "@/components/player-profile";
-import { usePlayerProfile } from "@/lib/data/player-view";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  findCachedWirePlayer,
+  isWirePlayer,
+  prefetchPlayerProfile,
+  usePlayerProfile,
+} from "@/lib/data/player-view";
 import type { GameChip, SlimPlayer } from "@/lib/data/types";
 
 export type SheetTarget = {
@@ -82,8 +88,13 @@ function Body({
   onClose: () => void;
 }) {
   const { player, game, context } = target;
+  const qc = useQueryClient();
   const q = usePlayerProfile(leagueId, player.player_id);
   const p = q.data;
+  const cached = findCachedWirePlayer(qc, leagueId, player.player_id);
+  const hint = isWirePlayer(cached)
+    ? { points: cached.pts, posRank: cached.rank }
+    : undefined;
 
   return (
     <>
@@ -101,6 +112,8 @@ function Body({
         <Link
           to="/league/$leagueId/player/$playerId"
           params={{ leagueId, playerId: player.player_id }}
+          preload="intent"
+          onPointerEnter={() => void prefetchPlayerProfile(qc, leagueId, player.player_id)}
           onClick={onClose}
           className="mt-3 inline-flex items-center gap-1.5 rounded-pill bg-raised px-3.5 py-1.5 text-[13px] font-semibold hover:bg-line"
         >
@@ -110,24 +123,28 @@ function Body({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        {q.data == null && q.isPending ? (
-          <div className="space-y-3 p-5">
-            <Skeleton className="h-20 rounded-lg" />
-            <Skeleton className="h-40 rounded-lg" />
-          </div>
-        ) : !p ? (
+        {q.isError && !p ? (
           <p className="p-5 text-sm text-muted">No profile for this player yet.</p>
         ) : (
           <>
             <div className="border-b border-line">
-              <ProfileStats p={p} player={player} />
+              <ProfileStats p={p} player={player} hint={hint} />
             </div>
-            <ProfileNews notes={p.news} />
-            <ProfileThisWeek p={p} player={player} game={game} />
-            <ProfileSchedule games={p.schedule} week={p.slateWeek} compact />
-            <ProfileGameLog weekly={p.weekly} bye={p.byeWeek} perGame={p.perGame} />
-            <ProfileSplits p={p} />
-            <div className="h-6" />
+            {p ? (
+              <>
+                <ProfileNews notes={p.news} />
+                <ProfileThisWeek p={p} player={player} game={game} />
+                <ProfileSchedule games={p.schedule} week={p.slateWeek} compact />
+                <ProfileGameLog weekly={p.weekly} bye={p.byeWeek} perGame={p.perGame} />
+                <ProfileSplits p={p} />
+                <div className="h-6" />
+              </>
+            ) : (
+              <div className="space-y-3 p-5">
+                <Skeleton className="h-24 rounded-lg" />
+                <Skeleton className="h-36 rounded-lg" />
+              </div>
+            )}
           </>
         )}
       </div>

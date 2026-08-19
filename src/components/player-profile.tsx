@@ -60,25 +60,44 @@ export function ProfileIdentity({
             {book.join(" · ")}
           </p>
         ) : null}
-        {context?.label ? (
-          <p className="mt-1 text-[13px] text-muted">{context.label}</p>
-        ) : null}
+        {context?.label ? <p className="mt-1 text-[13px] text-muted">{context.label}</p> : null}
       </div>
       {children}
     </div>
   );
 }
 
-export function ProfileStats({ p, player }: { p: Profile; player: SlimPlayer }) {
+export type StatsHint = {
+  season?: string;
+  points?: number | null;
+  perGame?: number | null;
+  posRank?: number | null;
+  gamesPlayed?: number | null;
+};
+
+export function ProfileStats({
+  p,
+  player,
+  hint,
+}: {
+  p?: Profile | null;
+  player: SlimPlayer;
+  hint?: StatsHint;
+}) {
+  const season = p?.season ?? hint?.season ?? "";
+  const points = p?.points ?? hint?.points;
+  const perGame = p?.perGame ?? hint?.perGame;
+  const posRank = p?.posRank ?? hint?.posRank;
+  const games = p?.gamesPlayed ?? hint?.gamesPlayed;
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4">
-      <Stat value={formatPts(p.points, 1)} label={`${p.season} pts`} />
-      <Stat value={formatPts(p.perGame, 1)} label="per game" />
       <Stat
-        value={p.posRank ? `${player.position ?? ""}${p.posRank}` : "—"}
-        label="position rank"
+        value={points != null ? formatPts(points, 1) : "—"}
+        label={`${season || "Season"} pts`}
       />
-      <Stat value={String(p.gamesPlayed)} label="games" />
+      <Stat value={perGame != null ? formatPts(perGame, 1) : "—"} label="per game" />
+      <Stat value={posRank ? `${player.position ?? ""}${posRank}` : "—"} label="position rank" />
+      <Stat value={games != null ? String(games) : "—"} label="games" />
     </div>
   );
 }
@@ -165,12 +184,7 @@ export function ProfileNews({ notes }: { notes: PlayerNote[] }) {
         </p>
         <p className="mt-1 text-sm font-semibold leading-snug">{lead.headline}</p>
         {body ? (
-          <p
-            className={cn(
-              "mt-1 text-[13px] leading-relaxed text-muted",
-              !open && "line-clamp-3",
-            )}
-          >
+          <p className={cn("mt-1 text-[13px] leading-relaxed text-muted", !open && "line-clamp-3")}>
             {body}
           </p>
         ) : null}
@@ -265,7 +279,15 @@ function noteWhen(raw: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export function ProfileThisWeek({ p, player, game }: { p: Profile; player: SlimPlayer; game?: GameChip | null }) {
+export function ProfileThisWeek({
+  p,
+  player,
+  game,
+}: {
+  p: Profile;
+  player: SlimPlayer;
+  game?: GameChip | null;
+}) {
   const bye = p.schedule.find((g) => g.bye)?.week ?? p.byeWeek;
   const slate = p.schedule.find((g) => g.week === p.slateWeek) ?? null;
   const opp = game?.opp ?? (slate?.bye ? "Bye" : slate?.opp) ?? "—";
@@ -311,11 +333,34 @@ function slateDetail(slate: PlayerScheduleGame | null): string {
  * rushing touchdowns is a fact worth reading.
  */
 const SPLIT_GROUPS: { keys: [string, string][] }[] = [
-  { keys: [["pass_yd", "Passing yards"], ["pass_td", "Passing TD"], ["pass_int", "Interceptions"]] },
-  { keys: [["rush_yd", "Rushing yards"], ["rush_td", "Rushing TD"]] },
-  { keys: [["rec", "Receptions"], ["rec_yd", "Receiving yards"], ["rec_td", "Receiving TD"]] },
+  {
+    keys: [
+      ["pass_yd", "Passing yards"],
+      ["pass_td", "Passing TD"],
+      ["pass_int", "Interceptions"],
+    ],
+  },
+  {
+    keys: [
+      ["rush_yd", "Rushing yards"],
+      ["rush_td", "Rushing TD"],
+    ],
+  },
+  {
+    keys: [
+      ["rec", "Receptions"],
+      ["rec_yd", "Receiving yards"],
+      ["rec_td", "Receiving TD"],
+    ],
+  },
   { keys: [["fum_lost", "Fumbles lost"]] },
-  { keys: [["fgm", "Field goals"], ["xpm", "PATs"], ["fgm_50p", "FG 50+"]] },
+  {
+    keys: [
+      ["fgm", "Field goals"],
+      ["xpm", "PATs"],
+      ["fgm_50p", "FG 50+"],
+    ],
+  },
   {
     keys: [
       ["sack", "Sacks"],
@@ -330,9 +375,9 @@ const SPLIT_GROUPS: { keys: [string, string][] }[] = [
 ];
 
 export function ProfileSplits({ p }: { p: Profile }) {
-  const groups = SPLIT_GROUPS.map((g) =>
-    g.keys.filter(([key]) => p.splits[key] != null),
-  ).filter((rows) => rows.some(([key]) => (p.splits[key] ?? 0) !== 0));
+  const groups = SPLIT_GROUPS.map((g) => g.keys.filter(([key]) => p.splits[key] != null)).filter(
+    (rows) => rows.some(([key]) => (p.splits[key] ?? 0) !== 0),
+  );
 
   if (groups.length === 0) {
     return (
@@ -408,21 +453,13 @@ export function ProfileGameLog({
             }
             const met = bar.kind === "actual" && bar.pts + 0.05 >= perGame;
             const fill =
-              bar.kind === "proj"
-                ? "bg-faint/35"
-                : met
-                  ? "bg-accent-strong"
-                  : "bg-faint";
+              bar.kind === "proj" ? "bg-faint/35" : met ? "bg-accent-strong" : "bg-faint";
             const label =
               bar.kind === "proj"
                 ? `Week ${week} · ${formatPts(bar.pts, 1)} proj`
                 : `Week ${week} · ${formatPts(bar.pts, 1)}${met ? "" : " · below line"}`;
             return (
-              <span
-                key={week}
-                title={label}
-                className="relative flex h-full flex-1 items-end"
-              >
+              <span key={week} title={label} className="relative flex h-full flex-1 items-end">
                 {best != null && bar.kind === "actual" && bar.pts === best ? (
                   <span className="absolute inset-x-0 -top-1 text-center font-mono text-[9px] font-semibold">
                     {formatPts(bar.pts, 1)}
@@ -443,7 +480,10 @@ export function ProfileGameLog({
         </div>
         <div className="mt-1 flex gap-[2px] border-t border-line pt-1">
           {weekly.map((_, i) => (
-            <span key={i} className="flex-1 text-center font-mono text-[8px] leading-none text-faint">
+            <span
+              key={i}
+              className="flex-1 text-center font-mono text-[8px] leading-none text-faint"
+            >
               {i % 2 === 0 ? i + 1 : ""}
             </span>
           ))}
@@ -456,5 +496,3 @@ export function ProfileGameLog({
     </Section>
   );
 }
-
-

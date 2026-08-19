@@ -59,6 +59,15 @@ function loadSeasonSeed(): StatSeed[] {
 const SEED_SEASON = "2025";
 const WEEKS = 18;
 
+let weeklyPpr: Record<string, Record<string, number>> | null = null;
+function loadWeeklyPpr(): Record<string, Record<string, number>> {
+  if (weeklyPpr) return weeklyPpr;
+  weeklyPpr = JSON.parse(
+    readFileSync(join(process.cwd(), "data/weekly-ppr-2025.json"), "utf8"),
+  ) as Record<string, Record<string, number>>;
+  return weeklyPpr;
+}
+
 /** Both league kinds already surface the resolved book on the bundle. */
 async function bookFor(leagueId: string): Promise<ScoringBook> {
   if (isHostedLeague(leagueId)) {
@@ -117,7 +126,13 @@ export async function loadPlayerProfile(input: {
         return {
           id: r.player_id,
           p,
-          pts: seasonPoints(book, p?.position ?? null, r, { ...stripMeta(r), ...stripMeta(extra) }, extra),
+          pts: seasonPoints(
+            book,
+            p?.position ?? null,
+            r,
+            { ...stripMeta(r), ...stripMeta(extra) },
+            extra,
+          ),
         };
       })
       .filter((r) => r.p?.position === player.position);
@@ -192,7 +207,10 @@ async function loadSlate(player: SlimPlayer): Promise<{
   const team = playerTeam(player);
   const rw = await import("./rotowire.server");
   const [stored, espnNotes, schedule, byeWeek] = await Promise.all([
-    rw.refreshRotowireFeed().then(() => rw.notesForPlayer(player.player_id)).catch(() => []),
+    rw
+      .refreshRotowireFeed()
+      .then(() => rw.notesForPlayer(player.player_id))
+      .catch(() => []),
     espnId ? espn.fetchPlayerNotes(espnId, year).catch(() => []) : Promise.resolve([]),
     team ? espn.fetchTeamSchedule(team, year).catch(() => []) : Promise.resolve([]),
     byeWeekFor(season, team),
@@ -206,10 +224,7 @@ function mergeNotes(primary: PlayerNote[], backup: PlayerNote[]): PlayerNote[] {
   return [...primary, ...extra].slice(0, 8);
 }
 
-function withBye(
-  games: PlayerScheduleGame[],
-  byeWeek: number | null,
-): PlayerScheduleGame[] {
+function withBye(games: PlayerScheduleGame[], byeWeek: number | null): PlayerScheduleGame[] {
   if (!byeWeek || games.some((g) => g.week === byeWeek)) return games;
   const bye: PlayerScheduleGame = {
     week: byeWeek,
@@ -232,24 +247,31 @@ async function ownerOf(
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
     const row = (
-      await sql<{ roster_id: number }>`
-        select roster_id from ff_spots
-        where league_id = ${leagueId} and player_id = ${playerId}
+      await sql<{ roster_id: number; team_name: string | null }>`
+        select s.roster_id, r.team_name
+        from ff_spots s
+        left join ff_rosters r
+          on r.league_id = s.league_id and r.roster_id = s.roster_id
+        where s.league_id = ${leagueId} and s.player_id = ${playerId}
         limit 1
       `
     )[0];
     if (!row) return null;
-    const eng = await import("@/lib/league/engine.server");
-    const bundle = await eng.loadLeagueBundle(leagueId, null, { tick: false });
-    const seat = bundle.standings.find((s) => s.rosterId === row.roster_id);
-    return { rosterId: row.roster_id, teamName: seat?.teamName ?? `Roster ${row.roster_id}` };
+    return { rosterId: row.roster_id, teamName: row.team_name ?? `Roster ${row.roster_id}` };
   } catch {
     // A league whose tables have not been created yet simply has no owners.
     return null;
   }
 }
 
-const META_KEYS = new Set(["player_id", "gp", "pts_ppr", "pts_half_ppr", "pts_std", "pos_rank_ppr"]);
+const META_KEYS = new Set([
+  "player_id",
+  "gp",
+  "pts_ppr",
+  "pts_half_ppr",
+  "pts_std",
+  "pos_rank_ppr",
+]);
 function stripMeta(row: Record<string, unknown> | StatSeed): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(row)) {
@@ -267,15 +289,16 @@ function seasonPoints(
   live: Record<string, number>,
 ): number {
   const preset = presetOf(book);
-  const canned = Number(
-    seed
-      ? preset === "half"
-        ? seed.pts_half_ppr
-        : preset === "std"
-          ? seed.pts_std
-          : seed.pts_ppr
-      : (live.pts_ppr ?? live.pts_std ?? 0),
-  ) || 0;
+  const canned =
+    Number(
+      seed
+        ? preset === "half"
+          ? seed.pts_half_ppr
+          : preset === "std"
+            ? seed.pts_std
+            : seed.pts_ppr
+        : (live.pts_ppr ?? live.pts_std ?? 0),
+    ) || 0;
   if (isDefense(pos) || pos === "K") return canned || applyBook(book, splits);
   return applyBook(book, splits) || canned;
 }
@@ -291,6 +314,15 @@ async function weeklyLine(
   playerId: string,
   book: ScoringBook,
 ): Promise<(number | null)[]> {
+  // 2025 PPR is already on disk. Hitting Sleeper for all 18 weeks is what made
+  // a cold profile click wait a second or two before the stats row painted.
+  if (season === SEED_SEASON && presetOf(book) === "ppr") {
+    const weekly = loadWeeklyPpr();
+    return Array.from({ length: WEEKS }, (_, i) => {
+      const v = weekly[String(i + 1)]?.[playerId];
+      return typeof v === "number" ? Math.round(v * 10) / 10 : null;
+    });
+  }
   const live = await import("./live.server");
   const weeks = await Promise.all(
     Array.from({ length: WEEKS }, async (_, i) => {
@@ -306,5 +338,3 @@ async function weeklyLine(
   );
   return weeks;
 }
-
-

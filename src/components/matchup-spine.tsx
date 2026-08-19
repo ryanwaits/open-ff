@@ -1,7 +1,9 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { InjuryMark } from "@/components/player-cell";
 import { TeamTotal } from "@/components/slot-pts";
 import { liveStatLine, sideIsProjected } from "@/lib/data/matchup-view";
+import { profileIntent } from "@/lib/data/player-view";
 import { baseSlotLabel, dstLabel } from "@/lib/data/teams";
 import type { MatchupSide, SlimPlayer, StarterLine } from "@/lib/data/types";
 import { cn, formatPts } from "@/lib/utils";
@@ -24,6 +26,7 @@ export function MatchupSpine({
   liveHome = 0,
   liveAway = 0,
   stats,
+  leagueId,
   onPlayer,
 }: {
   home: MatchupSide;
@@ -31,6 +34,7 @@ export function MatchupSpine({
   liveHome?: number;
   liveAway?: number;
   stats: Record<string, Record<string, number>>;
+  leagueId: string;
   onPlayer: (line: StarterLine, side: MatchupSide) => void;
 }) {
   const [open, setOpen] = useState<number | null>(null);
@@ -106,11 +110,17 @@ export function MatchupSpine({
 
               {showing ? (
                 <div className="grid grid-cols-[minmax(0,1fr)_38px_minmax(0,1fr)] gap-1.5 px-1 pb-2.5">
-                  <Detail line={r.a} stats={stats} onOpen={() => onPlayer(r.a, home)} />
+                  <Detail
+                    line={r.a}
+                    stats={stats}
+                    leagueId={leagueId}
+                    onOpen={() => onPlayer(r.a, home)}
+                  />
                   <span />
                   <Detail
                     line={r.b}
                     stats={stats}
+                    leagueId={leagueId}
                     right
                     onOpen={() => r.b && onPlayer(r.b, away)}
                   />
@@ -220,20 +230,25 @@ function Half({
 function Detail({
   line,
   stats,
+  leagueId,
   right,
   onOpen,
 }: {
   line: StarterLine | null;
   stats: Record<string, Record<string, number>>;
+  leagueId: string;
   right?: boolean;
   onOpen: () => void;
 }) {
+  const qc = useQueryClient();
   if (!line?.player) return <span />;
   const bag = line.stats ?? (line.playerId ? stats[line.playerId] : undefined);
   const statLine = liveStatLine(line.player.position, line.game, bag);
+  const intent = profileIntent(qc, leagueId, line.player.player_id);
   return (
     <button
       type="button"
+      {...intent}
       onClick={onOpen}
       className={cn(
         "min-w-0 rounded-md font-mono text-[9.5px] leading-relaxed text-faint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep",
