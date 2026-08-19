@@ -25,3 +25,25 @@ export function shouldPersistQueryKey(queryKey: readonly unknown[]): boolean {
   const root = queryKey[0];
   return typeof root === "string" && PERSIST_ROOTS.has(root);
 }
+
+/**
+ * Workbook keys that can change between sessions (lineups, trades). Hydrate
+ * paints last-known, then these must refetch — persist + 30s staleTime would
+ * otherwise treat a just-written snapshot as fresh and skip the network.
+ */
+export const PERSIST_STALE_ON_RESTORE = new Set<string>([
+  "league",
+  "matchups",
+  "team",
+  "trades",
+  "claims",
+  "wire",
+  "activity",
+  "recap",
+  "desk",
+]);
+
+export function shouldStaleOnRestore(queryKey: readonly unknown[]): boolean {
+  const root = queryKey[0];
+  return typeof root === "string" && PERSIST_STALE_ON_RESTORE.has(root);
+}

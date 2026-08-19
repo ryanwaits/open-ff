@@ -24,6 +24,18 @@ test("PERSIST_ROOTS allowlist includes workbook keys and excludes live keys", ()
 
   const buster = src.match(/PERSIST_BUSTER\s*=\s*"([^"]+)"/);
   assert.ok(buster?.[1], "PERSIST_BUSTER must be a non-empty string");
+
+  const stale = src.match(
+    /PERSIST_STALE_ON_RESTORE\s*=\s*new Set<string>\(\[([\s\S]*?)\]\)/,
+  );
+  assert.ok(stale, "PERSIST_STALE_ON_RESTORE Set literal not found");
+  const staleRoots = new Set([...stale[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]));
+  for (const key of ["league", "matchups", "team"]) {
+    assert.ok(staleRoots.has(key), `must stale-on-restore: ${key}`);
+  }
+  for (const key of ["byes", "player-profile", "my-leagues"]) {
+    assert.ok(!staleRoots.has(key), `must not stale-on-restore: ${key}`);
+  }
 });
 
 test("persistQueryClient is gated behind typeof window !== undefined", () => {

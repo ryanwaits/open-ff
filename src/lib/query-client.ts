@@ -13,6 +13,7 @@ import {
   PERSIST_MAX_AGE_MS,
   PERSIST_STORAGE_KEY,
   shouldPersistQueryKey,
+  shouldStaleOnRestore,
 } from "./query-persist";
 
 export type RouterContext = {
@@ -58,6 +59,12 @@ function restorePersistedClient(client: QueryClient) {
       return;
     }
     hydrate(client, persisted.clientState);
+    // Paint last-known immediately, then treat mutable workbook keys as stale
+    // so a reload after a lineup write cannot reuse a still-fresh snapshot.
+    void client.invalidateQueries({
+      predicate: (q) => shouldStaleOnRestore(q.queryKey),
+      refetchType: "none",
+    });
   } catch {
     // Corrupt persist — persistQueryClient will retry or drop it.
   }
