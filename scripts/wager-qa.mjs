@@ -100,18 +100,37 @@ try {
   }
   assertNoPageErrors("after login");
 
-  run(["open", `${base}/new`]);
-  run(["wait", "--load", "networkidle"]);
-  clearPageErrors();
-  run(["find", "placeholder", "The Backyard", "fill", "Wager QA Desk"]);
-  run(["find", "placeholder", "Night Desk", "fill", "Night Desk"]);
-  run(["find", "role", "button", "click", "--name", "Open the league"]);
-  run(["wait", "--url", "**/league/lg_*"]);
+  run(["open", `${base}/`]);
   run(["wait", "--load", "networkidle"]);
   {
-    const { out } = run(["get", "url"]);
-    leagueId = out.match(/league\/(lg_[a-z0-9]+)/)?.[1] ?? null;
-    if (!leagueId) throw new Error(`No league id in ${out}`);
+    const existing = evalJson(`(() => {
+      const a = [...document.querySelectorAll("a")].find((el) =>
+        /Wager QA Desk/i.test(el.textContent || ""),
+      );
+      const href = a?.getAttribute("href") || "";
+      const id = href.match(/league\\/(lg_[a-z0-9]+)/)?.[1] ?? null;
+      return { id };
+    })()`);
+    if (existing.id) {
+      leagueId = existing.id;
+      run(["open", `${base}/league/${leagueId}`]);
+      run(["wait", "--load", "networkidle"]);
+    }
+  }
+  if (!leagueId) {
+    run(["open", `${base}/new`]);
+    run(["wait", "--load", "networkidle"]);
+    clearPageErrors();
+    run(["find", "placeholder", "The Backyard", "fill", "Wager QA Desk"]);
+    run(["find", "placeholder", "Night Desk", "fill", "Night Desk"]);
+    run(["find", "role", "button", "click", "--name", "Open the league"]);
+    run(["wait", "--url", "**/league/lg_*"]);
+    run(["wait", "--load", "networkidle"]);
+    {
+      const { out } = run(["get", "url"]);
+      leagueId = out.match(/league\/(lg_[a-z0-9]+)/)?.[1] ?? null;
+      if (!leagueId) throw new Error(`No league id in ${out}`);
+    }
   }
 
   // Fresh creates can land with seats filled but week 1 unassigned —
