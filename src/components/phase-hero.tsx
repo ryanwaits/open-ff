@@ -9,6 +9,14 @@ import { cn, formatPts } from "@/lib/utils";
  * slot is the one thing that can cost a manager a week with no recourse, so it
  * is the one thing that gets the alarm treatment. Everything else stays calm,
  * or the warning stops meaning anything.
+ *
+ * Calm is now silence. A banner that says "Roster is set" and points at a
+ * lineup already on screen is a header for a page that has one — it trains
+ * people to skip the top of My Team, which is exactly where the alarm lives.
+ * So the hero renders only when there is something to do (a broken slot, a
+ * draft to join) or something you cannot get from the board underneath it
+ * (a live score, a finished week). Otherwise it returns null and the lineup
+ * becomes the top of the page.
  */
 export function PhaseHero(props: {
   phase: Phase;
@@ -18,21 +26,20 @@ export function PhaseHero(props: {
   me: MatchupSide | null;
   them: MatchupSide | null;
   draftStatus: "none" | "pending" | "live" | "complete";
-  waiversOpen: boolean;
   editable: boolean;
   /** How many broken slots auto-fill can actually solve. */
   fixable: number;
   fixing: boolean;
   onFix: () => void;
 }) {
-  const {
-    phase, health, leagueId, week, me, them, draftStatus, waiversOpen, editable,
-    fixable, fixing, onFix,
-  } = props;
+  const { phase, health, leagueId, week, me, them, draftStatus, editable, fixable, fixing, onFix } =
+    props;
 
-  // Undrafted: there is no roster to reason about, so the board is the only
-  // thing worth pointing at.
-  if (phase === "preseason" && draftStatus !== "complete") {
+  // A board still to run: there is no roster to reason about, so the draft is
+  // the only thing worth pointing at. `none` is a Sleeper import — no board of
+  // ours to open, so no banner.
+  const drafting = draftStatus === "pending" || draftStatus === "live";
+  if (phase === "preseason" && drafting) {
     return (
       <Shell tone="calm">
         <Body
@@ -149,7 +156,11 @@ export function PhaseHero(props: {
       <Shell tone={won ? "good" : "calm"}>
         <Body
           kicker={`Week ${week} final`}
-          title={won ? `You won by ${formatPts(Math.abs(margin), 1)}` : `You lost by ${formatPts(Math.abs(margin), 1)}`}
+          title={
+            won
+              ? `You won by ${formatPts(Math.abs(margin), 1)}`
+              : `You lost by ${formatPts(Math.abs(margin), 1)}`
+          }
           body={`${me.teamName} ${formatPts(me.points, 1)} against ${them.teamName} ${formatPts(them.points, 1)}.`}
         />
         <Link
@@ -164,44 +175,10 @@ export function PhaseHero(props: {
     );
   }
 
-  if (phase === "preseason") {
-    return (
-      <Shell tone="calm">
-        <Body
-          kicker="Preseason"
-          title={health.ok ? "Roster is set" : "Your lineup has holes"}
-          body="Real games haven't started. Nothing you do now can cost you a week."
-        />
-        <a
-          href="#lineup"
-          className="inline-flex h-11 shrink-0 items-center rounded-pill border border-line-strong px-5 text-sm font-semibold hover:bg-raised"
-        >
-          Review the lineup
-        </a>
-      </Shell>
-    );
-  }
-
-  return (
-    <Shell tone="calm">
-      <Body
-        kicker={waiversOpen ? "Waivers are open" : "Midweek"}
-        title={health.ok ? "Lineup is set" : "Nothing needs you yet"}
-        body={
-          waiversOpen
-            ? "Claims process before the next slate. Good time to look at the wire."
-            : "Check back closer to kickoff, or go shopping."
-        }
-      />
-      <Link
-        to="/league/$leagueId/wire"
-        params={{ leagueId }}
-        className="inline-flex h-11 shrink-0 items-center rounded-pill border border-line-strong px-5 text-sm font-semibold hover:bg-raised"
-      >
-        Go to the wire
-      </Link>
-    </Shell>
-  );
+  // Preseason with a set roster, midweek, gameday before kickoff, an open
+  // waiver window: all real, none of them a thing you have to do. The wire and
+  // the lineup both have permanent tabs; they do not need a banner as well.
+  return null;
 }
 
 function describeIssues(empty: number, inactive: number, bye: number): string {
@@ -214,20 +191,16 @@ function describeIssues(empty: number, inactive: number, bye: number): string {
   return `${parts.join(" · ")}. ${tail}`;
 }
 
-function Shell({
-  tone,
-  children,
-}: {
-  tone: "calm" | "alarm" | "good";
-  children: React.ReactNode;
-}) {
+function Shell({ tone, children }: { tone: "calm" | "alarm" | "good"; children: React.ReactNode }) {
   return (
     <section
       className={cn(
         "flex flex-wrap items-center gap-4 rounded-xl px-5 py-5",
         tone === "calm" && "bg-surface shadow-[var(--shadow-border)]",
-        tone === "alarm" && "bg-[color-mix(in_oklab,var(--alarm)_12%,var(--paper-raised))] shadow-[0_0_0_1px_color-mix(in_oklab,var(--alarm)_40%,transparent),var(--lift)]",
-        tone === "good" && "bg-[color-mix(in_oklab,var(--brand)_16%,var(--paper-raised))] shadow-[0_0_0_1px_color-mix(in_oklab,var(--brand)_45%,transparent),var(--lift)]",
+        tone === "alarm" &&
+          "bg-[color-mix(in_oklab,var(--alarm)_12%,var(--paper-raised))] shadow-[0_0_0_1px_color-mix(in_oklab,var(--alarm)_40%,transparent),var(--lift)]",
+        tone === "good" &&
+          "bg-[color-mix(in_oklab,var(--brand)_16%,var(--paper-raised))] shadow-[0_0_0_1px_color-mix(in_oklab,var(--brand)_45%,transparent),var(--lift)]",
       )}
     >
       {children}

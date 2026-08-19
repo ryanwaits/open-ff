@@ -10,19 +10,22 @@ import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   getActivity,
-  getLeagueBundle,
   getByeWeeks,
+  getLeagueBundle,
   getMatchups,
   getProjections,
   getPulse,
   getRecap,
   getTeam,
 } from "@/lib/data/fns";
-import { sitPlayer, startPlayer } from "@/lib/league/fns";
-import { planAutoFill } from "@/lib/league/autofill";
-import { lineupHealth, resolvePhase } from "@/lib/league/phase";
-import { cn, fmtRecord, formatPts } from "@/lib/utils";
+import { prefetchPlayerProfile, useWarmRosterProfiles } from "@/lib/data/player-view";
 import { baseSlotLabel } from "@/lib/data/teams";
+import { useDemoOn } from "@/lib/demo/store";
+import { planAutoFill } from "@/lib/league/autofill";
+import { sitPlayer, startPlayer } from "@/lib/league/fns";
+import { lineupHealth, resolvePhase } from "@/lib/league/phase";
+import { applyPrototype } from "@/lib/league/prototype";
+import { cn, fmtRecord, formatPts } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$leagueId/")({
   component: MyTeamPage,
@@ -39,6 +42,7 @@ function MyTeamPage() {
     refetchInterval: (q) => (q.state.data?.scoringLive ? 15_000 : false),
   });
   const search = Route.useSearch();
+  const demoOn = useDemoOn();
   const week = search.week ?? league.data?.currentWeek ?? 1;
   const rosterId = league.data?.myRosterId ?? null;
 
@@ -97,6 +101,10 @@ function MyTeamPage() {
 
   const editable = Boolean(league.data?.hosted && rosterId != null && !league.data?.locked);
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
+  useWarmRosterProfiles(
+    leagueId,
+    team.data?.players.filter((p) => p.slot === "starter").map((p) => p.player_id),
+  );
 
   function invalidate() {
     void qc.invalidateQueries({ queryKey: ["team", leagueId] });
@@ -178,13 +186,13 @@ function MyTeamPage() {
   const players = team.data?.players;
   const rosterPositions = league.data?.league.roster_positions;
   const byeMap = byes.data;
-  const health = useMemo(
+  const realHealth = useMemo(
     () => lineupHealth(players ?? [], rosterPositions, byeMap, week),
     [players, rosterPositions, byeMap, week],
   );
 
   const projMap = projections.data;
-  const plan = useMemo(
+  const realPlan = useMemo(
     () =>
       planAutoFill({
         players: players ?? [],
@@ -201,6 +209,35 @@ function MyTeamPage() {
     if (!pairs || rosterId == null) return null;
     return pairs.find((p) => p.home.rosterId === rosterId || p.away?.rosterId === rosterId) ?? null;
   }, [pairs, rosterId]);
+
+  const realMe = myPair ? (myPair.home.rosterId === rosterId ? myPair.home : myPair.away) : null;
+  const realThem = myPair ? (myPair.home.rosterId === rosterId ? myPair.away : myPair.home) : null;
+
+  // `?state=` swaps the derived inputs to the hero and nothing else, so the
+  // states it can be in are reviewable in August. Demo mode, dev builds only.
+  const hero = useMemo(
+    () =>
+      applyPrototype(demoOn ? search.state : undefined, {
+        phase: phase.phase,
+        health: realHealth,
+        draftStatus: bundle?.draftStatus ?? "none",
+        me: realMe,
+        them: realThem,
+        starters: (players ?? []).filter((p) => p.slot === "starter"),
+        fixable: realPlan.length,
+      }),
+    [
+      demoOn,
+      search.state,
+      phase.phase,
+      realHealth,
+      bundle?.draftStatus,
+      realMe,
+      realThem,
+      players,
+      realPlan,
+    ],
+  );
 
   if (league.data == null && league.isPending) {
     return (
@@ -237,9 +274,6 @@ function MyTeamPage() {
     );
   }
 
-  const me = myPair ? (myPair.home.rosterId === rosterId ? myPair.home : myPair.away) : null;
-  const them = myPair ? (myPair.home.rosterId === rosterId ? myPair.away : myPair.home) : null;
-
   const standings = league.data.standings;
   const myIndex = standings.findIndex((s) => s.rosterId === rosterId);
   const playoff = league.data.league.settings.playoff_teams ?? 0;
@@ -247,17 +281,19 @@ function MyTeamPage() {
   return (
     <div className="flex flex-col gap-5">
       <PhaseHero
-        phase={phase.phase}
-        health={health}
-        fixable={plan.length}
+        phase={hero.phase}
+        health={hero.health}
+        fixable={hero.fixable}
         fixing={autoFill.isPending}
-        onFix={() => autoFill.mutate(plan)}
+        onFix={() => {
+          if (realPlan.length) autoFill.mutate(realPlan);
+          else toast("Prototype state — there is nothing on the bench to move.");
+        }}
         leagueId={leagueId}
         week={week}
-        me={me}
-        them={them}
-        draftStatus={league.data.draftStatus}
-        waiversOpen={league.data.ops?.waiversOpen ?? false}
+        me={hero.me}
+        them={hero.them}
+        draftStatus={hero.draftStatus}
         editable={editable}
       />
 
@@ -274,6 +310,7 @@ function MyTeamPage() {
               week={week}
               projections={projections.data}
               showBench={false}
+              onIntentPlayer={(p) => void prefetchPlayerProfile(qc, leagueId, p.player_id)}
               onOpenPlayer={(p) =>
                 setSheet({
                   player: p,
@@ -299,7 +336,7 @@ function MyTeamPage() {
             players={team.data?.players ?? []}
             activity={activity.data ?? []}
             news={pulse.data?.news ?? []}
-            loading={team.isLoading}
+            loading={team.data == null && team.isPending}
           />
 
           <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
@@ -340,7 +377,9 @@ function MyTeamPage() {
                     {row.rank}
                   </span>
                   <Avatar src={row.avatar} name={row.teamName} className="size-7" tint />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{row.teamName}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {row.teamName}
+                  </span>
                   <span className="font-mono text-xs text-muted">
                     {fmtRecord(row.wins, row.losses, row.ties)}
                   </span>
@@ -379,10 +418,10 @@ function MyTeamPage() {
 
       <PlayerSheet target={sheet} leagueId={leagueId} onClose={() => setSheet(null)} />
 
-      {me && them ? (
+      {realMe && realThem ? (
         <p className="text-xs text-faint">
-          Week {week} &middot; {me.teamName} {formatPts(me.points, 1)} vs {them.teamName}{" "}
-          {formatPts(them.points, 1)}.
+          Week {week} &middot; {realMe.teamName} {formatPts(realMe.points, 1)} vs{" "}
+          {realThem.teamName} {formatPts(realThem.points, 1)}.
         </p>
       ) : null}
     </div>
