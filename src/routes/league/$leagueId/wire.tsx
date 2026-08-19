@@ -139,12 +139,12 @@ function WirePage() {
           ? league.data.ops.waiverType === "rolling"
             ? `Waivers are open. Claims process Wednesday in waiver order (you are #${
                 league.data.standings.find((s) => s.rosterId === mineId)?.waiverPos ?? "—"
-              }). After they run, leftovers are free agents.`
-            : `Waivers are open. Bid FAAB — you have $${league.data.faabRemaining ?? 100} left. Claims process Wednesday (highest bid wins; ties go to waiver order). After that, leftover players are free agents.`
-          : `Free agency. Instant add/drop. ${
+              }). After they run, leftovers are free agents — anyone just dropped still sits on waivers.`
+            : `Waivers are open. Bid FAAB — you have $${league.data.faabRemaining ?? 100} left. Highest bid wins; ties go to reverse standings. After they run, leftovers are free agents — anyone just dropped still sits on waivers.`
+          : `Leftovers are free agents. A player dropped this week still sits on waivers until the next run. ${
               league.data.ops?.waiverType === "faab"
-                ? `You have $${league.data.faabRemaining ?? 100} FAAB left for next week's wire.`
-                : "Next week's wire uses rolling priority."
+                ? `You have $${league.data.faabRemaining ?? 100} FAAB left.`
+                : "Next run uses rolling priority."
             }`;
 
   const waiversOpen = Boolean(league.data?.ops?.waiversOpen);
@@ -271,7 +271,11 @@ function WirePage() {
                   <td className="px-4 py-2.5 text-right">
                     <ClaimButton
                       size="sm"
-                      verdict={claim.verdictFor(p.player_id, p.ownedBy)}
+                      verdict={claim.verdictFor(
+                        p.player_id,
+                        p.ownedBy,
+                        p.availability === "waiver",
+                      )}
                       leagueId={leagueId}
                       playerId={p.player_id}
                       ownerRosterId={p.ownedBy?.rosterId}
@@ -281,9 +285,11 @@ function WirePage() {
                           name: p.full_name,
                           headshot: headshotFor(p),
                           action:
-                            claim.verdictFor(p.player_id, p.ownedBy).kind === "mine"
+                            claim.verdictFor(p.player_id, p.ownedBy, p.availability === "waiver")
+                              .kind === "mine"
                               ? "drop"
                               : "add",
+                          onWaivers: p.availability === "waiver",
                         })
                       }
                     />

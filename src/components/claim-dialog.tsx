@@ -6,6 +6,7 @@ import { Avatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import type { RosterPlayer, SlimPlayer } from "@/lib/data/types";
 import { addDrop, dropPlayer } from "@/lib/league/fns";
+import { invalidateAfterRosterMove } from "@/lib/league/lineup-cache";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,6 +34,8 @@ export type ClaimTarget = {
   headshot: string | null;
   /** Drop is a player you already hold — no add, no bid. */
   action?: "add" | "drop";
+  /** This player sits on waivers even if the weekly leftover pool is FA. */
+  onWaivers?: boolean;
 };
 
 export function ClaimDialog({
@@ -102,9 +105,7 @@ export function ClaimDialog({
     },
     onSuccess: (res) => {
       setPlaced(true);
-      for (const key of ["wire", "team", "league", "claims", "activity"]) {
-        void qc.invalidateQueries({ queryKey: [key, leagueId] });
-      }
+      void invalidateAfterRosterMove(qc, leagueId);
       void qc.invalidateQueries({ queryKey: ["player", leagueId] });
       void qc.invalidateQueries({ queryKey: ["player-profile", leagueId] });
       toast(
@@ -196,9 +197,9 @@ export function ClaimDialog({
                   Drop
                 </span>
                 <p className="mt-1.5 text-sm text-muted">
-                  {mode === "claim"
-                    ? "He hits waivers. Claims process Wednesday."
-                    : "He becomes a free agent. Anyone can add him."}
+                  {waiverType === "none"
+                    ? "He becomes a free agent. Anyone can add him."
+                    : "He hits waivers. The next run is when someone can claim him."}
                 </p>
               </section>
             ) : money ? (
@@ -245,7 +246,7 @@ export function ClaimDialog({
                 <p className={cn("mt-2 text-xs", overBudget ? "text-loss" : "text-faint")}>
                   {overBudget
                     ? `You only have $${faabRemaining}.`
-                    : "Highest bid wins. Ties go to waiver order."}
+                    : "Highest bid wins. Ties go to reverse standings."}
                 </p>
               </section>
             ) : mode === "claim" ? (

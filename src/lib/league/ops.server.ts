@@ -1,11 +1,8 @@
+import { getPlayer, playerName } from "@/lib/data/sleeper.server";
 import { getSql } from "@/lib/db";
 import { recordEvent } from "./events.server";
-import { getPlayer, playerName } from "@/lib/data/sleeper.server";
-import {
-  clampPlayoffByes,
-  defaultPlayoffByes,
-  firstRoundSeeds,
-} from "./playoffs";
+import { clampPlayoffByes, defaultPlayoffByes, firstRoundSeeds } from "./playoffs";
+import { leagueWaiversOpen, reverseStandingsOrder, rotateRollingOrder } from "./waivers";
 
 function nid(prefix: string, n = 10): string {
   const chars = "abcdefghjkmnpqrstuvwxyz23456789";
@@ -42,7 +39,7 @@ type RosterOps = {
 };
 
 let opsReady = 0;
-const OPS_SCHEMA = 5;
+const OPS_SCHEMA = 6;
 
 export async function ensureOpsSchema(): Promise<void> {
   if (opsReady >= OPS_SCHEMA) return;
@@ -105,6 +102,10 @@ export async function ensureOpsSchema(): Promise<void> {
       league_id text not null,
       email text not null,
       primary key (league_id, email))`,
+    `create table if not exists ff_waiver_holds (
+      league_id text not null,
+      player_id text not null,
+      primary key (league_id, player_id))`,
   ];
   for (const s of stmts) await sql.query(s);
   await sql.query(
@@ -151,7 +152,9 @@ function parseSlots(raw: string): string[] {
 export async function ensureDraftBoard(leagueId: string): Promise<void> {
   await ensureOpsSchema();
   const sql = await getSql();
-  const existing = await sql<{ n: number }>`select count(*)::int as n from ff_picks where league_id = ${leagueId}`;
+  const existing = await sql<{
+    n: number;
+  }>`select count(*)::int as n from ff_picks where league_id = ${leagueId}`;
   if ((existing[0]?.n ?? 0) > 0) return;
   const league = await leagueOf(leagueId);
   const slots = parseSlots(league.roster_slots);
@@ -185,8 +188,26 @@ export async function seedRosterOps(leagueId: string): Promise<void> {
 }
 
 function waiversOpen(l: LeagueOps): boolean {
-  if ((l.waiver_type ?? "faab") === "none") return false;
-  return (l.last_waiver_week ?? 0) < l.current_week;
+  return leagueWaiversOpen(l.waiver_type, l.last_waiver_week ?? 0, l.current_week);
+}
+
+export async function heldPlayerIds(leagueId: string): Promise<Set<string>> {
+  await ensureOpsSchema();
+  const rows = await (await getSql())<{ player_id: string }>`
+    select player_id from ff_waiver_holds where league_id = ${leagueId}
+  `;
+  return new Set(rows.map((r) => r.player_id));
+}
+
+async function stampWaiverHold(leagueId: string, playerId: string): Promise<void> {
+  const league = await leagueOf(leagueId);
+  if ((league.waiver_type ?? "faab") === "none") return;
+  const sql = await getSql();
+  await sql`
+    insert into ff_waiver_holds (league_id, player_id)
+    values (${leagueId}, ${playerId})
+    on conflict do nothing
+  `;
 }
 
 export async function requestAdd(
@@ -206,7 +227,11 @@ export async function requestAdd(
     await sql<RosterOps>`select * from ff_rosters where league_id = ${leagueId} and owner_id = ${userId}`
   )[0];
   if (!mine) throw new Error("You don't have a seat.");
-  if ((await sql`select player_id from ff_spots where league_id = ${leagueId} and player_id = ${addId}`)[0]) {
+  if (
+    (
+      await sql`select player_id from ff_spots where league_id = ${leagueId} and player_id = ${addId}`
+    )[0]
+  ) {
     throw new Error("Already rostered.");
   }
   if (!getPlayer(addId)) throw new Error("Unknown player.");
@@ -222,9 +247,9 @@ export async function requestAdd(
     `;
     if (!own[0]) throw new Error("You don't have that player to drop.");
   }
-  const amount =
-    (league.waiver_type ?? "faab") === "faab" ? Math.max(0, Math.floor(bid || 0)) : 0;
-  if (waiversOpen(league)) {
+  const amount = (league.waiver_type ?? "faab") === "faab" ? Math.max(0, Math.floor(bid || 0)) : 0;
+  const held = (await heldPlayerIds(leagueId)).has(addId);
+  if (waiversOpen(league) || held) {
     // One balance. Money staked on a wager is gone until it settles, so a claim
     // is measured against what is actually spendable rather than the headline
     // figure — otherwise $70 on the book and $80 on a player both go through.
@@ -258,7 +283,11 @@ export async function requestAdd(
   return { mode: "free_agent" };
 }
 
-export async function requestDrop(userId: string, leagueId: string, playerId: string): Promise<void> {
+export async function requestDrop(
+  userId: string,
+  leagueId: string,
+  playerId: string,
+): Promise<void> {
   const league = await leagueOf(leagueId);
   if (league.locked) throw new Error("This desk is locked.");
   if (league.status === "pre_draft" || league.status === "drafting") {
@@ -278,6 +307,7 @@ export async function requestDrop(userId: string, leagueId: string, playerId: st
     delete from ff_spots
     where league_id = ${leagueId} and roster_id = ${mine.roster_id} and player_id = ${playerId}
   `;
+  await stampWaiverHold(leagueId, playerId);
   await sql`
     insert into ff_moves (id, league_id, week, roster_id, type, add_player_id, drop_player_id)
     values (
@@ -309,6 +339,7 @@ async function applyAddDrop(
       delete from ff_spots
       where league_id = ${leagueId} and roster_id = ${rosterId} and player_id = ${dropId}
     `;
+    await stampWaiverHold(leagueId, dropId);
   }
   await sql`
     insert into ff_spots (league_id, roster_id, player_id, slot, starter_slot)
@@ -344,7 +375,11 @@ async function applyAddDrop(
   }
 }
 
-export async function cancelClaim(userId: string, leagueId: string, claimId: string): Promise<void> {
+export async function cancelClaim(
+  userId: string,
+  leagueId: string,
+  claimId: string,
+): Promise<void> {
   const sql = await getSql();
   const mine = (
     await sql<RosterOps>`select * from ff_rosters where league_id = ${leagueId} and owner_id = ${userId}`
@@ -366,12 +401,18 @@ export async function cancelClaim(userId: string, leagueId: string, claimId: str
   });
 }
 
-export async function processWaivers(leagueId: string, week?: number): Promise<{ awarded: number }> {
+export async function processWaivers(
+  leagueId: string,
+  week?: number,
+): Promise<{ awarded: number }> {
   const league = await leagueOf(leagueId);
   if (league.locked) return { awarded: 0 };
+  if ((league.waiver_type ?? "faab") === "none") return { awarded: 0 };
   const w = week ?? league.current_week;
   const sql = await getSql();
   const rolling = (league.waiver_type ?? "faab") === "rolling";
+  if (!rolling) await syncFaabWaiverOrder(leagueId);
+  const heldAtStart = await heldPlayerIds(leagueId);
   const claims = rolling
     ? await sql<{
         id: string;
@@ -455,7 +496,14 @@ export async function processWaivers(leagueId: string, week?: number): Promise<{
         continue;
       }
     }
-    await applyAddDrop(leagueId, c.roster_id, c.add_player_id, c.drop_player_id, "waiver", rolling ? null : c.bid);
+    await applyAddDrop(
+      leagueId,
+      c.roster_id,
+      c.add_player_id,
+      c.drop_player_id,
+      "waiver",
+      rolling ? null : c.bid,
+    );
     if (!rolling) {
       purse.set(c.roster_id, cash - c.bid);
       await sql`update ff_rosters set faab_remaining = ${cash - c.bid} where league_id = ${leagueId} and roster_id = ${c.roster_id}`;
@@ -464,15 +512,49 @@ export async function processWaivers(leagueId: string, week?: number): Promise<{
     winners.push(c.roster_id);
     awarded += 1;
   }
-  if (winners.length) {
-    const rest = order.filter((id) => !winners.includes(id));
-    const next = [...rest, ...winners.filter((id, i) => winners.indexOf(id) === i)];
+  if (rolling && winners.length) {
+    const next = rotateRollingOrder(order, winners);
     for (let i = 0; i < next.length; i++) {
       await sql`update ff_rosters set waiver_order = ${i + 1} where league_id = ${leagueId} and roster_id = ${next[i]}`;
     }
   }
+  // Anyone who sat on a hold through this run had their chance. Drops from
+  // this run keep their hold so the next process is the first bid window.
+  if (heldAtStart.size) {
+    for (const playerId of heldAtStart) {
+      await sql`
+        delete from ff_waiver_holds
+        where league_id = ${leagueId} and player_id = ${playerId}
+      `;
+    }
+  }
+  const claimed = await sql<{ player_id: string }>`
+    select h.player_id
+    from ff_waiver_holds h
+    join ff_spots s on s.league_id = h.league_id and s.player_id = h.player_id
+    where h.league_id = ${leagueId}
+  `;
+  for (const row of claimed) {
+    await sql`
+      delete from ff_waiver_holds
+      where league_id = ${leagueId} and player_id = ${row.player_id}
+    `;
+  }
   await sql`update ff_leagues set last_waiver_week = ${w} where id = ${leagueId}`;
   return { awarded };
+}
+
+async function syncFaabWaiverOrder(leagueId: string): Promise<void> {
+  const { loadLeagueBundle } = await import("./engine.server");
+  const bundle = await loadLeagueBundle(leagueId, null, { tick: false });
+  const ids = reverseStandingsOrder(bundle.standings);
+  const sql = await getSql();
+  for (let i = 0; i < ids.length; i++) {
+    await sql`
+      update ff_rosters set waiver_order = ${i + 1}
+      where league_id = ${leagueId} and roster_id = ${ids[i]}
+    `;
+  }
 }
 
 export async function listClaims(leagueId: string, rosterId: number | null) {
@@ -499,13 +581,37 @@ export async function listClaims(leagueId: string, rosterId: number | null) {
       .filter((r) => r.status === "pending" || r.roster_id === rosterId)
       .map((r) => {
         const mine = r.roster_id === rosterId;
-        const add = { id: r.add_player_id, name: playerName(r.add_player_id), pos: getPlayer(r.add_player_id)?.position ?? null };
+        const add = {
+          id: r.add_player_id,
+          name: playerName(r.add_player_id),
+          pos: getPlayer(r.add_player_id)?.position ?? null,
+        };
         const drop = r.drop_player_id
-          ? { id: r.drop_player_id, name: playerName(r.drop_player_id), pos: getPlayer(r.drop_player_id)?.position ?? null }
+          ? {
+              id: r.drop_player_id,
+              name: playerName(r.drop_player_id),
+              pos: getPlayer(r.drop_player_id)?.position ?? null,
+            }
           : null;
         return mine
-          ? { id: r.id, rosterId: r.roster_id, mine: true as const, add, drop, bid: r.bid, status: r.status }
-          : { id: r.id, rosterId: r.roster_id, mine: false as const, add, drop, bid: null, status: r.status };
+          ? {
+              id: r.id,
+              rosterId: r.roster_id,
+              mine: true as const,
+              add,
+              drop,
+              bid: r.bid,
+              status: r.status,
+            }
+          : {
+              id: r.id,
+              rosterId: r.roster_id,
+              mine: false as const,
+              add,
+              drop,
+              bid: null,
+              status: r.status,
+            };
       }),
   };
 }
@@ -563,9 +669,11 @@ export async function proposeTrade(
       if (!own[0]) throw new Error("A player in this trade is not on that roster.");
     } else {
       if (!a.pickNo) throw new Error("Missing pick.");
-      const draft = (await sql<{ pick_no: number; status: string }>`
+      const draft = (
+        await sql<{ pick_no: number; status: string }>`
         select pick_no, status from ff_draft where league_id = ${leagueId}
-      `)[0];
+      `
+      )[0];
       // Unused picks exist on a generated board even after import. They are
       // only a live asset while this draft is pending or on the clock.
       if (draft?.status !== "pending" && draft?.status !== "live") {
@@ -634,7 +742,9 @@ export async function voteTrade(
   accept: boolean,
 ): Promise<void> {
   const sql = await getSql();
-  const commishRow = await sql<{ commish_id: string }>`select commish_id from ff_leagues where id = ${leagueId}`;
+  const commishRow = await sql<{
+    commish_id: string;
+  }>`select commish_id from ff_leagues where id = ${leagueId}`;
   const isCommish = commishRow[0]?.commish_id === userId;
   const mine = (
     await sql<RosterOps>`select * from ff_rosters where league_id = ${leagueId} and owner_id = ${userId}`
@@ -686,7 +796,11 @@ export async function voteTrade(
   if (!leftover[0]) await executeTrade(leagueId, tradeId);
 }
 
-export async function cancelTrade(userId: string, leagueId: string, tradeId: string): Promise<void> {
+export async function cancelTrade(
+  userId: string,
+  leagueId: string,
+  tradeId: string,
+): Promise<void> {
   const sql = await getSql();
   const mine = (
     await sql<RosterOps>`select * from ff_rosters where league_id = ${leagueId} and owner_id = ${userId}`
@@ -759,9 +873,11 @@ async function executeTrade(leagueId: string, tradeId: string): Promise<void> {
     } else if (a.kind === "pick" && a.pick_no) {
       // Same rule as proposeTrade: a deal proposed legally can be accepted after
       // the board has advanced onto this pick — refuse rather than move the clock.
-      const draft = (await sql`
+      const draft = (
+        await sql`
         select pick_no, status from ff_draft where league_id = ${leagueId}
-      `)[0];
+      `
+      )[0];
       if (draft?.status === "live" && draft.pick_no === a.pick_no) {
         throw new Error("That pick is on the clock and cannot be traded.");
       }
@@ -805,7 +921,8 @@ export async function listTrades(leagueId: string) {
     order by created_at desc
     limit 40
   `;
-  const rosters = await sql<RosterOps>`select * from ff_rosters where league_id = ${leagueId} order by roster_id`;
+  const rosters =
+    await sql<RosterOps>`select * from ff_rosters where league_id = ${leagueId} order by roster_id`;
   const names = new Map(rosters.map((r) => [r.roster_id, r.team_name]));
   const owners = new Map(rosters.map((r) => [r.roster_id, r.owner_id]));
   const out = [];
@@ -882,7 +999,10 @@ export async function listTradablePicks(leagueId: string) {
     originalRoster: p.original_roster ?? p.roster_id,
     label: pickLabelSync(p.pick_no, rosters.length),
     ownerName: names.get(p.roster_id) ?? `Team ${p.roster_id}`,
-    via: (p.original_roster ?? p.roster_id) !== p.roster_id ? names.get(p.original_roster ?? p.roster_id) : null,
+    via:
+      (p.original_roster ?? p.roster_id) !== p.roster_id
+        ? names.get(p.original_roster ?? p.roster_id)
+        : null,
   }));
 }
 
@@ -915,6 +1035,10 @@ export async function snapshotWeek(leagueId: string, week: number): Promise<void
     await settleWeek(leagueId, week);
   } catch {
     // A book failure must never block the week from closing.
+  }
+  const league = await leagueOf(leagueId);
+  if ((league.waiver_type ?? "faab") === "faab") {
+    await syncFaabWaiverOrder(leagueId);
   }
 }
 
@@ -966,9 +1090,7 @@ async function seedPlayoffs(leagueId: string, week: number): Promise<void> {
       const ap = pts.get(m.away_roster) ?? 0;
       alive.push(hp >= ap ? m.home_roster : m.away_roster);
     }
-    const ordered = alive
-      .slice()
-      .sort((a, b) => (seedRank.get(a) ?? 99) - (seedRank.get(b) ?? 99));
+    const ordered = alive.slice().sort((a, b) => (seedRank.get(a) ?? 99) - (seedRank.get(b) ?? 99));
     if (ordered.length % 2 === 1) {
       byes.push(ordered[0]!);
       ordered.shift();
@@ -1168,13 +1290,18 @@ async function refreshStatusAndRecord(leagueIds: string[]): Promise<number> {
   }
 }
 
-const clockRef = globalThis as typeof globalThis & { __ledgerClock__?: ReturnType<typeof setInterval> };
+const clockRef = globalThis as typeof globalThis & {
+  __ledgerClock__?: ReturnType<typeof setInterval>;
+};
 
 export function startLeagueClock(): void {
   if (clockRef.__ledgerClock__) return;
-  clockRef.__ledgerClock__ = setInterval(() => {
-    void tickAllLeagues().catch(() => undefined);
-  }, 5 * 60 * 1000);
+  clockRef.__ledgerClock__ = setInterval(
+    () => {
+      void tickAllLeagues().catch(() => undefined);
+    },
+    5 * 60 * 1000,
+  );
   setTimeout(() => {
     void tickAllLeagues().catch(() => undefined);
   }, 20_000);
@@ -1183,7 +1310,9 @@ export function startLeagueClock(): void {
 export async function commishAdvance(userId: string, leagueId: string): Promise<void> {
   const league = await leagueOf(leagueId);
   const sql = await getSql();
-  const row = await sql<{ commish_id: string }>`select commish_id from ff_leagues where id = ${leagueId}`;
+  const row = await sql<{
+    commish_id: string;
+  }>`select commish_id from ff_leagues where id = ${leagueId}`;
   if (row[0]?.commish_id !== userId) throw new Error("Only the commissioner can advance the week.");
   if (league.locked) throw new Error("This desk is locked.");
   await snapshotWeek(leagueId, league.current_week);
@@ -1195,9 +1324,14 @@ export async function commishAdvance(userId: string, leagueId: string): Promise<
   await sql`update ff_leagues set current_week = ${next} where id = ${leagueId}`;
 }
 
-export async function commishProcessWaivers(userId: string, leagueId: string): Promise<{ awarded: number }> {
+export async function commishProcessWaivers(
+  userId: string,
+  leagueId: string,
+): Promise<{ awarded: number }> {
   const sql = await getSql();
-  const row = await sql<{ commish_id: string }>`select commish_id from ff_leagues where id = ${leagueId}`;
+  const row = await sql<{
+    commish_id: string;
+  }>`select commish_id from ff_leagues where id = ${leagueId}`;
   if (row[0]?.commish_id !== userId) throw new Error("Only the commissioner can process waivers.");
   return processWaivers(leagueId);
 }
@@ -1223,6 +1357,6 @@ export function opsSummary(l: {
     regularWeeks: l.regular_weeks ?? 14,
     playoffByes: l.playoff_byes ?? defaultPlayoffByes(teams),
     lastWaiverWeek: last,
-    waiversOpen: (l.waiver_type ?? "faab") !== "none" && last < l.current_week,
+    waiversOpen: leagueWaiversOpen(l.waiver_type, last, l.current_week),
   };
 }

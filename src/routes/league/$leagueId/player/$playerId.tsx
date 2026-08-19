@@ -57,8 +57,8 @@ function PlayerPage() {
   const mine = myTeam.data?.players.find((r) => r.player_id === playerId);
   const claim = useClaim(leagueId);
   const ownedBy = p?.ownedBy ?? (isWirePlayer(seed) ? seed.ownedBy : null);
-  const waiversOpen = Boolean(league.data?.ops?.waiversOpen);
   const waiverType = league.data?.ops?.waiverType ?? "faab";
+  const onWaivers = Boolean(p?.onWaivers ?? (isWirePlayer(seed) && seed.availability === "waiver"));
 
   if (!p && !seed) {
     if (q.data == null && q.isPending) {
@@ -105,7 +105,7 @@ function PlayerPage() {
             ["Status", "Needs a trade"] as [string, string],
           ],
         }
-      : waiversOpen && waiverType !== "none"
+      : onWaivers && waiverType !== "none"
         ? {
             label: "On waivers",
             rows: [
@@ -140,7 +140,7 @@ function PlayerPage() {
           <ProfileIdentity player={player} size="lg" context={context}>
             <div className="shrink-0">
               <ClaimButton
-                verdict={claim.verdictFor(playerId, p?.ownedBy)}
+                verdict={claim.verdictFor(playerId, p?.ownedBy, onWaivers)}
                 leagueId={leagueId}
                 playerId={playerId}
                 ownerRosterId={p?.ownedBy?.rosterId}
@@ -150,6 +150,7 @@ function PlayerPage() {
                     name: displayName(player),
                     headshot: headshotFor(player),
                     action: mine ? "drop" : "add",
+                    onWaivers,
                   })
                 }
               />

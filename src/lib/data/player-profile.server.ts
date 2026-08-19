@@ -37,6 +37,8 @@ export type PlayerProfile = {
    * of the other rosters a given player sits on.
    */
   ownedBy: { rosterId: number; teamName: string } | null;
+  /** Unowned and sitting for a bid — not the weekly leftover free-agent pool. */
+  onWaivers: boolean;
 };
 
 export type WeeklyBar = {
@@ -168,6 +170,7 @@ export async function loadPlayerProfile(input: {
     byeWeek,
     scoringNote: `Scored with this league's book`,
     ownedBy: await ownerOf(input.leagueId, input.playerId),
+    onWaivers: await onWaivers(input.leagueId, input.playerId),
     news: slate.news,
     schedule: withBye(slate.schedule, slate.byeWeek ?? byeWeek),
     slateSeason: slate.season,
@@ -235,6 +238,39 @@ function withBye(games: PlayerScheduleGame[], byeWeek: number | null): PlayerSch
     bye: true,
   };
   return [...games, bye].sort((a, b) => a.week - b.week);
+}
+
+async function onWaivers(leagueId: string, playerId: string): Promise<boolean> {
+  if (!isHostedLeague(leagueId)) return false;
+  try {
+    const ops = await import("@/lib/league/ops.server");
+    const { playerAvailability } = await import("@/lib/league/waivers");
+    const { getSql } = await import("@/lib/db");
+    const sql = await getSql();
+    const row = (
+      await sql<{
+        waiver_type: string | null;
+        last_waiver_week: number | null;
+        current_week: number;
+      }>`
+        select waiver_type, last_waiver_week, current_week from ff_leagues where id = ${leagueId}
+      `
+    )[0];
+    if (!row) return false;
+    const owned = await ownerOf(leagueId, playerId);
+    const held = (await ops.heldPlayerIds(leagueId)).has(playerId);
+    return (
+      playerAvailability({
+        owned: Boolean(owned),
+        waiverType: row.waiver_type,
+        lastWaiverWeek: row.last_waiver_week ?? 0,
+        currentWeek: row.current_week,
+        held,
+      }) === "waiver"
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Only hosted leagues have rosters we can read; an import is always read-only. */

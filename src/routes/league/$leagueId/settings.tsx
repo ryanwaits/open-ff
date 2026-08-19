@@ -20,6 +20,7 @@ import {
   removeAllowlistEmail,
   saveSettings,
 } from "@/lib/league/fns";
+import { invalidateAfterRosterMove } from "@/lib/league/lineup-cache";
 import { defaultPlayoffByes, describeBracket } from "@/lib/league/playoffs";
 import {
   countsFromSlots,
@@ -402,10 +403,10 @@ function SettingsPage() {
       <section>
         <h2 className="font-display text-2xl">Waivers & calendar</h2>
         <p className="mt-1 text-sm text-muted">
-          FAAB default $100, or rolling priority, or straight free agency. Claims sit until
-          Wednesday and clear on their own. The desk follows the NFL regular season — preseason does
-          not move the week, write ties, or lock scores. Once kickoff week starts, scores lock,
-          waivers run, the next slate opens, and playoffs seed from the standings.
+          FAAB default $100, or rolling priority, or straight free agency. FAAB: highest bid wins,
+          equal bids go to reverse standings. Rolling: waiver order, winners go last. Claims sit
+          until Wednesday. A drop sits on waivers until the next run so someone else can bid;
+          leftovers from that run are free agents until the week turns.
         </p>
         <div className="mt-4 flex flex-wrap gap-1">
           {(
@@ -851,9 +852,7 @@ function CommishClock({ leagueId }: { leagueId: string }) {
     mutationFn: () => processWaivers({ data: { leagueId } }),
     onSuccess: (res) => {
       toast(`Waivers processed · ${res.awarded} awards`);
-      void qc.invalidateQueries({ queryKey: ["league", leagueId] });
-      void qc.invalidateQueries({ queryKey: ["claims", leagueId] });
-      void qc.invalidateQueries({ queryKey: ["wire", leagueId] });
+      void invalidateAfterRosterMove(qc, leagueId);
     },
     onError: (e) => toast(e instanceof Error ? e.message : "Could not process"),
   });

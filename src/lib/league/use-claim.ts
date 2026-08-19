@@ -54,6 +54,7 @@ export function useClaim(leagueId: string) {
 
   const waiverType = bundle?.ops?.waiverType ?? "faab";
   const waiversOpen = Boolean(bundle?.ops?.waiversOpen);
+  const targetOnWaivers = Boolean(target?.onWaivers) || waiversOpen;
 
   return {
     open: target != null,
@@ -79,7 +80,7 @@ export function useClaim(leagueId: string) {
     /** How full the roster is, so the dialog can explain rather than just demand. */
     rosterCount: team.data?.players.length ?? 0,
     rosterCap: (bundle?.league.roster_positions ?? []).length || 15,
-    mode: (waiversOpen ? "claim" : "add") as ClaimMode,
+    mode: (targetOnWaivers && waiverType !== "none" ? "claim" : "add") as ClaimMode,
     /**
      * Per player, because a list draws one button per row. Pass `ownedBy`
      * whenever the row might be rostered — All includes taken players.
@@ -87,6 +88,7 @@ export function useClaim(leagueId: string) {
     verdictFor: (
       playerId: string,
       ownedBy?: { rosterId: number; teamName: string } | null,
+      onWaivers?: boolean,
     ): ClaimVerdict => {
       const pending = claims.data?.items.find(
         (c) => c.mine && c.status === "pending" && c.add.id === playerId,
@@ -96,7 +98,7 @@ export function useClaim(leagueId: string) {
         mine: Boolean(team.data?.players.some((p) => p.player_id === playerId)),
         pending: pending ? { id: pending.id, bid: pending.bid ?? 0 } : null,
         ownedBy: ownedBy ?? null,
-        waiversOpen,
+        waiversOpen: waiverType !== "none" && (Boolean(onWaivers) || waiversOpen),
         money: waiverType === "faab",
       });
     },
