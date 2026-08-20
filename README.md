@@ -21,6 +21,8 @@ Open `http://YOUR_HOST:8080` → `/login` → `/new` → invite friends.
 | `BETTER_AUTH_URL` | Public https origin (no trailing slash). Default `http://localhost:8080`. |
 | `BETTER_AUTH_SECRET` | Session signing. Blank → entrypoint generates one and keeps it on the data volume (`/data/better-auth-secret`). |
 | `CRON_SECRET` | Optional on Docker (in-process tick). Still gates HTTP `/api/league/tick`. Unset = that route is public — set it on a public host. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional. This app's own Google OAuth client (not the Grok broker). Both required. See [Google sign-in](#google-sign-in). |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Optional. Web Push. Both key vars required or the toggle stays hidden. See [Notifications](#notifications-web-push). |
 
 Compose sets `OPENFF_SELF_TICK=1` so the league clock runs inside the
 container every 2 minutes — no crontab. League data lives on the
@@ -30,14 +32,16 @@ container every 2 minutes — no crontab. League data lives on the
 After a season (or before you wipe a box), open **Settings → Download
 backup** for a JSON export of the league.
 
-Email/password is the self-host login. Google/X only appear when
+Email/password is the self-host login. Optional Google: your own client
+([below](#google-sign-in)). Google/X via the Grok broker only appear when
 `GROK_AUTH_CLIENT_ID` is set (or on the Grok live preview).
 
 ### Vercel instead
 
-Four env vars on the project: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
+Required env on the project: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `CRON_SECRET`, and `DATABASE_URL` (Neon or any Postgres — Vercel has no
-durable disk). Cron is free via `vercel.json` (`/api/league/tick` hourly).
+durable disk). Optional: `GOOGLE_CLIENT_*`, `VAPID_*` (same as Docker).
+Cron is free via `vercel.json` (`/api/league/tick` hourly).
 Do **not** set `OPENFF_SELF_TICK` there. Then `bun run db:migrate` runs as
 part of `bun run build`.
 
@@ -131,6 +135,78 @@ bun scripts/wager-qa.mjs
 
 Signs in with the local seed, creates a throwaway league, enables the book, and
 screenshots either a placed ticket or the no-price panel under `screenshots/`.
+Stdout JSON `"path":"price"` means a $1 ticket actually submitted; `"path":"no-price"`
+is preseason (nothing to quote — do not fake a line). Re-run once a regular-season
+week has projections.
+
+## Google sign-in
+
+Self-host can offer **Continue with Google** using *this app's* OAuth client.
+Email/password stays on. X native is not shipped (broker or nothing).
+
+1. Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client (Web).
+2. Authorized JavaScript origin: `https://YOUR_HOST` (local: `http://127.0.0.1:8080`).
+3. Authorized redirect URI (exact):
+
+   ```
+   https://YOUR_HOST/api/auth/callback/google
+   ```
+
+   Local: `http://127.0.0.1:8080/api/auth/callback/google`. Must match
+   `BETTER_AUTH_URL` (scheme + host + port, no trailing slash).
+4. Put `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`. Never `VITE_`.
+5. Restart the container / `bun run dev`.
+
+**Verify**
+
+| Expect | How |
+|--------|-----|
+| Off, no broker | `/login` is email only. Copy does not mention Google. |
+| Both env vars set | `/login` shows **Continue with Google**. Copy: "Google is available on this host." |
+| Sign-in | Button → Google account chooser → back on this origin, signed in. |
+| Broker already on | One Google button (broker), not two. |
+
+`bun test src/lib/auth/providers.test.mjs` covers the empty-env / both-vars button list.
+
+## Notifications (Web Push)
+
+The draft poll (4s) is only while a tab is open. Closed phone: opt-in push for
+**you're on the clock**, **a trade is waiting**, **your waiver claim processed**.
+The commissioner cannot force this on a manager.
+
+HTTPS (or localhost). iOS only delivers after **Add to Home Screen**.
+
+```sh
+bunx web-push generate-vapid-keys
+```
+
+Put the pair in `.env` as `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`. Optional
+`VAPID_SUBJECT` (`mailto:you@league.com`). Never commit real keys. Restart.
+
+**Verify**
+
+1. Claim a seat. Open that league → Settings.
+2. With VAPID unset: **Notify me when I'm away** is absent.
+3. With both keys set: section **On this phone** appears. **Notify me on this phone**
+   → allow notifications. Button becomes **Turn off notifications**.
+4. Chrome DevTools → Application → Service Workers → `/sw.js` running.
+   Hard refresh still loads new JS (the worker is network-only for documents;
+   it must not serve a cached `index.html`).
+5. Stay opted in. Close the tab (or lock the phone).
+
+   | Event | How to fire | Notification |
+   |-------|-------------|--------------|
+   | Clock | Live draft, your pick starts (autodraft off) | "You're on the clock" → `/league/…/draft` |
+   | Trade | Another manager proposes a deal that includes you | "A trade is waiting" → `/trades` |
+   | Waiver | Commish **Process waivers** (or tick) on a pending claim of yours | won / lost → `/roster` |
+
+6. Dry run (no FCM/APNs): `OPENFF_PUSH_DRY=1` on the server. Same events log
+   `would send` instead of hitting the network.
+7. Opt out one league: other leagues on this phone stay subscribed.
+
+```sh
+bun test src/lib/push
+```
 
 ## Agent hosts (local)
 
@@ -173,6 +249,8 @@ Copy or symlink into a host skills dir:
 
 ```sh
 bun test
+bun test src/lib/auth/providers.test.mjs   # native Google button gating
+bun test src/lib/push                      # SW + no-VAPID no-op
 bun run typecheck
 bun run lint
 ```
