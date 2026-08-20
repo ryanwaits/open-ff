@@ -1,7 +1,6 @@
-import { ArrowUp } from "lucide-react";
+import { ArrowUpDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { PlayerCell } from "@/components/player-cell";
-import { SlotPicker } from "@/components/slot-picker";
 import { Badge } from "@/components/ui/badge";
 import type { Projection, RosterPlayer, TeamBundle } from "@/lib/data/types";
 import { onBye } from "@/lib/league/phase";
@@ -12,6 +11,12 @@ import { cn, formatPts } from "@/lib/utils";
  * Owns lineup editing for the whole app. `team/$rosterId` is a read-only view
  * of anybody's roster; this is where a manager actually sets theirs, so the
  * interaction lives in exactly one place.
+ *
+ * One gesture everywhere: every row — starter slot or bench — carries a move
+ * button beside its position. Tap it and the rows that can legally trade
+ * places with it light up while the rest recede; tap a lit row and the move
+ * commits. The rule is shown, not remembered, and the bench needs no
+ * separate add/remove logic.
  */
 export function LineupBoard({
   team,
@@ -21,11 +26,11 @@ export function LineupBoard({
   week,
   projections,
   busy,
-  showBench = true,
   onOpenPlayer,
   onIntentPlayer,
   onStart,
   onSit,
+  onSwap,
 }: {
   team: TeamBundle;
   rosterPositions: string[];
@@ -34,12 +39,6 @@ export function LineupBoard({
   week?: number;
   projections?: Record<string, Projection>;
   busy: boolean;
-  /**
-   * Home wants the lineup and nothing else — the slot picker can already pull
-   * anyone off the bench, so listing it there is a second copy of the roster on
-   * a page meant to be read at a glance. My Team is where the whole roster lives.
-   */
-  showBench?: boolean;
   onOpenPlayer?: (p: RosterPlayer) => void;
   onIntentPlayer?: (p: RosterPlayer) => void;
   onStart: (
@@ -50,6 +49,15 @@ export function LineupBoard({
     into?: string,
   ) => void;
   onSit: (playerId: string, name?: string) => void;
+  /** Two starters trading slots: `a` takes `bSlot`, `b` takes `aSlot`. */
+  onSwap: (swap: {
+    aId: string;
+    bId: string;
+    aSlot: string;
+    bSlot: string;
+    aName: string;
+    bName: string;
+  }) => void;
 }) {
   const slots = labeledStartSlots(rosterPositions);
   const starters = team.players.filter((p) => p.slot === "starter");
@@ -57,61 +65,47 @@ export function LineupBoard({
   const bySlot = new Map(starters.map((p) => [p.starterSlot ?? "", p]));
 
   /**
-   * A bench player you have picked up but not yet put down.
-   *
-   * The slot picker asks "who fills this slot"; this asks the same question from
-   * the other end, because you usually decide you want a player in before you
-   * decide who he displaces. While someone is armed, the slots he can legally
-   * take light up and the rest go quiet, so the rule is shown rather than
-   * remembered.
+   * The row whose move button was pressed. Stored as a reference, not a
+   * snapshot, and re-resolved against the roster every render — the moment
+   * the move lands, or the week turns, the source stops resolving and the
+   * board drops out of the mode without an effect having to notice.
    */
-  const [picked, setPicked] = useState<RosterPlayer | null>(null);
-  const [targetSlot, setTargetSlot] = useState<string | null>(null);
+  const [picked, setPicked] = useState<
+    { kind: "slot"; label: string } | { kind: "bench"; playerId: string } | null
+  >(null);
 
-  // Derived rather than stored, so the moment the swap lands — or the week turns,
-  // or the roster is someone else's — he is no longer on the bench and the board
-  // drops out of this mode without an effect having to notice.
-  const armed =
-    picked && editable && bench.some((p) => p.player_id === picked.player_id) ? picked : null;
+  const src = !editable
+    ? null
+    : picked?.kind === "bench"
+      ? (() => {
+          const p = bench.find((b) => b.player_id === picked.playerId);
+          return p ? ({ kind: "bench", player: p } as const) : null;
+        })()
+      : picked?.kind === "slot" && slots.some((s) => s.label === picked.label)
+        ? ({ kind: "slot", label: picked.label, player: bySlot.get(picked.label) ?? null } as const)
+        : null;
 
-  const cancel = () => {
-    setPicked(null);
-    setTargetSlot(null);
-  };
-  const arm = (p: RosterPlayer | null) => {
-    setPicked(p);
-    setTargetSlot(null);
-  };
+  const cancel = () => setPicked(null);
 
   useEffect(() => {
-    if (!armed) return;
-    // The setters are stable, so this binds once per arming rather than per render.
+    if (!src) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setPicked(null);
-        setTargetSlot(null);
-      }
+      if (e.key === "Escape") setPicked(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [armed]);
+  }, [src]);
 
   /**
-   * Bring the slots he can take into view.
-   *
-   * You arm a player from the bench, which sits below the lineup, so the rows
-   * that just lit up are often off the top of the screen. `block: "nearest"`
-   * moves the least amount that works and does nothing when the row is already
-   * showing, so this never yanks the page for no reason; the scroll-margin on
-   * the row is what keeps it clear of the sticky header and the confirm bar.
+   * Bring the rows that just lit up into view. Arming a bench player often
+   * happens with the lineup scrolled off the top, so nudge to the first slot
+   * he can take. `block: "nearest"` moves the least amount that works.
    */
   const slotRows = useRef(new Map<string, HTMLLIElement>());
-  // Keyed on the label rather than the player so the effect has no unstable
-  // dependency, and so arming a second receiver does not re-scroll to a row
-  // that is already exactly where you left it.
-  const firstEligible = armed
-    ? (slots.find(({ label }) => slotAccepts(armed.position, label))?.label ?? null)
-    : null;
+  const firstEligible =
+    src?.kind === "bench"
+      ? (slots.find(({ label }) => slotAccepts(src.player.position, label))?.label ?? null)
+      : null;
 
   useEffect(() => {
     if (!firstEligible) return;
@@ -121,18 +115,58 @@ export function LineupBoard({
     row.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "nearest" });
   }, [firstEligible]);
 
-  const outgoing = targetSlot ? bySlot.get(targetSlot) : undefined;
+  /** Can the row at `label` trade with the armed source? */
+  const slotEligible = (label: string, occupant: RosterPlayer | undefined): boolean => {
+    if (!src) return false;
+    if (src.kind === "bench") return slotAccepts(src.player.position, label);
+    if (src.label === label) return false;
+    if (src.player && occupant)
+      return slotAccepts(src.player.position, label) && slotAccepts(occupant.position, src.label);
+    if (src.player) return slotAccepts(src.player.position, label);
+    if (occupant) return slotAccepts(occupant.position, src.label);
+    return false;
+  };
 
-  const confirm = () => {
-    if (!armed || !targetSlot) return;
+  const benchEligible = (b: RosterPlayer): boolean =>
+    src?.kind === "slot" ? slotAccepts(b.position, src.label) : false;
+
+  const chooseSlot = (label: string, occupant: RosterPlayer | undefined) => {
+    if (!src) return;
+    if (src.kind === "bench") {
+      onStart(
+        src.player.player_id,
+        occupant?.player_id ?? null,
+        occupant ? null : label,
+        src.player.full_name,
+        label,
+      );
+    } else if (src.player && occupant) {
+      onSwap({
+        aId: src.player.player_id,
+        bId: occupant.player_id,
+        aSlot: src.label,
+        bSlot: label,
+        aName: src.player.full_name,
+        bName: occupant.full_name,
+      });
+    } else if (src.player) {
+      onStart(src.player.player_id, null, label, src.player.full_name, label);
+    } else if (occupant) {
+      onStart(occupant.player_id, null, src.label, occupant.full_name, src.label);
+    }
+    setPicked(null);
+  };
+
+  const chooseBench = (b: RosterPlayer) => {
+    if (src?.kind !== "slot") return;
     onStart(
-      armed.player_id,
-      outgoing?.player_id ?? null,
-      outgoing ? null : targetSlot,
-      armed.full_name,
-      targetSlot,
+      b.player_id,
+      src.player?.player_id ?? null,
+      src.player ? null : src.label,
+      b.full_name,
+      src.label,
     );
-    cancel();
+    setPicked(null);
   };
 
   return (
@@ -140,7 +174,7 @@ export function LineupBoard({
       <header className="flex flex-wrap items-baseline justify-between gap-3 px-5 pt-5 pb-3">
         <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Starting lineup</h2>
         <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
-          {editable ? `Week ${team.week} · tap a slot` : `Week ${team.week}`}
+          {editable ? `Week ${team.week} · tap ⇅ to move` : `Week ${team.week}`}
         </span>
       </header>
 
@@ -149,8 +183,8 @@ export function LineupBoard({
           const p = bySlot.get(label);
           const bye = p ? onBye(p, byes, week) : false;
           const broken = !p || isOut(p) || bye;
-          const takes = armed ? slotAccepts(armed.position, label) : false;
-          const chosen = targetSlot === label;
+          const isSrc = src?.kind === "slot" && src.label === label;
+          const takes = src ? slotEligible(label, p) : false;
           return (
             <li
               key={label}
@@ -159,20 +193,39 @@ export function LineupBoard({
                 else slotRows.current.delete(label);
               }}
               className={cn(
-                // Keeps an auto-scrolled row out from under the sticky header and
-                // clear of the confirm bar, which sits higher on a phone.
                 "scroll-mt-20 scroll-mb-40 md:scroll-mb-24",
                 "flex items-center gap-3 border-b border-line px-5 py-2.5 last:border-0",
-                broken && !armed && "bg-[color-mix(in_oklab,var(--alarm)_9%,transparent)]",
-                // While a player is armed the board answers one question only, so
-                // slots he cannot take recede rather than compete for the press.
-                armed && !takes && "opacity-40",
-                chosen && "bg-[color-mix(in_oklab,var(--brand)_14%,transparent)]",
+                broken && !src && "bg-[color-mix(in_oklab,var(--alarm)_9%,transparent)]",
+                // While a row is armed the board answers one question only, so
+                // rows it cannot trade with recede rather than compete.
+                src && !isSrc && !takes && "opacity-40",
+                isSrc && "bg-[color-mix(in_oklab,var(--brand)_14%,transparent)]",
+                takes && "bg-[color-mix(in_oklab,var(--brand)_7%,transparent)]",
               )}
             >
               <span className="w-9 shrink-0 font-mono text-[10px] uppercase tracking-wide text-faint">
                 {label}
               </span>
+              {editable ? (
+                <MoveButton
+                  state={isSrc ? "source" : src ? (takes ? "target" : "off") : "idle"}
+                  busy={busy}
+                  label={
+                    isSrc
+                      ? "Cancel move"
+                      : src
+                        ? `Move here — ${p ? `swap with ${p.full_name}` : `fill ${label}`}`
+                        : `Move ${p ? p.full_name : `the empty ${label} slot`}`
+                  }
+                  onPress={() =>
+                    isSrc
+                      ? cancel()
+                      : src
+                        ? chooseSlot(label, p)
+                        : setPicked({ kind: "slot", label })
+                  }
+                />
+              ) : null}
               {p ? (
                 <button
                   type="button"
@@ -180,53 +233,31 @@ export function LineupBoard({
                   onPointerEnter={() => onIntentPlayer?.(p)}
                   onPointerDown={() => onIntentPlayer?.(p)}
                   onFocus={() => onIntentPlayer?.(p)}
-                  onClick={() => onOpenPlayer?.(p)}
+                  // A lit row commits the move wherever you tap it; everywhere
+                  // else the press keeps meaning "look at this player".
+                  onClick={() => (takes && !busy ? chooseSlot(label, p) : onOpenPlayer?.(p))}
                 >
                   <PlayerCell player={p} compact game={p.game} />
+                </button>
+              ) : takes ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => chooseSlot(label, undefined)}
+                  className="min-w-0 flex-1 rounded-md text-left text-sm font-semibold text-accent-strong"
+                >
+                  Put here
                 </button>
               ) : (
                 <span className="min-w-0 flex-1 text-sm font-semibold text-loss">Empty</span>
               )}
               {bye ? <Badge tone="loss">Bye</Badge> : null}
               <Points player={p} projection={projections?.[p?.player_id ?? ""]} />
-              {armed ? (
-                <button
-                  type="button"
-                  disabled={!takes || busy}
-                  aria-pressed={chosen}
-                  onClick={() => setTargetSlot(chosen ? null : label)}
-                  className={cn(
-                    "shrink-0 rounded-pill px-3 py-1.5 font-mono text-[10px] uppercase tracking-wide transition-colors duration-150",
-                    !takes && "text-faint",
-                    takes && chosen && "bg-accent text-accent-fg",
-                    takes && !chosen && "text-accent-strong shadow-[0_0_0_1px_var(--color-accent-deep)] hover:bg-raised",
-                  )}
-                >
-                  {!takes ? "No" : chosen ? "Chosen" : p ? "Swap in" : "Put here"}
-                </button>
-              ) : (
-                <SlotPicker
-                  slotLabel={label}
-                  occupant={p}
-                  bench={bench}
-                  disabled={!editable}
-                  busy={busy}
-                  projections={projections}
-                  onChoose={(playerId, name) =>
-                    onStart(playerId, p?.player_id ?? null, p ? null : label, name, label)
-                  }
-                  onClear={() => {
-                    if (p) onSit(p.player_id, p.full_name);
-                  }}
-                />
-              )}
             </li>
           );
         })}
       </ul>
 
-      {showBench ? (
-        <>
       <header className="border-t border-line px-5 pt-4 pb-2">
         <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Bench</h3>
       </header>
@@ -235,85 +266,88 @@ export function LineupBoard({
           <li className="px-5 py-3 text-sm text-muted">Nobody on the bench.</li>
         ) : null}
         {bench.map((p) => {
-          const isArmed = armed?.player_id === p.player_id;
+          const isSrc = src?.kind === "bench" && src.player.player_id === p.player_id;
+          const takes = src ? benchEligible(p) : false;
           const canStart = slots.some(({ label }) => slotAccepts(p.position, label));
           return (
             <li
               key={p.player_id}
               className={cn(
                 "flex items-center gap-3 border-b border-line px-5 py-2.5 last:border-0",
-                isArmed && "bg-[color-mix(in_oklab,var(--brand)_14%,transparent)]",
-                armed && !isArmed && "opacity-40",
+                src && !isSrc && !takes && "opacity-40",
+                isSrc && "bg-[color-mix(in_oklab,var(--brand)_14%,transparent)]",
+                takes && "bg-[color-mix(in_oklab,var(--brand)_7%,transparent)]",
               )}
             >
               <span className="w-9 shrink-0 font-mono text-[10px] uppercase tracking-wide text-faint">
                 {p.position ?? ""}
               </span>
+              {editable ? (
+                canStart || takes ? (
+                  <MoveButton
+                    state={isSrc ? "source" : src ? (takes ? "target" : "off") : "idle"}
+                    busy={busy}
+                    label={
+                      isSrc ? "Cancel move" : src ? `Send ${p.full_name} in` : `Move ${p.full_name}`
+                    }
+                    onPress={() =>
+                      isSrc
+                        ? cancel()
+                        : src
+                          ? chooseBench(p)
+                          : setPicked({ kind: "bench", playerId: p.player_id })
+                    }
+                  />
+                ) : (
+                  <span className="size-8 shrink-0" />
+                )
+              ) : null}
               <button
                 type="button"
                 className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
                 onPointerEnter={() => onIntentPlayer?.(p)}
                 onPointerDown={() => onIntentPlayer?.(p)}
                 onFocus={() => onIntentPlayer?.(p)}
-                onClick={() => onOpenPlayer?.(p)}
+                onClick={() => (takes && !busy ? chooseBench(p) : onOpenPlayer?.(p))}
               >
                 <PlayerCell player={p} compact game={p.game} />
               </button>
               {onBye(p, byes, week) ? <Badge tone="loss">Bye</Badge> : null}
               <Points player={p} projection={projections?.[p.player_id]} />
-              {editable && canStart ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  aria-pressed={isArmed}
-                  aria-label={isArmed ? `Cancel starting ${p.full_name}` : `Start ${p.full_name}`}
-                  onClick={() => arm(isArmed ? null : p)}
-                  className={cn(
-                    "grid size-8 shrink-0 place-items-center rounded-pill transition-colors duration-150",
-                    isArmed
-                      ? "bg-accent text-accent-fg"
-                      : "text-faint hover:bg-raised hover:text-fg",
-                  )}
-                >
-                  <ArrowUp className="size-4" strokeWidth={2.4} />
-                </button>
-              ) : (
-                <span className="size-8 shrink-0" />
-              )}
             </li>
           );
         })}
       </ul>
-        </>
-      ) : null}
 
-      {/* Pinned rather than placed. The slot you are aiming at can be a screen
-          away from the bench row you started from, so the thing that commits the
-          swap follows you instead of waiting where you left it. */}
-      {armed ? (
+      {/* Pinned rather than placed: the lit row can be a screen away from
+          where you armed, so the way out follows you. Moves commit on the
+          target press itself — this bar only narrates and cancels. */}
+      {src ? (
         <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] z-40 flex justify-center px-4 md:bottom-6">
           <div className="flex w-full max-w-md items-center gap-3 rounded-pill bg-surface px-4 py-2.5 shadow-[0_0_0_1px_var(--color-line-strong),var(--shadow-lift)]">
-            <span className="min-w-0 flex-1 text-sm leading-tight">
-              {targetSlot ? (
-                <>
-                  <span className="font-semibold">{armed.full_name}</span>
-                  <span className="text-muted"> into </span>
-                  <span className="font-mono text-xs uppercase">{targetSlot}</span>
-                  {outgoing ? (
-                    <span className="block truncate font-mono text-[10px] uppercase tracking-wide text-faint">
-                      {outgoing.full_name} to the bench
-                    </span>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <span className="font-semibold">{armed.full_name}</span>
-                  <span className="block font-mono text-[10px] uppercase tracking-wide text-faint">
-                    Pick a lit slot
-                  </span>
-                </>
-              )}
+            <span className="min-w-0 flex-1 truncate text-sm leading-tight">
+              <span className="font-semibold">
+                {src.kind === "bench"
+                  ? src.player.full_name
+                  : (src.player?.full_name ?? `${src.label} slot`)}
+              </span>
+              <span className="block font-mono text-[10px] uppercase tracking-wide text-faint">
+                Tap a lit row
+              </span>
             </span>
+            {src.kind === "slot" && src.player ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  if (src.player) onSit(src.player.player_id, src.player.full_name);
+                  cancel();
+                }}
+                className="shrink-0 rounded-pill px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-accent-strong shadow-[0_0_0_1px_var(--color-accent-deep)] hover:bg-raised"
+              >
+                To bench
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={cancel}
@@ -321,18 +355,47 @@ export function LineupBoard({
             >
               Cancel
             </button>
-            <button
-              type="button"
-              disabled={!targetSlot || busy}
-              onClick={confirm}
-              className="push shrink-0 rounded-pill bg-accent px-4 py-2 text-sm font-bold text-accent-fg disabled:pointer-events-none disabled:opacity-45"
-            >
-              {busy ? "Saving…" : "Confirm"}
-            </button>
           </div>
         </div>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * The edit column. One glyph, four postures: quiet when nothing is armed,
+ * filled on the row you armed, ringed on rows that can take the move, and
+ * faded on rows that cannot.
+ */
+function MoveButton({
+  state,
+  busy,
+  label,
+  onPress,
+}: {
+  state: "idle" | "source" | "target" | "off";
+  busy: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={state === "off" || busy}
+      aria-pressed={state === "source"}
+      aria-label={label}
+      onClick={onPress}
+      className={cn(
+        "grid size-8 shrink-0 place-items-center rounded-pill transition-colors duration-150",
+        state === "idle" && "text-faint hover:bg-raised hover:text-fg",
+        state === "source" && "bg-accent text-accent-fg",
+        state === "target" &&
+          "text-accent-strong shadow-[0_0_0_1px_var(--color-accent-deep)] hover:bg-raised",
+        state === "off" && "text-faint opacity-50",
+      )}
+    >
+      <ArrowUpDown className="size-4" strokeWidth={2.4} />
+    </button>
   );
 }
 

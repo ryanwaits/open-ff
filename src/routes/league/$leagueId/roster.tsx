@@ -167,6 +167,25 @@ function MyTeamPage() {
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not sit"),
   });
+  const swap = useMutation({
+    mutationFn: async (v: {
+      aId: string;
+      bId: string;
+      aSlot: string;
+      bSlot: string;
+      aName: string;
+      bName: string;
+    }) => {
+      // Two legs, in order: the first benches b and moves a into b's slot,
+      // the second lifts b into the slot a just left. One invalidate at the end.
+      await startPlayer({ data: { leagueId, playerId: v.aId, replaceId: v.bId } });
+      await startPlayer({ data: { leagueId, playerId: v.bId, slot: v.aSlot } });
+      await invalidateAfterLineup(qc, leagueId);
+      return v;
+    },
+    onSuccess: (v) => toast.success(`${v.aName} to ${v.bSlot}, ${v.bName} to ${v.aSlot}`),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not swap"),
+  });
   const drop = useMutation({
     mutationFn: (claimId: string) => cancelClaim({ data: { leagueId, claimId } }),
     onSuccess: () => {
@@ -328,13 +347,14 @@ function MyTeamPage() {
             byes={byes.data}
             week={week}
             projections={projections.data}
-            busy={start.isPending || sit.isPending}
+            busy={start.isPending || sit.isPending || swap.isPending}
             onIntentPlayer={(p) => void prefetchPlayerProfile(qc, leagueId, p.player_id)}
             onOpenPlayer={openPlayer}
             onStart={(playerId, replaceId, slot, name, into) =>
               start.mutate({ playerId, replaceId, slot, name, into })
             }
             onSit={(playerId, name) => sit.mutate({ playerId, name })}
+            onSwap={(v) => swap.mutate(v)}
           />
 
           {ir.length || taxi.length ? (
