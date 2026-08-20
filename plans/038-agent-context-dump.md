@@ -6,7 +6,7 @@
 > and report — do not improvise. When done, update your row in
 > `plans/README.md` unless a reviewer said they maintain the index.
 >
-> **Drift check (run first)**: `git diff --stat dd9bc53..HEAD -- src/lib/agent src/lib/league/fns.ts src/lib/league/book.server.ts src/lib/league/wagers.server.ts scripts/ledger.mjs`
+> **Drift check (run first)**: `git diff --stat 7545fdb..HEAD -- src/lib/agent src/lib/league/fns.ts src/lib/league/book.server.ts src/lib/league/wagers.server.ts scripts/ledger.mjs`
 > On a mismatch, STOP.
 
 ## Status
@@ -17,7 +17,8 @@
 - **Depends on**: plans/024-agent-primitive-surface.md (DONE — catalog exists;
   CLI only dispatches `getEvents` / `getLeagueFacts`)
 - **Category**: direction
-- **Planned at**: commit `dd9bc53`, 2026-08-19
+- **Planned at**: commit `7545fdb`, 2026-08-19 (reconciled from `dd9bc53`;
+  dump still missing)
 
 ## Why this matters
 
@@ -36,10 +37,11 @@ dispatch it. Features stay prompts over existing verbs.
 ## Current state
 
 - Catalog is 1:1 with `createServerFn` exports (`src/lib/agent/catalog.test.mjs:22-29`).
-  Adding a fn **requires** a catalog row + CATALOG.md row.
+  **68 tools** (was 67; `deleteLeague` landed with 036). Adding a fn
+  **requires** a catalog row + CATALOG.md row.
 - `scripts/ledger.mjs:81-100` only dispatches `getEvents` / `getLeagueFacts`.
   Other reads fail with "this CLI slice only dispatches…".
-- `getBook` (`fns.ts:591-599`) returns `purse.free` (= `spendable`) **only
+- `getBook` (`fns.ts:604-612`) returns `purse.free` (= `spendable`) **only
   when `betting_on`**. Empty book when betting is off (`book.server.ts:137-148`).
 - `loadLeagueBundle` already has `faabRemaining` / `faabAtRisk`
   (`engine.server.ts:616-617`) but the CLI cannot call it.

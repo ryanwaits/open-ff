@@ -6,7 +6,7 @@
 > update your row in `plans/README.md` unless a reviewer said they
 > maintain the index.
 >
-> **Drift check (run first)**: `git diff --stat dd9bc53..HEAD -- src/components/wager-ticket.tsx src/components/book-panel.tsx src/routes/league/$leagueId/standings.tsx src/lib/league/fns.ts src/lib/league/wagers.server.ts`
+> **Drift check (run first)**: `git diff --stat 7545fdb..HEAD -- src/components/wager-ticket.tsx src/components/book-panel.tsx src/routes/league/$leagueId/standings.tsx src/lib/league/fns.ts src/lib/league/wagers.server.ts`
 > On a mismatch, STOP.
 
 ## Status
@@ -17,14 +17,14 @@
 - **Depends on**: plans/024-agent-primitive-surface.md (DONE — `pullWager`
   RPC exists, no UI)
 - **Category**: direction
-- **Planned at**: commit `dd9bc53`, 2026-08-19
+- **Planned at**: commit `7545fdb`, 2026-08-19 (reconciled; still no `wager-pull`)
 
 ## Why this matters
 
 Every's **parity** test is bidirectional: anything the UI can do, the
 agent can do — and anything the agent can do should be visible in the
-product. `pullWager` is catalogued (`catalog.ts:271`) and wired
-(`fns.ts:618-625`, `wagers.server.ts:295-319`). The ticket UI only
+product. `pullWager` is catalogued (`catalog.ts:278`) and wired
+(`fns.ts:631-636`, `wagers.server.ts:295-319`). The ticket UI only
 imports `placeWager` (`wager-ticket.tsx:7`). Standings lists open
 positions with no withdraw control (`standings.tsx:338-356`). A human
 who fat-fingered a $20 ticket has to wait for lock. That is an **orphan

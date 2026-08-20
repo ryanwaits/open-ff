@@ -28,20 +28,48 @@ Slices live here. Read the one you are executing from.
 - **030–037 — Close the door, then self-host leftovers** (improve skill,
   2026-08-19, commit `dd9bc53`). Goal: invite-only means the RPCs too;
   the remaining skips and self-host gaps are named instead of rediscovered.
+  **030, 031, and 036 are DONE.**
 - **038–040 — Agent can actually use the catalog** (improve skill,
   2026-08-19, commit `dd9bc53`). Goal: one context dump, pull-ticket
   parity, and no minted FAAB on trade accept — so a loop over named
-  verbs is honest. 033 (mutating CLI) runs **after** 038, not before.
+  verbs is honest. **038–040 + 031 + 033 are DONE.**
 - **041–044 — Headless engine: token, MCP, skills** (improve skill,
   2026-08-19, commit `735b0ba`). Goal: Codex / Claude / Grok can
-  install open-ff as a tool server (stdio local, HTTP hosted) and
-  run migrate / sit / book playbooks. The PWA stays client zero.
+  install open-ff as a tool server (stdio on the commish box, HTTP
+  on *their* origin) and run migrate / sit / book playbooks. Not
+  a multi-tenant SaaS. The PWA stays client zero. **All four DONE.**
 - **045 — Migrate sources** (improve skill, 2026-08-19, commit
   `735b0ba`). After 044. Canonical import pack; file always works;
   NFL hops to ESPN; Yahoo OAuth gated on actual API approval.
+- **046 — Dead-simple self-host** (improve skill, 2026-08-19,
+  commit `735b0ba`). Docker + in-process tick so a non-technical
+  commish never writes a crontab. They only pay the host.
 
 Execute in the order below. Each executor: read the plan fully, honor STOP
 conditions, update your row when done.
+
+## Last reconcile
+
+2026-08-19 against `9af8eff`. No BLOCKED / IN PROGRESS.
+
+**Verified DONE (cheap):**
+- 038 `getAgentContext` · 040 `tradeTake` on execute · 039 `wager-pull`
+- 031 spendable/atRisk unskipped · 033 `placeWager --write`
+- 041 `off_` + `lookupToken` · 042 `scripts/mcp.mjs` · 043 `/api/mcp`
+- 044 four skills + `.grok/skills/open-ff-*`
+- 036 `deleteLeague` still there
+
+**Refreshed TODOs** (Planned-at → `9af8eff`): 032, 034, 035, 037, 045, 046.
+
+**Rejected:** none. Findings still live: no `exportLeague`, no Docker,
+no native Google, no SW, no `$1` live-line re-run, no Yahoo importer.
+
+**Indexed from outside this chain:** `047` skin system, `048` install
+drawer (not improve-template complete — `review-plan` before execute).
+
+**Executable now:** `046` (Docker + in-process tick). `045` unblocked
+but L + Yahoo-gated. `047`/`048` if look/install. `032` ops when a week
+has a line. `035` optional. `037` after a human installs.
 
 ## Decisions locked in
 
@@ -146,6 +174,29 @@ conditions, update your row when done.
   *whether* to stake belongs in the prompt.
 - **Engine stays UI-blind.** No `renderMatchupHtml` in the catalog.
   Generative UI / voice / Codex artifacts are clients.
+- **Connectors vs the engine.** League Loom / Flaim are read-only
+  MCP cables into ESPN/Sleeper. Steal: paste-one-URL hosted MCP
+  (043), prompt library as skills (044), “live data not memory,”
+  confirm-before-write. Do not steal: unrevokable sealed cookies,
+  18 analysis mega-tools, Fantrax/10-sports, staying on ESPN
+  forever. After 045 import, **we** are the league. Writes
+  (sit/start/claim/trade/wager) are the wedge they cannot copy
+  without becoming us.
+- **Self-host is the product, not a mode.** We do not run a
+  multi-tenant open-ff.com. A commish deploys *their* origin and
+  may run **many leagues** on it (`/new` or import each; each has
+  its own invite code). Pays only the host. Sleeper/ESPN stay free
+  non-commercial at household scale (a handful of leagues, not
+  thousands). MCP (041–043) talks to **their** URL, not ours.
+- **Migrate is one-way. Auth is a pump, not a bridge.** Private
+  ESPN/Yahoo login (or Sleeper id) exists so we can **extract
+  once** and bootstrap seats, settings, rosters, this-season
+  weeks. Then the other site is done. No live two-way sync, no
+  writing lineups back to ESPN/Sleeper, no keeping espn_s2 as
+  standing auth. Manual paste/PDF is the same pump without
+  login. After commit, sit/start/FAAB happen **here**. (Sleeper
+  the *NFL player/week stats pipe* is unrelated — that is public
+  score data, not “your Sleeper league stays connected.”)
 
 ## Execution order & status
 
@@ -172,7 +223,7 @@ conditions, update your row when done.
 | 019  | The composer — a readable deal, and FAAB you can send | P2 | L | 016, 017, 018 | DONE `ec855c3` (verified: composer sends `kind: "faab"`) |
 | 020  | Three-team trades — every asset says where it lands | P3 | M | 019 | DONE `4356a5e` (not pushed) |
 | 021  | The read line — one sentence that arranges the numbers | P3 | S | 016, 018/019 | DONE `7e6cac7` (verified: `trade-read.ts`) |
-| 022  | Prove FAAB, settlement, and clock with tests | P1 | M | — | DONE `ec0bd72` (live spendable/atRisk still skipped; mint case flipped in 027) |
+| 022  | Prove FAAB, settlement, and clock with tests | P1 | M | — | DONE `ec0bd72` (031 unskipped spendable/atRisk math; mint case flipped in 027) |
 | 023  | Close the public clock, invite leak, and bid leak | P1 | S | — | DONE `d9083ad` (verified: `CRON_SECRET` + commish-only invite) |
 | 024  | Publish the primitive catalog and a thin tool surface | P1 | M | 022, 023 | DONE `7f5a247` (verified `b918703`: catalog + `getEvents` / `getLeagueFacts` + `scripts/ledger.mjs`) |
 | 025  | Make a stranger able to run a league | P1 | M | 023 | DONE `f738a3b` (verified: `open-ff`, README, LICENSE, PGLite `dataDir`) |
@@ -181,21 +232,24 @@ conditions, update your row when done.
 | 028  | Invite-only desk — allowlist emails and member reads | P1 | M | 023 | DONE `fe3d1a6` (verified `dd9bc53`: allowlist + viewer on listed wrappers) |
 | 029  | Exercise the FAAB wager ticket for real | P2 | M | — | DONE `dd9bc53` (verified: `wager-qa.mjs` + testids; preseason no-price) |
 | 030  | Require a seat for every hosted league GET | P1 | S | 028 | DONE `4fd580c` (not pushed; eight hosted GETs + source test) |
-| 031  | Prove spendable and atRisk without a live database | P2 | S | 027 | TODO |
+| 031  | Prove spendable and atRisk without a live database | P2 | S | 027 | DONE `443b8ac` (not pushed) |
 | 032  | Re-run the wager script when a week has a live line | P3 | S | 029 | TODO (ops; no code) |
-| 033  | Let the CLI place a wager when asked in writing | P2 | M | 027, 038 | TODO (after 038) |
-| 034  | Let a commish download their league | P2 | M | 025 | TODO |
+| 033  | Let the CLI place a wager when asked in writing | P2 | M | 027, 038 | DONE `262717f` (not pushed) |
+| 034  | Let a commish download their league | P2 | M | 025 | DONE `0764e94` (not pushed; DeleteLeague untouched) |
 | 035  | Optional native Google sign-in for self-host | P2 | M | 025 | TODO |
-| 036  | Let a commish delete a league they run | P2 | M | 034 | TODO |
+| 036  | Let a commish delete a league they run | P2 | M | 034 | DONE `fa38680` (verified `7545fdb`: type-name confirm; 034 skipped) |
 | 037  | Web Push after someone actually installs the PWA | P3 | L | 026 | TODO (stop if no install) |
-| 038  | One dump: seat, spendable, facts, verbs | P1 | M | 024 | TODO |
-| 039  | Pull an open ticket from the book list | P1 | S | 024 | TODO |
-| 040  | Refuse a FAAB trade the sender cannot cover | P1 | S | 027 | TODO |
-| 041  | Mint a personal token so a host can act as a seat | P1 | M | 038 | TODO |
-| 042  | Speak MCP on stdio (local Codex / Claude / Grok) | P1 | M | 038, 033 | TODO |
-| 043  | Serve the same MCP over HTTP with the token | P1 | M | 041, 042 | TODO |
-| 044  | Skills: migrate, lineup, book | P1 | S | 042 | TODO |
+| 038  | One dump: seat, spendable, facts, verbs | P1 | M | 024 | DONE `e876e59` (not pushed) |
+| 039  | Pull an open ticket from the book list | P1 | S | 024 | DONE `6a77792` (not pushed) |
+| 040  | Refuse a FAAB trade the sender cannot cover | P1 | S | 027 | DONE `ff3d01b` (not pushed) |
+| 041  | Mint a personal token so a host can act as a seat | P1 | M | 038 | DONE `9537500` (not pushed) |
+| 042  | Speak MCP on stdio (local Codex / Claude / Grok) | P1 | M | 038, 033 | DONE `337ed25` (biome `e72f4cb`; not pushed) |
+| 043  | Serve the same MCP over HTTP with the token | P1 | M | 041, 042 | DONE `9af8eff` (not pushed) |
+| 044  | Skills: migrate, lineup, book | P1 | S | 042 | DONE `969cf73` (worktree; not pushed) |
 | 045  | Canonical import pack; file fallback; no NFL scrape | P1 | L | 044 | TODO (after 044; Yahoo gated) |
+| 046  | Dead-simple self-host (Docker + in-process tick) | P1 | M | 025 | TODO |
+| 047  | Runtime skin system (Ledger + Box Score) | P2 | L | 026 | TODO (design; review-plan first) |
+| 048  | Install drawer (dartwords-style A2HS) | P2 | M | 026 | TODO (design; stop if 037 ships SW first) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED
 
@@ -345,14 +399,12 @@ then `016` (client, pure). They meet at `018`.
 
 ## Suggested execution — slice 6 (door + leftovers)
 
-**030 is DONE** (`4fd580c`). Remaining leftovers are **not** on the
-headless-engine critical path:
+**030 is DONE** (`4fd580c`). **036 is DONE** (`fa38680`). Remaining
+leftovers are **not** on the headless-engine critical path:
 
-`031` (pure tests) anytime · `034` then `036` (backup/delete) ·
+`031` DONE · `034` (backup; leave DeleteLeague) ·
 `035` (Google) anytime · `032` when a week has a line · `037`
 only after a human installed the PWA.
-
-`034`/`036` share settings.tsx — do not run them in parallel.
 
 ## Sprints to the headless engine (do these)
 
@@ -361,18 +413,15 @@ speaks the same verbs. PWA is client zero, not the product.
 
 ### Sprint 1 — Honest loop (in-repo, no host yet)
 
-**Parallel:** `038` · `040` · `039` · `031`
-
-Then: `033` (CLI `placeWager --write`, needs 038).
+**DONE** (not pushed): `038` `e876e59` · `040` `ff3d01b` · `039`
+`6a77792` · `031` `443b8ac` · `033` `262717f`.
 
 Done when: an operator with `DATABASE_URL` can dump context and
 the purse cannot mint on trade accept. Pull exists in the PWA.
 
 ### Sprint 2 — Local host (commish Codex on the box)
 
-`042` (stdio MCP + `dispatch` + `AGENT_CORE`).
-
-Needs 038 + 033 so the socket is not hollow.
+**DONE** (not pushed): `042` `337ed25` + biome `e72f4cb`.
 
 Done when:
 
@@ -385,7 +434,7 @@ and “sit the injured RB” hits `sitPlayer`.
 
 ### Sprint 3 — Hosted host (a friend’s Codex)
 
-`041` (tokens) then `043` (HTTP `/api/mcp`).
+**DONE** (not pushed): `041` `9537500` · `043` `9af8eff`.
 
 Done when:
 
@@ -398,8 +447,7 @@ Same `dispatch`. Cookie still for the PWA.
 
 ### Sprint 4 — Playbooks (features as files)
 
-`044` — migrate / lineup / book skills. Copy into
-`~/.codex/skills`, `~/.claude/skills`, `.grok/skills`.
+**DONE** (not pushed): `044` `969cf73`.
 
 Done when “migrate my sdiff league” is a skill over
 `preview*` → `confirm: true` → `import*` (Sleeper / ESPN /
@@ -411,9 +459,15 @@ rebuild as they exist today).
 Sleeper prior season optional. **Yahoo OAuth only if the YDN app
 is approved.** Do not block Sprints 1–4 on Yahoo.
 
-### Sprint 5 — Self-host + season ops (off the critical path)
+### Sprint 5 — Self-host is the product
 
-`034` → `036` · `035` · `032` · `037` (stop if no install).
+Prefer `034` first (delete already ships with no download). Then
+`046` (Docker + tick without a crontab). `035` Google optional.
+`032` / `037` as before. `048` is install UX; `037` is push after
+someone installed.
+
+A commish pays **only** the host. No SportsDataIO. MCP 041–043
+point at **their** origin.
 
 ### Not a sprint
 
@@ -459,6 +513,12 @@ invite, `@open-ff/engine` npm extract.
   a verb.
 - **Extract `@open-ff/engine`:** the boundary is `dispatch` +
   catalog. A package split before 043 works is a rewrite.
+- **Beat League Loom at free multi-platform read-only MCP:**
+  they already did that (18 tools, 2-min setup, 10 sports).
+  Competing there is a trap. Optional later: a *thin* Sleeper
+  read for people who have not migrated. Not a sprint.
+- **Loom-style unrevokable AES credential blob:** 041 hashes
+  `off_` so revoke works. ESPN cookies stay one-shot on import.
 
 ## Findings considered and rejected (022–026)
 
@@ -467,8 +527,8 @@ unbrand, per-league icons, SW/push this slice).
 
 ## Open leftovers
 
-Planned: **031–037** (self-host/ops), **038–040** (callable
-catalog), **041–044** (token / MCP / skills). Do not re-audit as
+Planned leftovers: **032, 034, 035, 037, 045, 046**. Direction:
+**047, 048**. Headless engine **038–044 DONE**. Do not re-audit as
 unnamed findings.
 
 Still unplanned, still real, still not this backlog:
@@ -479,3 +539,12 @@ Still unplanned, still real, still not this backlog:
 - `total` market registry after someone has staked a spread.
 - Yahoo OAuth importer until YDN review is actually approved.
 - NFL.com HTML scrape (platform moving to ESPN for 2026).
+
+- **047 — Runtime skin system** (design exploration, 2026-08-19). Goal: `data-skin`
+  as a third axis beside theme and accent — Ledger untouched as default, Box Score
+  (from the design canvas) as the proving skin, token contract widened so radii,
+  type, label voice, and card structure swap per skin without component forks.
+- **048 — Install drawer** (2026-08-19). Goal: dartwords-style Add-to-Home-Screen
+  bottom sheet — engagement-triggered, glyph-step instructions, native prompt on
+  Android — replacing the quiet InstallCoach card. PWA manifest/middleware stay
+  as-is; service worker still owned by 037.

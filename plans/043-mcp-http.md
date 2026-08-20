@@ -3,7 +3,7 @@
 > **Executor instructions**: Follow this plan step by step. If a STOP
 > fires, report. Update `plans/README.md` unless told not to.
 >
-> **Drift check (run first)**: `git diff --stat 735b0ba..HEAD -- src/lib/agent src/lib/auth src/routes/api package.json`
+> **Drift check (run first)**: `git diff --stat 7545fdb..HEAD -- src/lib/agent src/lib/auth src/routes/api package.json`
 > On a mismatch, STOP.
 
 ## Status
@@ -13,21 +13,29 @@
 - **Risk**: HIGH
 - **Depends on**: plans/041-agent-tokens.md, plans/042-mcp-stdio.md
 - **Category**: direction
-- **Planned at**: commit `735b0ba`, 2026-08-19
+- **Planned at**: commit `7545fdb`, 2026-08-19 (reconciled; still no `/api/mcp`)
 
 ## Why this matters
 
 Local stdio (042) is the commish-on-the-box path. A friend with only
-the PWA + a Codex install needs:
+the PWA + Claude/ChatGPT/Codex needs a **paste-one-URL** hosted
+connector (League Loom’s pattern: `https://leagueloom.com/mcp`,
+leave Client ID blank, ~2 minutes). Ours:
+
+```
+https://YOUR_HOST/api/mcp
+Authorization: Bearer off_…     # 041
+```
 
 ```
 codex mcp add openff --url https://YOUR_HOST/api/mcp \
   --bearer-token-env-var OPENFF_TOKEN
 ```
 
-Same `dispatch` / `AGENT_CORE`. Auth is `Authorization: Bearer off_…`
-from 041. Isolation already allows non-browser requests with no
-`Sec-Fetch-Site`. Do not send session cookies to Codex.
+Claude: Settings → Connectors → custom → paste URL. ChatGPT:
+Developer mode → custom connector (Plus+). Grok: `grok mcp add
+--transport http`. Same `dispatch` / `AGENT_CORE`. Do not send
+session cookies. Isolation already allows no `Sec-Fetch-Site`.
 
 ## Current state
 
@@ -58,7 +66,9 @@ from 041. Isolation already allows non-browser requests with no
   if the SDK’s HTTP helper is ugly — pick one, document it)
 - Wire `dispatch` + `AGENT_CORE`
 - Bearer `off_` required on every call. Missing/unknown → 401
-- README: hosted install snippet next to the local one
+- README: hosted install for Codex **and** Claude Connectors /
+  ChatGPT custom connector (paste URL, leave Client ID blank,
+  then `OPENFF_TOKEN`). Steal Loom’s copy, not their product.
 - `scripts/mcp-http.test.mjs` — source-string: route calls
   `lookupToken` or `requireUserId`, does **not** mention
   `OPENFF_USER`, does **not** import `tickAllLeagues`
@@ -97,7 +107,8 @@ export OPENFF_TOKEN=off_…          # minted in the app, 041
 codex mcp add openff --url https://HOST/api/mcp --bearer-token-env-var OPENFF_TOKEN
 ```
 
-Same URL for Claude (`-t http`) and Grok (`--transport http`).
+Same URL for Claude (`-t http` / Connectors UI) and Grok
+(`--transport http`). Document “leave Client ID & Secret blank.”
 
 **Verify**: `rg -n "/api/mcp" README.md`.
 
@@ -132,3 +143,5 @@ path). Do not live-hit production.
   second origin.
 - Reviewer: reject CORS that reflects any origin with
   `credentials: true`.
+- Do **not** copy League Loom’s unrevokable sealed-credential
+  token. Ours is `off_` hashed in DB so 041 revoke works.

@@ -7,7 +7,7 @@
 > in `plans/README.md` — unless a reviewer dispatched you and told you they
 > maintain the index.
 >
-> **Drift check (run first)**: `git diff --stat dd9bc53..HEAD -- src/lib/league/faab.ts src/lib/league/wagers.server.ts src/lib/league/money.characterization.test.mjs src/lib/db.ts`
+> **Drift check (run first)**: `git diff --stat 7545fdb..HEAD -- src/lib/league/faab.ts src/lib/league/wagers.server.ts src/lib/league/money.characterization.test.mjs src/lib/db.ts`
 > Compare excerpts if those files moved.
 
 ## Status
@@ -17,7 +17,7 @@
 - **Risk**: LOW
 - **Depends on**: plans/027-faab-conservation.md (DONE `9f512b5`)
 - **Category**: tests
-- **Planned at**: commit `dd9bc53`, 2026-08-19
+- **Planned at**: commit `7545fdb`, 2026-08-19 (reconciled from `dd9bc53`; skips unchanged)
 
 ## Why this matters
 
@@ -35,10 +35,12 @@ the one-liners so a unit test can flip the skips.
 
 ## Current state
 
-`wagers.server.ts` `spendable` (339-356):
+`wagers.server.ts` `spendable` (331-349):
 `Math.max(0, (purse ?? 0) - (await atRisk(leagueId, rosterId)))`
 
-`atRisk`: `sum(stake) where status = 'placed'`.
+`atRisk` (352-366): `sum(stake) where status = 'placed'`. Still
+calls `getSql()` / `ensureWagerSchema`. `src/lib/db.ts` glob migrate
+is 146-150 (PGLite close was added in `c8df5c0` — ignore it).
 
 `faab.ts` already holds `applyLoss` (pure, no `getSql`). Add neighbors.
 

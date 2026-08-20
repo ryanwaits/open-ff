@@ -6,7 +6,7 @@
 > update your row in `plans/README.md` unless a reviewer said they
 > maintain the index.
 >
-> **Drift check (run first)**: `git diff --stat dd9bc53..HEAD -- src/lib/league/ops.server.ts src/lib/league/faab.ts src/lib/league/faab.test.mjs src/lib/league/money.characterization.test.mjs`
+> **Drift check (run first)**: `git diff --stat 7545fdb..HEAD -- src/lib/league/ops.server.ts src/lib/league/faab.ts src/lib/league/faab.test.mjs src/lib/league/money.characterization.test.mjs`
 > On a mismatch, STOP.
 
 ## Status
@@ -17,15 +17,15 @@
 - **Depends on**: plans/027-faab-conservation.md (DONE — wager *settle*
   no longer mints; trade *execute* still can)
 - **Category**: bug
-- **Planned at**: commit `dd9bc53`, 2026-08-19
+- **Planned at**: commit `7545fdb`, 2026-08-19 (reconciled; execute still mints)
 
 ## Why this matters
 
 027 closed the documented mint: a lost wager pools only what the purse
 still holds (`applyLoss`). FAAB-in-a-trade was checked at **propose**
-against `spendable` (`ops.server.ts:547-556`) and then at **execute**
+against `spendable` (`ops.server.ts:653-662`) and then at **execute**
 debited with `greatest(0, remaining - amount)` while the receiver is
-**credited the full amount** (`ops.server.ts:748-757`). If the sender
+**credited the full amount** (`ops.server.ts:862-872`). If the sender
 stakes or wins a claim between propose and accept, remaining $20 +
 trade $30 → sender 0, receiver +30, league total +10.
 
@@ -37,7 +37,7 @@ catalog safe to hand to a loop.
 
 Propose (honest):
 
-```547:556:src/lib/league/ops.server.ts
+```653:662:src/lib/league/ops.server.ts
     if (a.kind === "faab") {
       const amount = Math.floor(a.amount ?? 0);
       ...
@@ -50,7 +50,7 @@ Propose (honest):
 
 Execute (the hole):
 
-```748:757:src/lib/league/ops.server.ts
+```862:872:src/lib/league/ops.server.ts
     } else if (a.kind === "faab" && a.amount) {
       await sql`
         update ff_rosters set faab_remaining = greatest(0, coalesce(faab_remaining, 0) - ${a.amount})

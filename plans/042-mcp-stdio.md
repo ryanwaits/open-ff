@@ -4,7 +4,7 @@
 > verification. If a STOP fires, report — do not improvise. Update
 > `plans/README.md` unless a reviewer maintains the index.
 >
-> **Drift check (run first)**: `git diff --stat 735b0ba..HEAD -- src/lib/agent scripts/ledger.mjs src/lib/league/fns.ts package.json`
+> **Drift check (run first)**: `git diff --stat 7545fdb..HEAD -- src/lib/agent scripts/ledger.mjs src/lib/league/fns.ts package.json`
 > On a mismatch, STOP.
 
 ## Status
@@ -15,7 +15,8 @@
 - **Depends on**: plans/038-agent-context-dump.md, plans/033-place-wager-cli.md
   (dump + at least one mutating dispatch exist so MCP is not a hollow socket)
 - **Category**: direction
-- **Planned at**: commit `735b0ba`, 2026-08-19
+- **Planned at**: commit `7545fdb`, 2026-08-19 (reconciled from `735b0ba`;
+  catalog is 68 tools; still no `dispatch` / `mcp.mjs`)
 
 ## Why this matters
 
@@ -35,8 +36,9 @@ This plan **is** the case. Look up the current version first.
 
 ## Current state
 
-- `AGENT_TOOLS` in `src/lib/agent/catalog.ts` — 67 ids, 1:1 with
-  `createServerFn` exports (`catalog.test.mjs`).
+- `AGENT_TOOLS` in `src/lib/agent/catalog.ts` — **68 ids** (was 67;
+  +`deleteLeague`), 1:1 with `createServerFn` exports
+  (`catalog.test.mjs`). `package.json` gained `db:repair` — ignore.
 - `scripts/ledger.mjs` dispatches `getEvents` / `getLeagueFacts`
   (and after 038, `getAgentContext`; after 033, `placeWager --write`).
   Direct engine imports, no session.
@@ -175,3 +177,6 @@ until then, document “copy from the `user` table / local seed”).
 - Adding a verb to MCP = add the id to `AGENT_CORE` and a dispatch
   branch. Catalog 1:1 still owns the name.
 - Reviewer: reject a server that takes `userId` from the model.
+- Do not grow `AGENT_CORE` into League Loom’s 18 *analysis*
+  tools (league health, exposure maps, weekly digest-as-a-tool).
+  Those are **044 skills** over the atoms. Keep the socket small.

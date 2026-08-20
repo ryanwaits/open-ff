@@ -3,7 +3,7 @@
 > **Executor instructions**: Follow this plan step by step. Skills are
 > markdown. Do not invent tools. If a STOP fires, report.
 >
-> **Drift check (run first)**: `git diff --stat 735b0ba..HEAD -- src/lib/agent src/lib/league/fns.ts README.md`
+> **Drift check (run first)**: `git diff --stat 7545fdb..HEAD -- src/lib/agent src/lib/league/fns.ts README.md`
 > On a mismatch, STOP.
 
 ## Status
@@ -13,14 +13,18 @@
 - **Risk**: LOW
 - **Depends on**: plans/042-mcp-stdio.md (tools exist to playbook)
 - **Category**: direction
-- **Planned at**: commit `735b0ba`, 2026-08-19
+- **Planned at**: commit `7545fdb`, 2026-08-19 (reconciled; still no `src/lib/agent/skills/`)
 
 ## Why this matters
 
 MCP is the plug. Without a skill, the model dumps 20 tools into
 context and guesses. Cora drowned that way. Skills are the features:
-migrate, set lineup, read the book. They compose `AGENT_CORE`. They
-are not a second engine and not a desk chatbot.
+migrate, set lineup, read the book, **plus the read-only weekly
+habits League Loom ships as a prompt library** (newsletter,
+lineup check, waiver report). Those are prompts over our verbs,
+not new tools. They are not a second engine and not a desk
+chatbot. Every skill must say: pull live tools, do not invent
+rosters from memory (Loom bakes this into every prompt).
 
 A host loads them as files (Claude/Grok/Codex each have a skills
 dir). We author **once** under `src/lib/agent/skills/` and tell the
@@ -43,7 +47,7 @@ human to copy or symlink. Optional: also drop the same files in
 | Purpose | Command | Expected |
 |---------|---------|----------|
 | Tests | `bun test src/lib/agent` | pass |
-| Presence | `ls src/lib/agent/skills/*/SKILL.md` | three files |
+| Presence | `ls src/lib/agent/skills/*/SKILL.md` | four files |
 
 ## Scope
 
@@ -51,7 +55,12 @@ human to copy or symlink. Optional: also drop the same files in
 - `src/lib/agent/skills/open-ff-migrate/SKILL.md`
 - `src/lib/agent/skills/open-ff-lineup/SKILL.md`
 - `src/lib/agent/skills/open-ff-book/SKILL.md`
-- Same three copied or linked under `.grok/skills/<name>/SKILL.md`
+- `src/lib/agent/skills/open-ff-week/SKILL.md` — read-only weekly
+  digest (record, matchup, injuries/byes, one waiver idea). No
+  writes. Compose `getAgentContext` + `getTeam` + `getMatchups` +
+  `getWire`. This is Loom’s “weekly newsletter” for **this**
+  league, not a cross-ESPN aggregator.
+- Same **four** copied or linked under `.grok/skills/<name>/SKILL.md`
   (project scope, so Grok in this repo sees them)
 - `src/lib/agent/context-prompt.md` — one paragraph: “features are
   the skills in `./skills`”
@@ -71,7 +80,7 @@ human to copy or symlink. Optional: also drop the same files in
 ## Git workflow
 
 - Branch: current
-- Commit: `docs: add migrate, lineup, and book agent skills`
+- Commit: `docs: add migrate, lineup, book, and week agent skills`
 - Do NOT push
 
 ## Steps
@@ -104,9 +113,19 @@ ids, link to `CATALOG.md` / `context-prompt.md` with relative paths.
 2. Never fade the user’s own roster (engine also blocks).
 3. `placeWager` / `pullWager`. Stake in whole dollars.
 
+**open-ff-week** (read-only)
+1. First line of the skill: “Call tools. Do not answer from
+   memory.”
+2. `getAgentContext` → `getMatchups` → `getTeam` → `getWire`.
+3. Output: record, this week’s opponent, sit/start *flags*
+   (bye/injury) as advice, one FA add. Do **not** call
+   `sitPlayer` / `addDrop` in this skill. Lineup *changes* are
+   `open-ff-lineup`.
+4. Use as decision support, not autopilot (Loom FAQ).
+
 **Verify**: each SKILL.md contains `getAgentContext` and does
 **not** contain `tickAllLeagues`. Migrate skill contains
-`confirm: true`.
+`confirm: true`. Week skill does not mention `sitPlayer`.
 
 ### Step 2: Grok copies + README
 
@@ -129,8 +148,8 @@ short block:
 
 ## Done criteria
 
-- [ ] Three skills exist in `src/lib/agent/skills`
-- [ ] Grok copies exist
+- [ ] Four skills exist in `src/lib/agent/skills`
+- [ ] Grok copies exist for all four
 - [ ] Skill test: no invented tool ids
 - [ ] README copy instructions
 - [ ] `bun test src/lib/agent` pass

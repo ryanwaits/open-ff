@@ -11,10 +11,11 @@
 - **Priority**: P2
 - **Effort**: M
 - **Risk**: HIGH
-- **Depends on**: plans/034-league-backup.md (download first — or ship
-  a "type the name" confirm if 034 is not done and you must proceed)
+- **Depends on**: plans/034-league-backup.md (download first — **not
+  required**; this plan shipped the type-the-name confirm instead)
 - **Category**: dx
 - **Planned at**: commit `dd9bc53`, 2026-08-19
+- **Landed at**: commit `fa38680` (verified `7545fdb`) — DONE without 034
 
 ## Why this matters
 

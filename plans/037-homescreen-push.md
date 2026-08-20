@@ -4,7 +4,7 @@
 > operator has **not** confirmed a friend installed the PWA, STOP at
 > step 0. Do not invent a service worker "just in case."
 >
-> **Drift check (run first)**: `git diff --stat dd9bc53..HEAD -- src/skin src/routes/__root.tsx vite.config.ts public/__grok scripts/grok-pwa-shared.mjs`
+> **Drift check (run first)**: `git diff --stat 9af8eff..HEAD -- src/skin src/routes/__root.tsx vite.config.ts public/__grok scripts/grok-pwa-shared.mjs`
 
 ## Status
 
@@ -14,7 +14,9 @@
 - **Depends on**: plans/026-skin-and-homescreen.md (DONE — install
   coach, no SW)
 - **Category**: direction
-- **Planned at**: commit `dd9bc53`, 2026-08-19
+- **Planned at**: commit `9af8eff`, 2026-08-19 (reconciled; still no SW.
+  Plan 048 is the install *drawer* — do not ship a service worker here
+  “to make the drawer work.”)
 
 ## Why this matters
 
@@ -28,6 +30,8 @@ SW+push before that is a cache-invalidation footgun for zero users.
 ## Current state
 
 - No `navigator.serviceWorker` in app source (026 deferred it).
+  `vite.config.ts` gained a PGLite close-on-teardown hook
+  (`c8df5c0`) — unrelated; do not fight it.
 - `grokPwaPlugin` + `public/__grok/manifest.webmanifest` are
   **platform**. Do not delete or unbrand.
 - Draft poll stays the in-room transport even after this plan.

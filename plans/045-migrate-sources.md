@@ -4,7 +4,7 @@
 > plan, not “build Yahoo OAuth this week.” Do the spike in Step 0
 > before writing a Yahoo client. If a STOP fires, report.
 >
-> **Drift check (run first)**: `git diff --stat 735b0ba..HEAD -- src/lib/league/engine.server.ts src/lib/data/sleeper.server.ts src/lib/data/espn-ff.server.ts src/lib/league/rebuild.ts src/lib/agent/skills src/routes/import.tsx`
+> **Drift check (run first)**: `git diff --stat 9af8eff..HEAD -- src/lib/league/engine.server.ts src/lib/data/sleeper.server.ts src/lib/data/espn-ff.server.ts src/lib/league/rebuild.ts src/lib/agent/skills src/routes/import.tsx`
 
 ## Status
 
@@ -14,13 +14,23 @@
 - **Depends on**: plans/044-agent-skills.md (migrate skill exists over
   today’s three verbs)
 - **Category**: direction
-- **Planned at**: commit `735b0ba`, 2026-08-19
+- **Planned at**: commit `9af8eff`, 2026-08-19 (reconciled; **044 skills
+  exist.** Migrate skill is Sleeper-on-MCP; ESPN/rebuild → PWA `/import`.
+  Engine verbs unchanged: still three sources, no Yahoo, no Sleeper
+  `previous_league_id`.)
 
 ## Why this matters
 
 Onboarding is “bring SDIFFL over,” not “create an empty desk.” The
 must-haves are **teams + managers**, **league settings**, and
 **current rosters** (pre-draft empty, post-draft, or mid-season).
+
+League Loom (and Flaim) **keep you on ESPN/Sleeper forever** and
+re-read them on every question (cookies in a sealed token). That
+is a great connector. After we import, **we are the source of
+truth** — espn_s2 is used once and discarded. That is the
+migrate story. Do not become a second Loom by polling ESPN for
+the rest of the season.
 History (this season’s weeks, then prior seasons) is the
 nice-to-have. Two ingest modes must both work at the agent/UX
 layer: **connect** (API / cookies) and **file/paste**. Every source
@@ -65,11 +75,16 @@ three-way preset, not a full book.
    migrates **to ESPN**. Tell the commish: espn.com/importnfl, then
    our ESPN import. Direct `fantasy.nfl.com` scrape is ToS + a
    dying site.
-5. **No manager emails from these APIs.** Sleeper `display_name`,
+5. **One-way only.** Auth/connect is extract-and-leave. After
+   `commitImportPack`, do not refresh rosters from ESPN/Sleeper
+   league APIs, do not push sits back, do not keep cookies. The
+   other managers join **this** origin (`/join?code=`). File/paste
+   is the same one-way pump.
+6. **No manager emails from these APIs.** Sleeper `display_name`,
    ESPN `displayName`, Yahoo nickname/`guid`. Allowlist is a
    **post-import** step the commish types. Do not block migrate on
    emails.
-6. **Must-have vs nice.** Ship: seats, names, settings, current
+7. **Must-have vs nice.** Ship: seats, names, settings, current
    roster, this-season schedule/scores if the source has them.
    Walk prior seasons only when the source has a cheap pointer
    (Sleeper `previous_league_id`). Do not promise a 2015 archive.
@@ -194,6 +209,8 @@ the flag is set.
 - You start a Yahoo OAuth client without an approved YDN app
 - You fetch `fantasy.nfl.com` HTML
 - You persist espnS2 / Yahoo refresh tokens
+- You add a “sync from Sleeper” button or a cron that re-pulls
+  *league* rosters/settings from the old host
 - Unifying writers requires rewriting `engine.server.ts` scoring —
   stop and keep three writers behind a thin mapper instead
 

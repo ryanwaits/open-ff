@@ -4,7 +4,7 @@
 > verification command and confirm the expected result before moving to
 > the next step. If a STOP fires, report — do not improvise.
 >
-> **Drift check (run first)**: `git diff --stat dd9bc53..HEAD -- src/lib/auth/server.ts src/lib/auth/providers.ts src/lib/auth/email-password.ts src/routes/login.tsx .env.example`
+> **Drift check (run first)**: `git diff --stat 9af8eff..HEAD -- src/lib/auth/server.ts src/lib/auth/providers.ts src/lib/auth/email-password.ts src/routes/login.tsx .env.example`
 
 ## Status
 
@@ -14,7 +14,8 @@
 - **Depends on**: plans/025-self-host-pickup.md (DONE — broker gated;
   email/password is the self-host path)
 - **Category**: dx
-- **Planned at**: commit `dd9bc53`, 2026-08-19
+- **Planned at**: commit `9af8eff`, 2026-08-19 (reconciled; still no
+  `GOOGLE_CLIENT_*`. `.env.example` has an agent-token comment — keep it.)
 
 ## Why this matters
 
@@ -36,6 +37,8 @@ Auth, optional, env-gated. Preview / broker path stays as-is.
   `configuredGrokProviders`.
 - `.env.example` exists from 025 — empty keys only, no secrets.
 - Login page already maps `configuredGrokProviders(host)` to buttons.
+  `login.tsx` now invalidates `["my-leagues"]` after email sign-in
+  (`1abb1b6`) — keep that. Still no `GOOGLE_CLIENT_*`.
 
 Better Auth social `google` is a supported method in this template
 **only if** you use the app's own client. Do not add GitHub, magic

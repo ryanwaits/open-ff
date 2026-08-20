@@ -5,7 +5,7 @@
 > If a STOP fires, report — do not improvise. Update `plans/README.md`
 > unless a reviewer said they maintain the index.
 >
-> **Drift check (run first)**: `git diff --stat 735b0ba..HEAD -- src/lib/auth/verify.server.ts src/lib/auth/middleware.ts src/lib/auth/isolation.server.ts src/lib/auth/server.ts src/routes/league/$leagueId/settings.tsx migrations`
+> **Drift check (run first)**: `git diff --stat 7545fdb..HEAD -- src/lib/auth/verify.server.ts src/lib/auth/middleware.ts src/lib/auth/isolation.server.ts src/lib/auth/server.ts src/routes/league/$leagueId/settings.tsx migrations`
 > On a mismatch, STOP.
 
 ## Status
@@ -16,7 +16,8 @@
 - **Depends on**: plans/038-agent-context-dump.md (dump exists so a
   token is useful)
 - **Category**: security
-- **Planned at**: commit `735b0ba`, 2026-08-19
+- **Planned at**: commit `7545fdb`, 2026-08-19 (reconciled from `735b0ba`;
+  next migration is **0013**, not 0012)
 
 ## Why this matters
 
@@ -32,6 +33,13 @@ person who owns the database.
 Do **not** rewrite `src/lib/auth/server.ts`. Do **not** add Better
 Auth’s apiKey plugin. Own table, own hash, prefix `off_`.
 
+League Loom seals ESPN cookies into a user-held AES token with
+**no server revoke** (“reconnect does not revoke an older
+token”). Steal the *user holds the bearer* idea. Do **not** steal
+unrevokable. Hash at rest so `revokeAgentToken` is real. Our
+token is **our user**, not a bag of espn_s2. After migrate (045),
+we do not need ESPN cookies in the token at all.
+
 ## Current state
 
 - `requireUserId` (`verify.server.ts:83-96`) only accepts a Better
@@ -42,12 +50,15 @@ Auth’s apiKey plugin. Own table, own hash, prefix `off_`.
   MCP typically sends none, so isolation is already fine for a
   token header. Do **not** weaken the cookie path.
 - Settings (`src/routes/league/$leagueId/settings.tsx`) is
-  commish-dense. Token mint belongs on **account**, not per-league —
-  a token is the user, seats come from `ff_rosters`. Put the mint
-  UI on `/` (signed-in home) or a small account strip, **not** only
-  on one league’s settings. If home is too tight, a row on settings
-  that says “this token is you, every league you sit” is ok.
-- Migrations are ordered files. Next is `migrations/0012_agent_tokens.sql`.
+  commish-dense **and now has DeleteLeague** (`fa38680`). Token mint
+  belongs on **account**, not per-league — a token is the user,
+  seats come from `ff_rosters`. Put the mint UI on `/` (signed-in
+  home) or a small account strip, **not** only on one league’s
+  settings. If home is too tight, a row on settings that says
+  “this token is you, every league you sit” is ok. Do not restyle
+  DeleteLeague.
+- Migrations are ordered files. **`0012_waiver_holds.sql` already
+  exists** (`7545fdb`). Next is `migrations/0013_agent_tokens.sql`.
 
 ## Commands you will need
 
@@ -60,7 +71,7 @@ Auth’s apiKey plugin. Own table, own hash, prefix `off_`.
 ## Scope
 
 **In scope**:
-- `migrations/0012_agent_tokens.sql`
+- `migrations/0013_agent_tokens.sql`
 - `src/lib/auth/tokens.server.ts` (create) — mint, hash, lookup, revoke
 - `src/lib/auth/verify.server.ts` — `requireUserId` / `getSessionUser`
   accept `Bearer off_…` **after** session miss
@@ -93,7 +104,7 @@ Auth’s apiKey plugin. Own table, own hash, prefix `off_`.
 
 ### Step 1: Table + hash helpers
 
-`migrations/0012_agent_tokens.sql`:
+`migrations/0013_agent_tokens.sql`:
 
 ```sql
 create table if not exists ff_agent_tokens (

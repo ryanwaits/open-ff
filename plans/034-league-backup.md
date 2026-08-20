@@ -4,7 +4,7 @@
 > verification command and confirm the expected result before moving to
 > the next step. If a STOP fires, report — do not improvise.
 >
-> **Drift check (run first)**: `git diff --stat dd9bc53..HEAD -- src/lib/league/fns.ts src/lib/league/engine.server.ts src/routes/league/$leagueId/settings.tsx src/lib/agent/catalog.ts`
+> **Drift check (run first)**: `git diff --stat 9af8eff..HEAD -- src/lib/league/fns.ts src/lib/league/engine.server.ts src/routes/league/$leagueId/settings.tsx src/lib/agent/catalog.ts`
 
 ## Status
 
@@ -14,7 +14,9 @@
 - **Depends on**: plans/025-self-host-pickup.md (DONE — self-host exists,
   no dump)
 - **Category**: dx
-- **Planned at**: commit `dd9bc53`, 2026-08-19
+- **Planned at**: commit `9af8eff`, 2026-08-19 (reconciled; still no
+  `exportLeague`. **036 delete shipped.** Catalog 1:1 excludes
+  `/AgentTokens?$/` — `exportLeague` **is** a catalog tool, add it.)
 
 ## Why this matters
 
@@ -28,12 +30,18 @@ off-box is the first half of backup.
 ## Current state
 
 - No `exportLeague` / `backup` symbol in `src/lib/league/fns.ts`.
+- **036 already landed** (`fa38680`): `deleteLeague` in
+  `engine.server.ts:1043`, `fns.ts:29`, catalog row, settings
+  `DeleteLeague` (`settings.tsx:722-767`) types the league name.
+  Leave that block alone. Add the download control **above** it.
 - Settings is commish-gated for writes; `getSettings` is a viewer GET
   after 028.
 - Dual schema: `migrations/*.sql` + `ensure*Schema`. Dump **rows**,
   not "run these creates."
 - Catalog (`src/lib/agent/catalog.ts`) must gain a row if you add a
   server fn (024 rule). Ids match `export const X = createServerFn`.
+  Token fns (`mintAgentToken` etc.) are already excluded from the 1:1
+  test via `/AgentTokens?$/` — do not put exportLeague on that list.
 
 Tables that *are* the league (read, do not invent): `ff_leagues`,
 `ff_rosters`, `ff_spots`, `ff_matchups` / schedule, `ff_claims`,

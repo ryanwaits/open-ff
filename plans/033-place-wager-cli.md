@@ -5,16 +5,18 @@
 > the next step. If a STOP fires, report — do not improvise. Skip
 > updating `plans/README.md` if a reviewer said they maintain the index.
 >
-> **Drift check (run first)**: `git diff --stat dd9bc53..HEAD -- scripts/ledger.mjs src/lib/agent/cli.test.mjs src/lib/agent/catalog.ts src/lib/league/wagers.server.ts`
+> **Drift check (run first)**: `git diff --stat 7545fdb..HEAD -- scripts/ledger.mjs src/lib/agent/cli.test.mjs src/lib/agent/catalog.ts src/lib/league/wagers.server.ts`
 
 ## Status
 
 - **Priority**: P2
 - **Effort**: M
 - **Risk**: MED
-- **Depends on**: plans/027-faab-conservation.md (DONE — mint closed)
+- **Depends on**: plans/027-faab-conservation.md (DONE — mint closed);
+  plans/038-agent-context-dump.md (README order: write CLI after dump)
 - **Category**: direction
-- **Planned at**: commit `dd9bc53`, 2026-08-19
+- **Planned at**: commit `7545fdb`, 2026-08-19 (reconciled from `dd9bc53`;
+  argv still refuses mutating tools)
 
 ## Why this matters
 
@@ -29,7 +31,7 @@ enforces spendable, fade-self, caps.
 
 ## Current state
 
-`scripts/ledger.mjs:113-115`:
+Catalog grew (`deleteLeague`). CLI still read-only. `scripts/ledger.mjs:113-115`:
 
 ```js
 if (tool.mutating) {
