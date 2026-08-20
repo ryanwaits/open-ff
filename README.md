@@ -105,6 +105,17 @@ codex mcp add openff --command bun --args scripts/mcp.mjs
 
 `OPENFF_USER` is the Better Auth `user.id` (copy from the `user` table / local seed until settings shows it).
 
+## Agent hosts (hosted)
+
+Same `AGENT_CORE` catalog over Streamable HTTP in **JSON response mode** (request/response; no SSE — Vercel-friendly) with a personal `off_` token (mint in the app; 041):
+
+```sh
+export OPENFF_TOKEN=off_…
+codex mcp add openff --url https://HOST/api/mcp --bearer-token-env-var OPENFF_TOKEN
+```
+
+Claude Connectors / ChatGPT custom connector: paste `https://HOST/api/mcp`, leave Client ID & Secret blank, authorize with the bearer token. Grok: `--transport http` against the same URL (bearer via env). Cookie sessions are not accepted — `Authorization: Bearer off_…` only.
+
 ## Agent skills
 
 Playbooks for migrate / lineup / book / week live under

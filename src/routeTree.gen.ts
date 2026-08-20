@@ -17,6 +17,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as PlayersRouteImport } from './routes/players'
 import { Route as ScoresRouteImport } from './routes/scores'
+import { Route as ApiMcpRouteImport } from './routes/api/mcp'
 import { Route as LeagueLeagueIdRouteImport } from './routes/league/$leagueId'
 import { Route as ScoresGameIdRouteImport } from './routes/scores_.$gameId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -74,6 +75,11 @@ const PlayersRoute = PlayersRouteImport.update({
 const ScoresRoute = ScoresRouteImport.update({
   id: '/scores',
   path: '/scores',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMcpRoute = ApiMcpRouteImport.update({
+  id: '/api/mcp',
+  path: '/api/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LeagueLeagueIdRoute = LeagueLeagueIdRouteImport.update({
@@ -179,6 +185,7 @@ export interface FileRoutesByFullPath {
   '/new': typeof NewRoute
   '/players': typeof PlayersRoute
   '/scores': typeof ScoresRoute
+  '/api/mcp': typeof ApiMcpRoute
   '/league/$leagueId': typeof LeagueLeagueIdRouteWithChildren
   '/scores/$gameId': typeof ScoresGameIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -207,6 +214,7 @@ export interface FileRoutesByTo {
   '/new': typeof NewRoute
   '/players': typeof PlayersRoute
   '/scores': typeof ScoresRoute
+  '/api/mcp': typeof ApiMcpRoute
   '/scores/$gameId': typeof ScoresGameIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/league/tick': typeof ApiLeagueTickRoute
@@ -235,6 +243,7 @@ export interface FileRoutesById {
   '/new': typeof NewRoute
   '/players': typeof PlayersRoute
   '/scores': typeof ScoresRoute
+  '/api/mcp': typeof ApiMcpRoute
   '/league/$leagueId': typeof LeagueLeagueIdRouteWithChildren
   '/scores_/$gameId': typeof ScoresGameIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -265,6 +274,7 @@ export interface FileRouteTypes {
     | '/new'
     | '/players'
     | '/scores'
+    | '/api/mcp'
     | '/league/$leagueId'
     | '/scores/$gameId'
     | '/api/auth/$'
@@ -293,6 +303,7 @@ export interface FileRouteTypes {
     | '/new'
     | '/players'
     | '/scores'
+    | '/api/mcp'
     | '/scores/$gameId'
     | '/api/auth/$'
     | '/api/league/tick'
@@ -320,6 +331,7 @@ export interface FileRouteTypes {
     | '/new'
     | '/players'
     | '/scores'
+    | '/api/mcp'
     | '/league/$leagueId'
     | '/scores_/$gameId'
     | '/api/auth/$'
@@ -349,6 +361,7 @@ export interface RootRouteChildren {
   NewRoute: typeof NewRoute
   PlayersRoute: typeof PlayersRoute
   ScoresRoute: typeof ScoresRoute
+  ApiMcpRoute: typeof ApiMcpRoute
   LeagueLeagueIdRoute: typeof LeagueLeagueIdRouteWithChildren
   ScoresGameIdRoute: typeof ScoresGameIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -411,6 +424,13 @@ declare module '@tanstack/react-router' {
       path: '/scores'
       fullPath: '/scores'
       preLoaderRoute: typeof ScoresRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mcp': {
+      id: '/api/mcp'
+      path: '/api/mcp'
+      fullPath: '/api/mcp'
+      preLoaderRoute: typeof ApiMcpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/league/$leagueId': {
@@ -590,6 +610,7 @@ const rootRouteChildren: RootRouteChildren = {
   NewRoute: NewRoute,
   PlayersRoute: PlayersRoute,
   ScoresRoute: ScoresRoute,
+  ApiMcpRoute: ApiMcpRoute,
   LeagueLeagueIdRoute: LeagueLeagueIdRouteWithChildren,
   ScoresGameIdRoute: ScoresGameIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
