@@ -51,15 +51,19 @@ export function Shell({
     <div className="flex min-h-dvh flex-col bg-bg text-fg">
       <header className="sticky top-0 z-30 border-b border-line bg-bg/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <div className="mx-auto flex min-h-15 max-w-6xl items-center gap-3 px-4">
-          <Link
-            to={league ? "/league/$leagueId" : "/"}
-            params={league ? { leagueId: league.leagueId } : undefined}
-            className="shrink-0"
-          >
-            <span className="font-display text-[26px] font-extrabold leading-none tracking-[-0.03em]">
-              {brand.name}
-            </span>
-          </Link>
+          {/* Inside a league the tabs are the identity; the wordmark only
+              earns its slot on the outside pages, where it is the way home. */}
+          {!inLeague ? (
+            <Link
+              to={league ? "/league/$leagueId" : "/"}
+              params={league ? { leagueId: league.leagueId } : undefined}
+              className="shrink-0"
+            >
+              <span className="font-display text-[26px] font-extrabold leading-none tracking-[-0.03em]">
+                {brand.name}
+              </span>
+            </Link>
+          ) : null}
           {tabs?.length ? (
             <nav className="hidden min-w-0 items-center gap-0.5 overflow-x-auto md:flex">
               {tabs.map((t) => (
