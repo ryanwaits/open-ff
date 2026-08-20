@@ -25,7 +25,6 @@ export type ShellTab = {
 export function Shell({
   children,
   tabs,
-  trailing,
   center = false,
 }: {
   children: React.ReactNode;
@@ -34,8 +33,6 @@ export function Shell({
    * the thumb bar on mobile, from one definition so the two cannot drift.
    */
   tabs?: ShellTab[];
-  /** Extra header control, e.g. the league setup gear. */
-  trailing?: React.ReactNode;
   /** Center the page body in the remaining viewport (home / empty states). */
   center?: boolean;
 }) {
@@ -81,7 +78,6 @@ export function Shell({
                   {t.label}
                 </Link>
               ))}
-              {trailing}
             </nav>
           ) : (
             <nav className="hidden items-center gap-1 md:flex">
@@ -115,7 +111,8 @@ export function Shell({
             ) : (
               <>
                 <SignedIn>
-                  <UserButton />
+                  {/* League settings live in this menu now, not a header gear. */}
+                  <UserButton leagueId={inLeague ? (pathname.split("/")[2] ?? null) : null} />
                 </SignedIn>
                 <SignedOut>
                   <Link

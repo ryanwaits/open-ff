@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BarChart3, House, Search, Settings, Shield, Swords } from "lucide-react";
+import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { BarChart3, House, Search, Shield, Swords } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DemoToolbar } from "@/components/demo-toolbar";
@@ -13,7 +13,6 @@ import { joinLeague } from "@/lib/league/fns";
 import { type PrototypeState, parsePrototypeState } from "@/lib/league/prototype";
 import { warmQuery } from "@/lib/query-client";
 import { useLeagueStore } from "@/lib/store";
-import { cn } from "@/lib/utils";
 
 type LeagueSearch = {
   week?: number;
@@ -176,26 +175,8 @@ function LeagueLayout() {
   );
   const shownWeek = search.week ?? q.data?.currentWeek ?? 1;
 
-  const setupHref = `/league/${leagueId}/settings`;
-  const gear = (
-    <Link
-      to="/league/$leagueId/settings"
-      params={{ leagueId }}
-      aria-label="League setup"
-      title="League setup"
-      className={cn(
-        "ml-1 grid size-9 shrink-0 place-items-center rounded-pill transition-colors duration-150",
-        pathname.startsWith(setupHref) || pathname.startsWith(`/league/${leagueId}/draft`)
-          ? "bg-fg text-bg"
-          : "text-faint hover:bg-raised hover:text-fg",
-      )}
-    >
-      <Settings className="size-4" strokeWidth={2} />
-    </Link>
-  );
-
   return (
-    <Shell tabs={tabs} trailing={gear}>
+    <Shell tabs={tabs}>
       {q.data == null && q.isPending ? (
         <div className="space-y-3">
           <Skeleton className="h-8 w-48" />

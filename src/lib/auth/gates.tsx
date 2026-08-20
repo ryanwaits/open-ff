@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { Navigate } from "@tanstack/react-router";
+import { Link, Navigate } from "@tanstack/react-router";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { authEnabled, signOut } from "./client";
 import { useCurrentUser, useCurrentUserState } from "./use-current-user";
 
@@ -45,37 +45,96 @@ export function RedirectToSignIn({ to = SIGN_IN_PATH }: { to?: string }) {
 }
 
 /**
- * Minimal signed-in identity chip + sign-out. Restyle freely (see the
- * `design-ui` skill). Sign-out is only shown when auth is enabled (the
- * disabled-auth dev user has nothing to sign out of).
+ * The signed-in account mark: just the avatar, opening a menu underneath.
+ * Who you are, where your settings live, and the way out sit behind one
+ * press instead of cluttering the header. Sign-out only appears when auth
+ * is enabled (the disabled-auth dev user has nothing to sign out of).
  */
-export function UserButton() {
+export function UserButton({ leagueId }: { leagueId?: string | null }) {
   const user = useCurrentUser();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPress = (e: PointerEvent) => {
+      if (rootRef.current && e.target instanceof Node && !rootRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    window.addEventListener("pointerdown", onPress);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onPress);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   if (!user) return null;
   const label = user.displayName ?? user.primaryEmail ?? "Account";
+
+  const item =
+    "block w-full rounded-md px-3 py-2 text-left text-sm font-medium text-muted hover:bg-raised hover:text-fg";
+
   return (
-    <div className="flex items-center gap-2">
-      {user.profileImageUrl ? (
-        <img
-          src={user.profileImageUrl}
-          alt=""
-          className="h-8 w-8 shrink-0 rounded-pill object-cover"
-        />
-      ) : (
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-pill bg-raised font-mono text-xs font-medium">
-          {label.charAt(0).toUpperCase()}
-        </span>
-      )}
-      <span className="hidden max-w-32 truncate text-sm font-medium sm:inline">{label}</span>
-      {authEnabled && (
-        <button
-          type="button"
-          onClick={() => void signOut()}
-          className="shrink-0 cursor-pointer text-sm underline-offset-4 opacity-70 hover:underline"
+    <div ref={rootRef} className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Account menu"
+        onClick={() => setOpen((v) => !v)}
+        className="grid size-9 place-items-center rounded-pill focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+      >
+        {user.profileImageUrl ? (
+          <img src={user.profileImageUrl} alt="" className="size-8 rounded-pill object-cover" />
+        ) : (
+          <span className="grid size-8 place-items-center rounded-pill bg-raised font-mono text-xs font-medium">
+            {label.charAt(0).toUpperCase()}
+          </span>
+        )}
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-40 mt-2 w-52 rounded-lg bg-surface p-1.5 shadow-[0_0_0_1px_var(--color-line-strong),var(--shadow-lift)]"
         >
-          Sign out
-        </button>
-      )}
+          <div className="border-b border-line px-3 pt-1.5 pb-2.5">
+            <span className="block truncate text-sm font-semibold">{label}</span>
+            {user.primaryEmail && user.displayName ? (
+              <span className="block truncate font-mono text-[11px] text-faint">
+                {user.primaryEmail}
+              </span>
+            ) : null}
+          </div>
+          <div className="pt-1.5">
+            {leagueId ? (
+              <Link
+                to="/league/$leagueId/settings"
+                params={{ leagueId }}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className={item}
+              >
+                League settings
+              </Link>
+            ) : null}
+            {authEnabled && (
+              <button type="button" role="menuitem" onClick={() => void signOut()} className={item}>
+                Sign out
+              </button>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
