@@ -91,6 +91,20 @@ bun scripts/wager-qa.mjs
 Signs in with the local seed, creates a throwaway league, enables the book, and
 screenshots either a placed ticket or the no-price panel under `screenshots/`.
 
+## Agent hosts (local)
+
+Point Codex / Claude / Grok at the same catalog over MCP stdio (hosted Postgres only — bun cannot boot PGLite):
+
+```sh
+export DATABASE_URL=postgres://…
+export OPENFF_USER=<your user id>
+codex mcp add openff --command bun --args scripts/mcp.mjs
+# Claude: claude mcp add openff -- bun scripts/mcp.mjs
+# Grok:   grok mcp add openff -- bun scripts/mcp.mjs
+```
+
+`OPENFF_USER` is the Better Auth `user.id` (copy from the `user` table / local seed until settings shows it).
+
 ## Check
 
 ```sh
