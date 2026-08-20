@@ -69,16 +69,39 @@ function MyTeamPage() {
     refetchInterval: () => (league.data?.scoringLive ? 15_000 : false),
   });
 
+  const pairs = matchups.data;
+  const myPair = useMemo(() => {
+    if (!pairs || rosterId == null) return null;
+    return pairs.find((p) => p.home.rosterId === rosterId || p.away?.rosterId === rosterId) ?? null;
+  }, [pairs, rosterId]);
+
+  const realMe = myPair ? (myPair.home.rosterId === rosterId ? myPair.home : myPair.away) : null;
+  const realThem = myPair ? (myPair.home.rosterId === rosterId ? myPair.away : myPair.home) : null;
+
   const roster = team.data?.players;
+  // The matchup card projects both sides, so the opponent's starters ride
+  // along in the same projections fetch my lineup already needs.
+  const oppStarters = useMemo(
+    () =>
+      (realThem?.starters ?? [])
+        .map((l) => l.player)
+        .filter((p): p is NonNullable<typeof p> => p != null),
+    [realThem],
+  );
   const projections = useQuery({
-    queryKey: ["projections", leagueId, week, projectionRosterKey(roster?.map((p) => p.player_id))],
+    queryKey: [
+      "projections",
+      leagueId,
+      week,
+      projectionRosterKey([...(roster ?? []), ...oppStarters].map((p) => p.player_id)),
+    ],
     queryFn: () =>
       getProjections({
         data: {
           leagueId,
           season,
           week,
-          players: (roster ?? []).map((p) => ({
+          players: [...(roster ?? []), ...oppStarters].map((p) => ({
             player_id: p.player_id,
             team: p.team,
             injury_status: p.injury_status,
@@ -212,6 +235,16 @@ function MyTeamPage() {
   );
 
   const projMap = projections.data;
+  /**
+   * The masthead's pre-kickoff number: this week's projected total for the
+   * lineup as set. getMatchups reports raw points (zero until games start),
+   * so the forecast comes from the same projections map the lineup rows use.
+   */
+  const projTotal = useMemo(() => {
+    const starters = (players ?? []).filter((p) => p.slot === "starter");
+    if (!projMap || starters.length === 0) return null;
+    return starters.reduce((sum, p) => sum + (projMap[p.player_id]?.points ?? 0), 0);
+  }, [players, projMap]);
   const realPlan = useMemo(
     () =>
       planAutoFill({
@@ -223,15 +256,6 @@ function MyTeamPage() {
       }),
     [players, rosterPositions, projMap, byeMap, week],
   );
-
-  const pairs = matchups.data;
-  const myPair = useMemo(() => {
-    if (!pairs || rosterId == null) return null;
-    return pairs.find((p) => p.home.rosterId === rosterId || p.away?.rosterId === rosterId) ?? null;
-  }, [pairs, rosterId]);
-
-  const realMe = myPair ? (myPair.home.rosterId === rosterId ? myPair.home : myPair.away) : null;
-  const realThem = myPair ? (myPair.home.rosterId === rosterId ? myPair.away : myPair.home) : null;
 
   // `?state=` swaps the derived inputs to the hero and nothing else, so the
   // states it can be in are reviewable in August. Demo mode, dev builds only.
@@ -325,7 +349,11 @@ function MyTeamPage() {
             standings={standings}
             rosterId={rosterId}
             phase={phase.phase}
-            weekPts={realMe?.points ?? null}
+            weekPts={
+              phase.phase === "live" || phase.phase === "settled"
+                ? (realMe?.points ?? null)
+                : projTotal
+            }
             faab={league.data.faabRemaining ?? null}
           />
           {!team.data ? (
@@ -375,6 +403,7 @@ function MyTeamPage() {
               rosterId={rosterId}
               standings={standings}
               phase={phase.phase}
+              projections={projections.data}
             />
           ) : null}
 

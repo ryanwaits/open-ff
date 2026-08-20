@@ -1,6 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { Avatar } from "@/components/avatar";
-import type { MatchupPair, MatchupSide, StandingRow, StarterLine } from "@/lib/data/types";
+import type {
+  MatchupPair,
+  MatchupSide,
+  Projection,
+  StandingRow,
+  StarterLine,
+} from "@/lib/data/types";
 import type { Phase } from "@/lib/league/phase";
 import { cn, fmtRecord, formatPts } from "@/lib/utils";
 
@@ -10,6 +16,10 @@ import { cn, fmtRecord, formatPts } from "@/lib/utils";
  * never changes — the numbers walk Projected → Live → Final with the
  * phase. Like the hero, it only exists when there is a matchup; the
  * offseason page simply doesn't render it.
+ *
+ * getMatchups reports raw points, which are zero until games start, so
+ * before kickoff every number here comes from the projections map instead
+ * — the same source the lineup rows read.
  */
 export function MatchupCard({
   leagueId,
@@ -18,6 +28,7 @@ export function MatchupCard({
   rosterId,
   standings,
   phase,
+  projections,
 }: {
   leagueId: string;
   week: number;
@@ -25,6 +36,7 @@ export function MatchupCard({
   rosterId: number;
   standings: StandingRow[];
   phase: Phase;
+  projections?: Record<string, Projection>;
 }) {
   const mine = pair.home.rosterId === rosterId ? pair.home : pair.away;
   const theirs = pair.home.rosterId === rosterId ? pair.away : pair.home;
@@ -32,22 +44,35 @@ export function MatchupCard({
 
   const settled = phase === "settled";
   const live = phase === "live";
+  const scoring = live || settled;
   const label = live ? "Live" : settled ? "Final" : "Projected";
-  const total = mine.points + theirs.points;
-  const share = total > 0 ? (mine.points / total) * 100 : 50;
-  const diff = mine.points - theirs.points;
 
-  const delta =
-    total === 0
-      ? null
-      : Math.abs(diff) < 0.05
-        ? "even"
-        : settled
-          ? `${diff > 0 ? "won" : "lost"} by ${formatPts(Math.abs(diff), 1)}`
-          : `+${formatPts(Math.abs(diff), 1)} ${diff > 0 ? "you" : "them"}`;
+  const lineValue = (l: StarterLine): number =>
+    scoring
+      ? (l.points ?? 0)
+      : (projections?.[l.playerId ?? l.player?.player_id ?? ""]?.points ?? 0);
+  const sideTotal = (side: MatchupSide): number =>
+    scoring ? side.points : side.starters.reduce((sum, l) => sum + lineValue(l), 0);
 
-  const myBest = bestStarter(mine);
-  const theirBest = bestStarter(theirs);
+  const myPts = sideTotal(mine);
+  const theirPts = sideTotal(theirs);
+  const total = myPts + theirPts;
+  // Pre-kickoff with no projections loaded yet, every figure is a fake zero
+  // — say nothing rather than "0.0 · even".
+  const known = total > 0;
+  const share = known ? (myPts / total) * 100 : 50;
+  const diff = myPts - theirPts;
+
+  const delta = !known
+    ? null
+    : Math.abs(diff) < 0.05
+      ? "even"
+      : settled
+        ? `${diff > 0 ? "won" : "lost"} by ${formatPts(Math.abs(diff), 1)}`
+        : `+${formatPts(Math.abs(diff), 1)} ${diff > 0 ? "you" : "them"}`;
+
+  const myBest = bestStarter(mine, lineValue);
+  const theirBest = bestStarter(theirs, lineValue);
 
   return (
     <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
@@ -63,26 +88,35 @@ export function MatchupCard({
         </span>
       </header>
 
-      <SideRow side={mine} standings={standings} me />
-      <SideRow side={theirs} standings={standings} />
+      <SideRow side={mine} standings={standings} pts={known ? myPts : null} me />
+      <SideRow side={theirs} standings={standings} pts={known ? theirPts : null} />
 
-      <div className="grid gap-1.5 px-5 pt-1 pb-3">
-        <div className="flex h-1.5 overflow-hidden rounded-pill bg-raised">
-          <div
-            className="rounded-l-pill bg-accent motion-safe:transition-[width] motion-safe:duration-500"
-            style={{ width: `${share}%` }}
-          />
+      {known ? (
+        <div className="grid gap-1.5 px-5 pt-1 pb-3">
+          <div className="flex h-1.5 overflow-hidden rounded-pill bg-raised">
+            <div
+              className="rounded-l-pill bg-accent motion-safe:transition-[width] motion-safe:duration-500"
+              style={{ width: `${share}%` }}
+            />
+          </div>
+          <div className="flex items-baseline justify-between font-mono text-[9.5px] uppercase tracking-[0.1em] text-faint">
+            <span>{label}</span>
+            {delta ? <span className="tabular-nums">{delta}</span> : null}
+          </div>
         </div>
-        <div className="flex items-baseline justify-between font-mono text-[9.5px] uppercase tracking-[0.1em] text-faint">
-          <span>{label}</span>
-          {delta ? <span className="tabular-nums">{delta}</span> : null}
-        </div>
-      </div>
+      ) : (
+        <div className="px-5 pt-1 pb-3" />
+      )}
 
-      {myBest?.player && theirBest?.player ? (
+      {known && myBest?.player && theirBest?.player ? (
         <div className="space-y-1.5 border-t border-line px-5 py-3">
-          <WatchRow label="Your best" line={myBest} proj={!live && !settled} />
-          <WatchRow label="Their threat" line={theirBest} proj={!live && !settled} />
+          <WatchRow label="Your best" line={myBest} value={lineValue(myBest)} proj={!scoring} />
+          <WatchRow
+            label="Their threat"
+            line={theirBest}
+            value={lineValue(theirBest)}
+            proj={!scoring}
+          />
         </div>
       ) : null}
 
@@ -92,7 +126,7 @@ export function MatchupCard({
           params={{ leagueId, week: String(week), matchupId: String(pair.matchupId) }}
           className="font-mono text-[10px] uppercase tracking-[0.12em] text-accent-strong"
         >
-          {live || settled ? "Full box score →" : "Full preview →"}
+          {scoring ? "Full box score →" : "Full preview →"}
         </Link>
       </div>
     </section>
@@ -102,10 +136,12 @@ export function MatchupCard({
 function SideRow({
   side,
   standings,
+  pts,
   me = false,
 }: {
   side: MatchupSide;
   standings: StandingRow[];
+  pts: number | null;
   me?: boolean;
 }) {
   const idx = standings.findIndex((s) => s.rosterId === side.rosterId);
@@ -133,15 +169,26 @@ function SideRow({
         className={cn(
           "shrink-0 font-mono text-lg tabular-nums",
           me ? "font-bold" : "font-medium text-muted",
+          pts == null && "text-faint",
         )}
       >
-        {formatPts(side.points, 1)}
+        {pts != null ? formatPts(pts, 1) : "—"}
       </span>
     </div>
   );
 }
 
-function WatchRow({ label, line, proj }: { label: string; line: StarterLine; proj: boolean }) {
+function WatchRow({
+  label,
+  line,
+  value,
+  proj,
+}: {
+  label: string;
+  line: StarterLine;
+  value: number;
+  proj: boolean;
+}) {
   const p = line.player;
   if (!p) return null;
   return (
@@ -157,18 +204,18 @@ function WatchRow({ label, line, proj }: { label: string; line: StarterLine; pro
       ) : null}
       <span className="ml-auto shrink-0 font-mono text-xs tabular-nums text-muted">
         {proj ? "proj " : ""}
-        {formatPts(line.points, 1)}
+        {formatPts(value, 1)}
       </span>
     </div>
   );
 }
 
-/** The starter most likely to decide the week — highest points/forecast. */
-function bestStarter(side: MatchupSide): StarterLine | null {
+/** The starter most likely to decide the week — highest by the phase's number. */
+function bestStarter(side: MatchupSide, value: (l: StarterLine) => number): StarterLine | null {
   let best: StarterLine | null = null;
   for (const line of side.starters) {
     if (!line.player) continue;
-    if (best == null || (line.points ?? 0) > (best.points ?? 0)) best = line;
+    if (best == null || value(line) > value(best)) best = line;
   }
   return best;
 }
