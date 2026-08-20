@@ -1913,7 +1913,8 @@ export async function importSleeperLeague(input: {
 }): Promise<{ leagueId: string; inviteCode: string }> {
   await ensureDemo();
   const sleeper = await import("@/lib/data/sleeper.server");
-  const { packFromSleeper, mergeSleeperHistory, commitImportPack } = await import("./import-pack");
+  const { packFromSleeper, mergeSleeperHistory } = await import("./import-pack");
+  const { commitImportPack } = await import("./import-commit");
   const raw = await sleeper.loadImportPack(input.sleeperId.trim());
   if (!raw.rosters.length) throw new Error("That Sleeper league has no rosters.");
   const warnings: string[] = [];
@@ -1991,7 +1992,8 @@ export async function importEspnLeague(input: {
     espnS2: input.espnS2,
   });
   if (!raw.teams.length) throw new Error("That ESPN league has no teams.");
-  const { packFromEspn, commitImportPack } = await import("./import-pack");
+  const { packFromEspn } = await import("./import-pack");
+  const { commitImportPack } = await import("./import-commit");
   return commitImportPack({
     userId: input.userId,
     pack: packFromEspn(raw),
@@ -2159,7 +2161,8 @@ async function importRebuildOnce(input: {
 }): Promise<{ leagueId: string; inviteCode: string }> {
   await ensureDemo();
   const { parseImportSource } = await import("./recap");
-  const { packFromRebuild, commitImportPack } = await import("./import-pack");
+  const { packFromRebuild } = await import("./import-pack");
+  const { commitImportPack } = await import("./import-commit");
   const parsed = parseImportSource({
     paste: input.paste,
     known: input.known,

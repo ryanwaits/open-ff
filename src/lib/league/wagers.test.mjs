@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { payoutMultiplier } from "./wagers.server.ts";
+import { payoutMultiplier } from "./wagers.ts";
 
 test("payoutMultiplier(0.25) → 3", () => {
   assert.equal(payoutMultiplier(0.25), 3);

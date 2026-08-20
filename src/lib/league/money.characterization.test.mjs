@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { applyLoss, atRiskFrom, spendableFrom, tradeTake } from "./faab.ts";
-import { payoutMultiplier } from "./wagers.server.ts";
+import { payoutMultiplier } from "./wagers.ts";
 
 // Pure book math runs without a DB. SQL wrappers for spendable / atRisk still
 // need a PGLite fixture; the math itself is proven via spendableFrom / atRiskFrom.

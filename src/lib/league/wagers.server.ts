@@ -1,7 +1,10 @@
 import { getSql } from "@/lib/db";
 import { recordEvent } from "./events.server";
 import { applyLoss, atRiskFrom, spendableFrom } from "./faab";
+import { payoutMultiplier } from "./wagers";
 import { normalCdf, type PlayerOutlook, winProbability } from "./win-probability";
+
+export { payoutMultiplier };
 
 /**
  * The book.
@@ -51,13 +54,6 @@ export type Quote = {
  * There is deliberately no vig. The pool is funded by losing stakes rather than
  * by an edge, so taking one would just tax the league to no end.
  */
-export function payoutMultiplier(probability: number): number {
-  // A 2% shot would otherwise pay 49×, which one lucky week could drain the pool
-  // with. Clamping caps the extreme at 19× and keeps the book solvent.
-  const p = Math.min(0.95, Math.max(0.05, probability));
-  return Math.round(((1 - p) / p) * 100) / 100;
-}
-
 let ready = false;
 
 export async function ensureWagerSchema(): Promise<void> {
