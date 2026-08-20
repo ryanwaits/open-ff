@@ -3,7 +3,7 @@
  * Passthrough for /__grok/ (install tutorial ?install=1).
  * Push + passthrough fetch only.
  */
-self.addEventListener("install", (event) => {
+self.addEventListener("install", (_event) => {
   self.skipWaiting();
 });
 
@@ -43,6 +43,6 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || "/";
+  const url = event.notification.data?.url || "/";
   event.waitUntil(self.clients.openWindow(url));
 });

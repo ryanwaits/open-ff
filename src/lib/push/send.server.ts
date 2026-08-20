@@ -63,11 +63,10 @@ async function sendToSubs(leagueId: string, rows: SubRow[], payload: PushPayload
     console.info("would send", payload.kind, payload.title, payload.url, rows.length);
     return;
   }
-  setVapidDetails(
-    vapidSubject(),
-    process.env.VAPID_PUBLIC_KEY!.trim(),
-    process.env.VAPID_PRIVATE_KEY!.trim(),
-  );
+  const publicKey = process.env.VAPID_PUBLIC_KEY?.trim();
+  const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
+  if (!publicKey || !privateKey) return;
+  setVapidDetails(vapidSubject(), publicKey, privateKey);
   const body = JSON.stringify({
     title: payload.title,
     body: payload.body,

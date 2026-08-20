@@ -38,7 +38,11 @@ export function PushRegister() {
 
 export async function enablePushForLeague(leagueId: string, publicKey: string): Promise<boolean> {
   if (onSandbox()) return false;
-  if (!("serviceWorker" in navigator) || !("Notification" in window) || !("PushManager" in window)) {
+  if (
+    !("serviceWorker" in navigator) ||
+    !("Notification" in window) ||
+    !("PushManager" in window)
+  ) {
     return false;
   }
   const perm = await Notification.requestPermission();
