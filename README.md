@@ -19,7 +19,7 @@ Open `http://YOUR_HOST:8080` → `/login` → `/new` → invite friends.
 | Env | Notes |
 |-----|--------|
 | `BETTER_AUTH_URL` | Public https origin (no trailing slash). Default `http://localhost:8080`. |
-| `BETTER_AUTH_SECRET` | Session signing. Blank → entrypoint generates one. |
+| `BETTER_AUTH_SECRET` | Session signing. Blank → entrypoint generates one and keeps it on the data volume (`/data/better-auth-secret`). |
 | `CRON_SECRET` | Optional on Docker (in-process tick). Still gates HTTP `/api/league/tick`. Unset = that route is public — set it on a public host. |
 
 Compose sets `OPENFF_SELF_TICK=1` so the league clock runs inside the
