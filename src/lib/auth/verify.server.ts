@@ -53,12 +53,31 @@ export type VerifiedUser = { id: string; email: string | null };
  * as a bearer token, which we present as `Authorization: Bearer …` (the `bearer`
  * plugin resolves it). When deployed no token is passed and the cookie is used.
  */
-export async function getSessionUser(
-  bearerToken?: string,
-): Promise<VerifiedUser | null> {
+function extractAgentToken(
+  bearerToken: string | undefined,
+  authorization: string | null,
+): string | null {
+  if (bearerToken?.startsWith("off_")) return bearerToken;
+  if (!authorization) return null;
+  if (authorization.startsWith("Bearer off_")) return authorization.slice(7);
+  if (authorization.startsWith("off_")) return authorization;
+  return null;
+}
+
+export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser | null> {
   if (!authConfigured) return null;
   const request = getRequest();
   if (!request) return null;
+
+  // Personal agent tokens (off_…) — do not pass into Better Auth getSession.
+  const agentRaw = extractAgentToken(bearerToken, request.headers.get("Authorization"));
+  if (agentRaw) {
+    const { lookupToken } = await import("./tokens.server");
+    const userId = await lookupToken(agentRaw);
+    if (!userId) return null;
+    return { id: userId, email: null };
+  }
+
   let headers = request.headers;
   if (bearerToken) {
     headers = new Headers(request.headers);

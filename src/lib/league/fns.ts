@@ -646,3 +646,29 @@ export const pullWager = createServerFn({ method: "POST" })
     await w.pullWager(context.userId, data.leagueId, data.wagerId);
     return { ok: true };
   });
+
+/* ----------------------------------------------------------- agent tokens -- */
+
+export const mintAgentToken = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ name: z.string() }))
+  .handler(async ({ context, data }) => {
+    const tokens = await import("@/lib/auth/tokens.server");
+    return tokens.mintToken(context.userId, data.name);
+  });
+
+export const listAgentTokens = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const tokens = await import("@/lib/auth/tokens.server");
+    return tokens.listTokens(context.userId);
+  });
+
+export const revokeAgentToken = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ id: z.string() }))
+  .handler(async ({ context, data }) => {
+    const tokens = await import("@/lib/auth/tokens.server");
+    await tokens.revokeToken(context.userId, data.id);
+    return { ok: true };
+  });

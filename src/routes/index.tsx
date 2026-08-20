@@ -1,11 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { InstallCoach } from "@/components/install-coach";
 import { Shell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { listMyLeagues } from "@/lib/league/fns";
+import { listAgentTokens, listMyLeagues, mintAgentToken, revokeAgentToken } from "@/lib/league/fns";
 import { useLeagueStore } from "@/lib/store";
 
 export const Route = createFileRoute("/")({
@@ -81,6 +84,7 @@ function Home() {
               </Link>
             )}
           </div>
+          {user ? <AgentTokensPanel /> : null}
         </section>
       ) : waiting ? (
         <div className="mt-8 h-24 w-full max-w-sm animate-pulse rounded-xl bg-surface" />
@@ -107,10 +111,115 @@ function Home() {
           <Link to="/new" className="text-sm text-faint hover:text-muted">
             Start empty
           </Link>
+          <AgentTokensPanel />
         </div>
       )}
 
       <InstallCoach />
     </Shell>
+  );
+}
+
+/** Mint / list / revoke personal off_ tokens for agent hosts. Plaintext once. */
+function AgentTokensPanel() {
+  const qc = useQueryClient();
+  const [name, setName] = useState("codex");
+  const [once, setOnce] = useState<string | null>(null);
+
+  const tokens = useQuery({
+    queryKey: ["agent-tokens"],
+    queryFn: () => listAgentTokens(),
+  });
+
+  const mint = useMutation({
+    mutationFn: () => mintAgentToken({ data: { name } }),
+    onSuccess: (res) => {
+      setOnce(res.token);
+      void qc.invalidateQueries({ queryKey: ["agent-tokens"] });
+      toast("Token created — copy it now.");
+    },
+    onError: (e) => toast(e instanceof Error ? e.message : "Could not mint"),
+  });
+
+  const revoke = useMutation({
+    mutationFn: (id: string) => revokeAgentToken({ data: { id } }),
+    onSuccess: () => {
+      setOnce(null);
+      void qc.invalidateQueries({ queryKey: ["agent-tokens"] });
+      toast("Token revoked.");
+    },
+    onError: (e) => toast(e instanceof Error ? e.message : "Could not revoke"),
+  });
+
+  return (
+    <div className="mt-8 w-full max-w-lg text-left">
+      <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Agent tokens</h2>
+      <p className="mt-1 text-sm text-muted">
+        Bearer for hosted agents. Shown once; hashed at rest.
+      </p>
+
+      <form
+        className="mt-3 flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          mint.mutate();
+        }}
+      >
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="codex"
+          aria-label="Token name"
+          className="h-9"
+        />
+        <Button type="submit" size="sm" disabled={mint.isPending}>
+          Create
+        </Button>
+      </form>
+
+      {once ? (
+        <div className="mt-3 rounded-xl bg-raised px-3 py-3">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+            Copy now — not shown again
+          </p>
+          <code className="mt-1 block break-all font-mono text-xs text-fg">{once}</code>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onClick={() => {
+              void navigator.clipboard.writeText(once);
+              toast("Copied.");
+            }}
+          >
+            Copy
+          </Button>
+        </div>
+      ) : null}
+
+      <ul className="mt-3 space-y-2">
+        {(tokens.data ?? []).map((t) => (
+          <li
+            key={t.id}
+            className="flex items-center justify-between gap-3 rounded-xl bg-surface px-3 py-2 shadow-[var(--shadow-border)]"
+          >
+            <span>
+              <span className="block font-mono text-xs">{t.prefix}…</span>
+              <span className="font-mono text-[11px] text-faint">{t.name}</span>
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={revoke.isPending}
+              onClick={() => revoke.mutate(t.id)}
+            >
+              Revoke
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

@@ -20,9 +20,14 @@ function markdownIds() {
 }
 
 test("catalog ids === markdown ids === fns exports", () => {
-  const fromFns = [...fnExports("src/lib/league/fns.ts"), ...fnExports("src/lib/data/fns.ts")];
-  const fromCatalog = AGENT_TOOLS.map((t) => t.id);
-  const fromMd = markdownIds();
+  // Personal tokens must not be MCP tools — exclude *AgentToken(s) from both sides.
+  const notToken = (id) => !/AgentTokens?$/.test(id);
+  const fromFns = [
+    ...fnExports("src/lib/league/fns.ts"),
+    ...fnExports("src/lib/data/fns.ts"),
+  ].filter(notToken);
+  const fromCatalog = AGENT_TOOLS.map((t) => t.id).filter(notToken);
+  const fromMd = markdownIds().filter(notToken);
 
   assert.deepEqual([...fromCatalog].sort(), [...fromFns].sort());
   assert.deepEqual([...fromMd].sort(), [...fromFns].sort());
