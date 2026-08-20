@@ -1,11 +1,13 @@
 #!/usr/bin/env bun
 /**
- * Read-only ledger CLI.
+ * Ledger CLI (reads by default; placeWager with --write).
  *
  *   bun scripts/ledger.mjs --help
  *   bun scripts/ledger.mjs getEvents --league <id> --limit 20
  *   bun scripts/ledger.mjs getLeagueFacts --league <id> --week <n>
  *   bun scripts/ledger.mjs getAgentContext --league <id> --user <id>
+ *   bun scripts/ledger.mjs placeWager --write --user <id> --league <id> \
+ *     --matchup <n> --kind spread|moneyline --side <rosterId> --line <n> --stake <n>
  *
  * --help / --list work with zero DB (catalog import only).
  *
@@ -15,8 +17,8 @@
  * `DATABASE_URL` to the same Postgres the app uses, or run reads through
  * the running app.
  *
- * Mutating catalog entries (placeWager, makePick, …) are listed in --help
- * but are not dispatched from argv.
+ * Mutating catalog entries are refused from argv by default. Only
+ * `placeWager` is dispatched, and only with an explicit `--write`.
  */
 import { AGENT_TOOLS } from "../src/lib/agent/catalog.ts";
 
@@ -50,7 +52,7 @@ function parseArgs(argv) {
 
 function printHelp() {
   const lines = [
-    "Read-only ledger CLI. Mutating tools are listed, not dispatched.",
+    "Ledger CLI. Reads by default; writes need --write (placeWager only).",
     "",
     "Usage:",
     "  bun scripts/ledger.mjs --help",
@@ -58,10 +60,12 @@ function printHelp() {
     "  bun scripts/ledger.mjs getEvents --league <id> [--limit n] [--sinceWeek n]",
     "  bun scripts/ledger.mjs getLeagueFacts --league <id> --week <n>",
     "  bun scripts/ledger.mjs getAgentContext --league <id> --user <id>",
+    "  bun scripts/ledger.mjs placeWager --write --user <id> --league <id> \\",
+    "    --matchup <n> --kind spread|moneyline --side <rosterId> --line <n> --stake <n>",
     "",
-    "Live reads need DATABASE_URL (same Postgres as the app) or the running app.",
+    "Live reads/writes need DATABASE_URL (same Postgres as the app) or the running app.",
     "bun cannot boot the PGLite fallback (no import.meta.glob).",
-    "--user is the seat holder's user id (dump is their purse).",
+    "--user is the seat holder's user id (dump is their purse; placeWager stakes as them).",
     "",
     "Tools:",
   ];
@@ -80,6 +84,11 @@ function payloadOf(args) {
     sinceWeek: args.sinceWeek != null ? Number(args.sinceWeek) : json.sinceWeek,
     week: args.week != null ? Number(args.week) : json.week,
     userId: args.user ?? args.userId ?? json.userId,
+    matchupId: args.matchup != null ? Number(args.matchup) : json.matchupId,
+    kind: args.kind ?? json.kind,
+    sideRoster: args.side != null ? Number(args.side) : json.sideRoster,
+    line: args.line != null ? Number(args.line) : json.line,
+    stake: args.stake != null ? Number(args.stake) : json.stake,
   };
 }
 
@@ -112,6 +121,33 @@ async function dispatchRead(id, args) {
   );
 }
 
+async function dispatchPlaceWager(args) {
+  const data = payloadOf(args);
+  const missing = [];
+  if (!data.userId) missing.push("--user <id>");
+  if (!data.leagueId) missing.push("--league <id>");
+  if (!Number.isFinite(data.matchupId)) missing.push("--matchup <n>");
+  if (data.kind !== "spread" && data.kind !== "moneyline") {
+    missing.push("--kind spread|moneyline");
+  }
+  if (!Number.isFinite(data.sideRoster)) missing.push("--side <rosterId>");
+  if (!Number.isFinite(data.line)) missing.push("--line <n>");
+  if (!Number.isFinite(data.stake)) missing.push("--stake <n>");
+  if (missing.length) {
+    fail(`placeWager requires ${missing.join(", ")}`);
+  }
+  const { placeWager } = await import("../src/lib/league/wagers.server.ts");
+  return placeWager({
+    userId: data.userId,
+    leagueId: data.leagueId,
+    matchupId: data.matchupId,
+    kind: data.kind,
+    sideRoster: data.sideRoster,
+    line: data.line,
+    stake: data.stake,
+  });
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const id = args._[0];
@@ -123,16 +159,25 @@ async function main() {
   const tool = AGENT_TOOLS.find((t) => t.id === id);
   if (!tool) fail(`Unknown tool ${id}. bun scripts/ledger.mjs --help`);
   if (tool.mutating) {
-    fail(`${id} is mutating and is not dispatched from this CLI. See src/lib/agent/CATALOG.md.`);
+    if (id === "placeWager" && args.write === true) {
+      // opt-in write path below
+    } else if (id === "placeWager") {
+      fail(
+        `placeWager is mutating and is not dispatched without --write. See src/lib/agent/CATALOG.md.`,
+      );
+    } else {
+      fail(`${id} is mutating and is not dispatched from this CLI. See src/lib/agent/CATALOG.md.`);
+    }
   }
 
   try {
-    const result = await dispatchRead(id, args);
+    const result =
+      id === "placeWager" ? await dispatchPlaceWager(args) : await dispatchRead(id, args);
     console.log(JSON.stringify(result, null, 2));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     fail(
-      `${msg}\nLive reads need DATABASE_URL (same Postgres as the app). bun cannot boot PGLite (no import.meta.glob).`,
+      `${msg}\nLive reads/writes need DATABASE_URL (same Postgres as the app). bun cannot boot PGLite (no import.meta.glob).`,
     );
   }
 }

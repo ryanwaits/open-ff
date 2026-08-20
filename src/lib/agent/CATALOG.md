@@ -57,7 +57,7 @@ If it's not in this table, it is not a tool. Stop. Do not invent a table.
 | saveWeekSchedule | commish | workflow | Set home/away pairs for one week. |
 | rebuildSchedule | commish | workflow | Rebuild the remaining regular-season schedule. |
 | getBook | spectator | read | Load the matchup book, lines, and your tickets. |
-| placeWager | manager | atomic | Stake FAAB on a spread or moneyline. |
+| placeWager | manager | atomic | Stake FAAB on a spread or moneyline. CLI requires --write and --user. |
 | pullWager | manager | atomic | Withdraw a wager before the book closes. |
 | getPulse | spectator | read | NFL state, scoreboard, news, and trending. |
 | getScores | spectator | read | Scoreboard for a week. |
