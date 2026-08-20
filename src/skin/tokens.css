@@ -32,6 +32,17 @@
   --lift: 0 10px 26px -16px rgb(23 25 29 / 0.3);
   --lift-hover: 0 16px 34px -18px rgb(23 25 29 / 0.4);
   --press-cast: rgb(63 167 101 / 0.4);
+
+  /* shape + type — per-skin knobs; Tailwind's @theme reads these names */
+  --r-xs: 8px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 22px;
+  --r-pill: 999px;
+  --font-stack-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-stack-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-stack-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
 }
 
 @media (prefers-color-scheme: dark) {

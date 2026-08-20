@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { InstallCoach } from "@/components/install-coach";
 import { Shell } from "@/components/shell";
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { listAgentTokens, mintAgentToken, revokeAgentToken } from "@/lib/league/fns";
+import { type SkinPref, setSkinPref, useSkin } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/account")({
   component: AccountPage,
@@ -25,6 +27,7 @@ function AccountPage() {
         {user?.displayName ?? "Signed in"}
         {user?.primaryEmail ? ` · ${user.primaryEmail}` : ""}
       </p>
+      <AppearancePanel />
       <AgentTokensPanel />
       <div className="mt-10 max-w-lg">
         <InstallCoach />
@@ -33,6 +36,54 @@ function AccountPage() {
         Back to the desk
       </Link>
     </Shell>
+  );
+}
+
+const SKIN_OPTIONS: { value: SkinPref; label: string }[] = [
+  { value: "ledger", label: "Ledger" },
+  { value: "boxscore", label: "Box Score" },
+];
+
+/** Per-user runtime skin picker. Same store/attribute convention as
+ * ThemeToggle, one axis over. */
+function AppearancePanel() {
+  const skin = useSkin();
+  // The stored preference is only knowable on the client; render the
+  // segmented control unselected until mount so SSR and first paint agree.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  return (
+    <div className="mt-8 max-w-lg">
+      <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Appearance</h2>
+      <p className="mt-1 text-sm text-muted">Pick the skin this desk renders with.</p>
+
+      <div
+        role="radiogroup"
+        aria-label="Skin"
+        className="mt-3 flex w-fit shrink-0 items-center gap-0.5 rounded-pill bg-raised p-0.5"
+      >
+        {SKIN_OPTIONS.map(({ value, label }) => {
+          const on = mounted && skin === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => setSkinPref(value)}
+              className={cn(
+                "rounded-pill px-4 py-1.5 text-sm font-medium transition-colors duration-150",
+                on ? "bg-surface text-fg shadow-[0_1px_2px_rgb(0_0_0/0.12)]" : "text-faint",
+                !on && "hover:text-muted",
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

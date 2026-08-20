@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "./skin/tokens.css";
+@import "./skin/skins/boxscore.css";
 
 /* Tailwind's stock `dark:` keys off prefers-color-scheme, which ignores an
    explicit user override. Point it at the attribute the app actually stamps.
@@ -53,17 +54,17 @@
   --color-live: var(--alarm);
   --color-warn: var(--caution);
 
-  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --font-display: var(--font-stack-display);
+  --font-sans: var(--font-stack-sans);
+  --font-mono: var(--font-stack-mono);
 
   /* No square corners anywhere. */
-  --radius-xs: 8px;
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 18px;
-  --radius-xl: 22px;
-  --radius-pill: 999px;
+  --radius-xs: var(--r-xs);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+  --radius-pill: var(--r-pill);
 
   --shadow-border: 0 0 0 1px var(--hairline), var(--lift);
   --shadow-border-hover: 0 0 0 1px var(--hairline-strong), var(--lift-hover);

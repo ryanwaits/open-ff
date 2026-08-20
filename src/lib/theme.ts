@@ -5,6 +5,9 @@ export type Resolved = "light" | "dark";
 
 export const THEME_KEY = "ledger-theme";
 
+export type SkinPref = "ledger" | "boxscore";
+export const SKIN_KEY = "ledger-skin"; // the ONE key; no other spelling
+
 /**
  * Runs before paint, inlined into <head>. Stamps a concrete theme on <html> so
  * the first frame is already correct — without it the page flashes light before
@@ -12,7 +15,9 @@ export const THEME_KEY = "ledger-theme";
  */
 export const NO_FLASH_SCRIPT = `(function(){try{var p=localStorage.getItem(${JSON.stringify(
   THEME_KEY,
-)});if(p!=="light"&&p!=="dark"){p=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.setAttribute("data-theme",p)}catch(e){}})()`;
+)});if(p!=="light"&&p!=="dark"){p=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.setAttribute("data-theme",p);var s=localStorage.getItem(${JSON.stringify(
+  SKIN_KEY,
+)});if(s==="boxscore")document.documentElement.setAttribute("data-skin",s)}catch(e){}})()`;
 
 function isPref(v: unknown): v is ThemePref {
   return v === "light" || v === "dark" || v === "system";
@@ -90,4 +95,41 @@ export function useTheme() {
     resolved: resolve(pref),
     setPref: useCallback((next: ThemePref) => setThemePref(next), []),
   };
+}
+
+function isSkinPref(v: unknown): v is SkinPref {
+  return v === "boxscore";
+}
+
+export function readSkin(): SkinPref {
+  if (typeof localStorage === "undefined") return "ledger";
+  try {
+    const raw = localStorage.getItem(SKIN_KEY);
+    return isSkinPref(raw) ? raw : "ledger";
+  } catch {
+    return "ledger";
+  }
+}
+
+/** Applies the resolved skin to <html>. Absent attribute = ledger, same
+ * convention as data-accent. */
+function paintSkin(skin: SkinPref) {
+  if (typeof document === "undefined") return;
+  if (skin === "ledger") document.documentElement.removeAttribute("data-skin");
+  else document.documentElement.setAttribute("data-skin", skin);
+}
+
+export function setSkinPref(skin: SkinPref) {
+  try {
+    if (skin === "ledger") localStorage.removeItem(SKIN_KEY);
+    else localStorage.setItem(SKIN_KEY, skin);
+  } catch {
+    /* private mode — the choice just won't persist */
+  }
+  paintSkin(skin);
+  emit();
+}
+
+export function useSkin() {
+  return useSyncExternalStore(subscribe, readSkin, () => "ledger" as SkinPref);
 }

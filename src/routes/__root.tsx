@@ -1,11 +1,12 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createRootRouteWithContext, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { Toaster } from "sonner";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { PushRegister } from "@/components/push-register";
 import { AuthProvider } from "@/lib/auth/provider";
 import type { RouterContext } from "@/lib/query-client";
-import { NO_FLASH_SCRIPT, useTheme } from "@/lib/theme";
+import { NO_FLASH_SCRIPT, useSkin, useTheme } from "@/lib/theme";
 import { brand } from "@/skin/brand";
 import appCss from "../styles.css?url";
 
@@ -54,9 +55,27 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootDocument,
 });
 
+const THEME_COLOR = {
+  ledger: { light: "#f7f4ea", dark: "#14161a" },
+  boxscore: { light: "#fbfaf6", dark: "#141519" },
+} as const;
+
 function RootDocument() {
   const { resolved } = useTheme();
+  const skin = useSkin();
   const { queryClient } = Route.useRouteContext();
+
+  // The SSR'd meta values are Ledger's, for first paint. Once mounted, keep
+  // both theme-color metas in sync with whatever skin is actually active.
+  useEffect(() => {
+    const colors = THEME_COLOR[skin];
+    const metas = document.querySelectorAll('meta[name="theme-color"]');
+    for (const meta of metas) {
+      const media = meta.getAttribute("media");
+      if (media?.includes("dark")) meta.setAttribute("content", colors.dark);
+      else if (media?.includes("light")) meta.setAttribute("content", colors.light);
+    }
+  }, [skin, resolved]);
 
   return (
     <html lang="en" className="antialiased" suppressHydrationWarning>

@@ -1,0 +1,78 @@
+/* Box Score — ink rules, one electric blue, square corners. Loaded after
+   tokens.css so it outranks the accent ramp at equal specificity. */
+[data-skin="boxscore"] {
+  --paper: #fbfaf6;
+  --paper-raised: #ffffff;
+  --paper-sunken: #f1f0ea;
+  --band: #e9e8e1;
+  --ink: #101114;
+  --ink-2: #54565a;
+  --ink-3: #8f9194;
+  --hairline: #cfcec5;
+  --hairline-strong: #101114;
+  --brand: #2118c8;
+  --brand-deep: #150e9e;
+  --brand-strong: #2b46e0;
+  --brand-ink: #f5f6ff;
+  --highlight: #b9c0ee;
+  --alarm: #d2422e;
+  --caution: #c4921a;
+  --lift: 0 0 0 0 rgb(0 0 0 / 0);
+  --lift-hover: 0 0 0 0 rgb(0 0 0 / 0);
+  --press-cast: rgb(33 24 200 / 0.25);
+  --r-xs: 0px;
+  --r-sm: 0px;
+  --r-md: 0px;
+  --r-lg: 0px;
+  --r-xl: 0px;
+  --r-pill: 999px;
+  --font-stack-display: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-stack-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-stack-mono: "Courier New", Courier, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-skin="boxscore"]:not([data-theme="light"]) {
+    --paper: #141519;
+    --paper-raised: #1a1b20;
+    --paper-sunken: #1f2024;
+    --band: #26272b;
+    --ink: #ecebe4;
+    --ink-2: #a4a5aa;
+    --ink-3: #6f7177;
+    --hairline: #2e2f34;
+    --hairline-strong: #ecebe4;
+    --brand: #2a2bdc;
+    --brand-deep: #1b16b8;
+    --brand-strong: #8691f7;
+    --brand-ink: #f5f6ff;
+    --highlight: #2c3384;
+    --alarm: #ee6a52;
+    --caution: #e3b341;
+    --lift: 0 0 0 0 rgb(0 0 0 / 0);
+    --lift-hover: 0 0 0 0 rgb(0 0 0 / 0);
+    --press-cast: rgb(0 0 0 / 0.5);
+  }
+}
+
+[data-skin="boxscore"][data-theme="dark"] {
+  --paper: #141519;
+  --paper-raised: #1a1b20;
+  --paper-sunken: #1f2024;
+  --band: #26272b;
+  --ink: #ecebe4;
+  --ink-2: #a4a5aa;
+  --ink-3: #6f7177;
+  --hairline: #2e2f34;
+  --hairline-strong: #ecebe4;
+  --brand: #2a2bdc;
+  --brand-deep: #1b16b8;
+  --brand-strong: #8691f7;
+  --brand-ink: #f5f6ff;
+  --highlight: #2c3384;
+  --alarm: #ee6a52;
+  --caution: #e3b341;
+  --lift: 0 0 0 0 rgb(0 0 0 / 0);
+  --lift-hover: 0 0 0 0 rgb(0 0 0 / 0);
+  --press-cast: rgb(0 0 0 / 0.5);
+}
