@@ -1,5 +1,8 @@
 # 048 — Install drawer (dartwords-style A2HS)
 
+> Reconciled 2026-08-20 at `84d684e`. `InstallCoach` still exists. 037 SW
+> shipped — see Scope. Still design-incomplete: `review-plan` before execute.
+
 **Goal:** replace the quiet `InstallCoach` card with an engagement-triggered
 bottom-sheet drawer that teaches Add-to-Home-Screen the way dartwords.com does:
 scrim + sheet, app icon front and center, numbered steps with the browser's
@@ -37,8 +40,12 @@ guilt copy.
    `server/middleware/grok-pwa.ts`, `public/__grok/*` keep working as-is on
    any host (self-contained despite the name). Optional later cleanup —
    rename the `grok-pwa` files/paths to self-owned naming — belongs with
-   plan 046 self-host work, NOT here. Do not add a service worker (plan 037
-   owns that decision).
+   plan 046 self-host work, NOT here.
+
+   **037 shipped `public/sw.js` + `PushRegister` in `__root.tsx` (2026-08-20).**
+   Do not replace `/sw.js`, do not add a second worker, do not strip
+   `PushRegister`. The drawer is install UX only. Network-only navigations
+   in that worker must stay (stale `index.html` trap).
 
 ## QA
 

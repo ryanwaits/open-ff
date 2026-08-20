@@ -4,7 +4,7 @@
 > Do not restyle the ticket. Do not add markets. Follow the steps. If a
 > STOP fires, report — do not invent a fake price.
 >
-> **Drift check (run first)**: `git diff --stat 9af8eff..HEAD -- scripts/wager-qa.mjs src/components/wager-ticket.tsx src/components/book-panel.tsx`
+> **Drift check (run first)**: `git diff --stat 84d684e..HEAD -- scripts/wager-qa.mjs src/components/wager-ticket.tsx src/components/book-panel.tsx`
 
 ## Status
 
@@ -13,7 +13,8 @@
 - **Risk**: LOW
 - **Depends on**: plans/029-wager-ticket-qa.md (DONE `dd9bc53`)
 - **Category**: tests
-- **Planned at**: commit `9af8eff`, 2026-08-19 (reconciled; still ops, still no `$1` click)
+- **Planned at**: commit `84d684e`, 2026-08-20 (reconciled; execute that day
+  STOPPED — throwaway league still `wager-no-price`. Finding live.)
 
 ## Why this matters
 

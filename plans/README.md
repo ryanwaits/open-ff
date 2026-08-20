@@ -28,7 +28,7 @@ Slices live here. Read the one you are executing from.
 - **030–037 — Close the door, then self-host leftovers** (improve skill,
   2026-08-19, commit `dd9bc53`). Goal: invite-only means the RPCs too;
   the remaining skips and self-host gaps are named instead of rediscovered.
-  **030, 031, and 036 are DONE.**
+  **030–031, 033–037 DONE.** **032** still ops (no live line).
 - **038–040 — Agent can actually use the catalog** (improve skill,
   2026-08-19, commit `dd9bc53`). Goal: one context dump, pull-ticket
   parity, and no minted FAAB on trade accept — so a loop over named
@@ -39,37 +39,40 @@ Slices live here. Read the one you are executing from.
   on *their* origin) and run migrate / sit / book playbooks. Not
   a multi-tenant SaaS. The PWA stays client zero. **All four DONE.**
 - **045 — Migrate sources** (improve skill, 2026-08-19, commit
-  `735b0ba`). After 044. Canonical import pack; file always works;
-  NFL hops to ESPN; Yahoo OAuth gated on actual API approval.
+  `735b0ba`). **DONE** `6a0df03` + split `29f7a2e` (not pushed).
+  Canonical `ImportPack`; Sleeper/ESPN/rebuild → `commitImportPack`;
+  file always works; NFL hops to ESPN; Yahoo OAuth not shipped.
 - **046 — Dead-simple self-host** (improve skill, 2026-08-19,
-  commit `735b0ba`). Docker + in-process tick so a non-technical
-  commish never writes a crontab. They only pay the host.
+  commit `735b0ba`). **DONE** `c1769d2` + secret persist `bb965bd`
+  (not pushed). Docker + in-process tick. They only pay the host.
 
 Execute in the order below. Each executor: read the plan fully, honor STOP
 conditions, update your row when done.
 
 ## Last reconcile
 
-2026-08-19 against `9af8eff`. No BLOCKED / IN PROGRESS.
+2026-08-20 against `84d684e`. No BLOCKED / IN PROGRESS.
 
 **Verified DONE (cheap):**
-- 038 `getAgentContext` · 040 `tradeTake` on execute · 039 `wager-pull`
-- 031 spendable/atRisk unskipped · 033 `placeWager --write`
-- 041 `off_` + `lookupToken` · 042 `scripts/mcp.mjs` · 043 `/api/mcp`
-- 044 four skills + `.grok/skills/open-ff-*`
-- 036 `deleteLeague` still there
+- 035 `GOOGLE_CLIENT_*` + `configuredLoginSocials` · `112f48a`
+- 037 `public/sw.js` (no `cache.put`) + `void notifyRoster` on clock/trade/waiver · `07ca3c3`/`fc4ef7f`/`84d684e`
+- 034 `exportLeague` · 046 `docker-compose.yml` + `OPENFF_SELF_TICK`
+- 038–044 / 045 still present from last reconcile
 
-**Refreshed TODOs** (Planned-at → `9af8eff`): 032, 034, 035, 037, 045, 046.
+**Refreshed TODOs** (Planned-at → `84d684e`): 032, 047, 048.
 
-**Rejected:** none. Findings still live: no `exportLeague`, no Docker,
-no native Google, no SW, no `$1` live-line re-run, no Yahoo importer.
+**Rejected:** none. Findings still live: no `$1` live-line click
+(`032` execute 2026-08-20 STOPPED: `wager-no-price`). No Yahoo importer.
 
-**Indexed from outside this chain:** `047` skin system, `048` install
-drawer (not improve-template complete — `review-plan` before execute).
+**Dirty tree (not this backlog):** uncommitted account/home/auth/db work
+plus `README.md` operator checklists for Google + push. Do not fold
+those into 047/048 without a separate plan.
 
-**Executable now:** `046` (Docker + in-process tick). `045` unblocked
-but L + Yahoo-gated. `047`/`048` if look/install. `032` ops when a week
-has a line. `035` optional. `037` after a human installs.
+**Indexed from outside this chain:** `047` skin, `048` install drawer
+(not improve-template complete — `review-plan` before execute).
+
+**Executable now:** `047`/`048` after `review-plan` (048 must **not**
+replace `/sw.js`). `032` when a week quotes a line. Yahoo still YDN-gated.
 
 ## Decisions locked in
 
@@ -233,12 +236,12 @@ has a line. `035` optional. `037` after a human installs.
 | 029  | Exercise the FAAB wager ticket for real | P2 | M | — | DONE `dd9bc53` (verified: `wager-qa.mjs` + testids; preseason no-price) |
 | 030  | Require a seat for every hosted league GET | P1 | S | 028 | DONE `4fd580c` (not pushed; eight hosted GETs + source test) |
 | 031  | Prove spendable and atRisk without a live database | P2 | S | 027 | DONE `443b8ac` (not pushed) |
-| 032  | Re-run the wager script when a week has a live line | P3 | S | 029 | TODO (ops; no code) |
+| 032  | Re-run the wager script when a week has a live line | P3 | S | 029 | TODO (ops; execute 2026-08-20 STOPPED — still no live line; no commit) |
 | 033  | Let the CLI place a wager when asked in writing | P2 | M | 027, 038 | DONE `262717f` (not pushed) |
 | 034  | Let a commish download their league | P2 | M | 025 | DONE `0764e94` (not pushed; DeleteLeague untouched) |
-| 035  | Optional native Google sign-in for self-host | P2 | M | 025 | TODO |
+| 035  | Optional native Google sign-in for self-host | P2 | M | 025 | DONE `112f48a` (not pushed) |
 | 036  | Let a commish delete a league they run | P2 | M | 034 | DONE `fa38680` (verified `7545fdb`: type-name confirm; 034 skipped) |
-| 037  | Web Push after someone actually installs the PWA | P3 | L | 026 | TODO (stop if no install) |
+| 037  | Web Push after someone actually installs the PWA | P3 | L | 026 | DONE `07ca3c3` + `fc4ef7f` + `84d684e` (not pushed; operator waived install gate) |
 | 038  | One dump: seat, spendable, facts, verbs | P1 | M | 024 | DONE `e876e59` (not pushed) |
 | 039  | Pull an open ticket from the book list | P1 | S | 024 | DONE `6a77792` (not pushed) |
 | 040  | Refuse a FAAB trade the sender cannot cover | P1 | S | 027 | DONE `ff3d01b` (not pushed) |
@@ -246,10 +249,10 @@ has a line. `035` optional. `037` after a human installs.
 | 042  | Speak MCP on stdio (local Codex / Claude / Grok) | P1 | M | 038, 033 | DONE `337ed25` (biome `e72f4cb`; not pushed) |
 | 043  | Serve the same MCP over HTTP with the token | P1 | M | 041, 042 | DONE `9af8eff` (not pushed) |
 | 044  | Skills: migrate, lineup, book | P1 | S | 042 | DONE `969cf73` (worktree; not pushed) |
-| 045  | Canonical import pack; file fallback; no NFL scrape | P1 | L | 044 | TODO (after 044; Yahoo gated) |
-| 046  | Dead-simple self-host (Docker + in-process tick) | P1 | M | 025 | TODO |
+| 045  | Canonical import pack; file fallback; no NFL scrape | P1 | L | 044 | DONE `6a0df03` (split `29f7a2e`; not pushed) |
+| 046  | Dead-simple self-host (Docker + in-process tick) | P1 | M | 025 | DONE `c1769d2` (secret persist `bb965bd`; not pushed) |
 | 047  | Runtime skin system (Ledger + Box Score) | P2 | L | 026 | TODO (design; review-plan first) |
-| 048  | Install drawer (dartwords-style A2HS) | P2 | M | 026 | TODO (design; stop if 037 ships SW first) |
+| 048  | Install drawer (dartwords-style A2HS) | P2 | M | 026 | TODO (design; 037 SW already ships — do not replace `/sw.js`) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED
 
@@ -399,12 +402,9 @@ then `016` (client, pure). They meet at `018`.
 
 ## Suggested execution — slice 6 (door + leftovers)
 
-**030 is DONE** (`4fd580c`). **036 is DONE** (`fa38680`). Remaining
-leftovers are **not** on the headless-engine critical path:
-
-`031` DONE · `034` (backup; leave DeleteLeague) ·
-`035` (Google) anytime · `032` when a week has a line · `037`
-only after a human installed the PWA.
+**Slice 6 leftovers are DONE** except **032** (ops; no live line).
+`031` `443b8ac` · `034` `0764e94` · `035` `112f48a` · `036` `fa38680`
+· `037` `07ca3c3` (install gate waived).
 
 ## Sprints to the headless engine (do these)
 
@@ -461,10 +461,8 @@ is approved.** Do not block Sprints 1–4 on Yahoo.
 
 ### Sprint 5 — Self-host is the product
 
-Prefer `034` first (delete already ships with no download). Then
-`046` (Docker + tick without a crontab). `035` Google optional.
-`032` / `037` as before. `048` is install UX; `037` is push after
-someone installed.
+**DONE** except `032` (wait for a live line). `048` is install UX
+and must coexist with the 037 worker (`public/sw.js`).
 
 A commish pays **only** the host. No SportsDataIO. MCP 041–043
 point at **their** origin.
@@ -527,7 +525,7 @@ unbrand, per-league icons, SW/push this slice).
 
 ## Open leftovers
 
-Planned leftovers: **032, 034, 035, 037, 045, 046**. Direction:
+Planned leftovers: **032**. Direction:
 **047, 048**. Headless engine **038–044 DONE**. Do not re-audit as
 unnamed findings.
 
@@ -547,4 +545,4 @@ Still unplanned, still real, still not this backlog:
 - **048 — Install drawer** (2026-08-19). Goal: dartwords-style Add-to-Home-Screen
   bottom sheet — engagement-triggered, glyph-step instructions, native prompt on
   Android — replacing the quiet InstallCoach card. PWA manifest/middleware stay
-  as-is; service worker still owned by 037.
+  as-is. **037 already shipped `/sw.js`** — 048 must not replace it.

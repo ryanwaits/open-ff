@@ -1,5 +1,9 @@
 # 047 — Runtime skin system (Ledger + Box Score, N skins later)
 
+> Reconciled 2026-08-20 at `84d684e`. Finding still live (`data-skin` not in
+> app source). `__root.tsx` now mounts `PushRegister` (037) — keep it. Still
+> design-incomplete: `review-plan` before execute.
+
 **Goal:** `data-skin` on `<html>` switches the whole look — colors, radii, type,
 label voice, button/card structure — at runtime, like `data-theme` does for
 light/dark. Ledger stays byte-identical as default. Box Score ships as the
