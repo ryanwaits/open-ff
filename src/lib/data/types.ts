@@ -54,6 +54,7 @@ export type SleeperLeague = {
   total_rosters?: number;
   roster_positions?: string[];
   scoring_settings?: Record<string, number>;
+  previous_league_id?: string | null;
   avatar?: string | null;
   settings: {
     num_teams?: number;

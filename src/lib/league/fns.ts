@@ -295,21 +295,33 @@ export const dropPlayer = createServerFn({ method: "POST" })
 
 export const previewImport = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .validator(z.object({ sleeperId: z.string() }))
+  .validator(
+    z.object({
+      sleeperId: z.string(),
+      includeHistory: z.boolean().optional(),
+    }),
+  )
   .handler(async ({ data }) => {
     const eng = await import("./engine.server");
-    return eng.previewSleeperImport(data.sleeperId);
+    return eng.previewSleeperImport(data.sleeperId, data.includeHistory ?? false);
   });
 
 export const importLeague = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ sleeperId: z.string(), claimRosterId: z.number().nullable() }))
+  .validator(
+    z.object({
+      sleeperId: z.string(),
+      claimRosterId: z.number().nullable(),
+      includeHistory: z.boolean().optional().default(false),
+    }),
+  )
   .handler(async ({ context, data }) => {
     const eng = await import("./engine.server");
     return eng.importSleeperLeague({
       userId: context.userId,
       sleeperId: data.sleeperId,
       claimRosterId: data.claimRosterId,
+      includeHistory: data.includeHistory ?? false,
     });
   });
 

@@ -208,7 +208,8 @@ export async function dispatch(
     }
     case "previewImport": {
       const { previewSleeperImport } = await import("@/lib/league/engine.server");
-      return asJson(await previewSleeperImport(str(args.sleeperId, "sleeperId")));
+      const includeHistory = args.includeHistory === true;
+      return asJson(await previewSleeperImport(str(args.sleeperId, "sleeperId"), includeHistory));
     }
     case "importLeague": {
       if (!userId) throw new Error(`${id} requires a signed-in user (OPENFF_USER)`);
@@ -225,6 +226,7 @@ export async function dispatch(
           userId,
           sleeperId: str(args.sleeperId, "sleeperId"),
           claimRosterId: claim,
+          includeHistory: args.includeHistory === true,
         }),
       );
     }

@@ -101,6 +101,21 @@ Sleeper is the player/week pipe (outbound HTTPS). No member needs a
 Sleeper account. ESPN cookies are import-only; they are not used at
 runtime after import.
 
+Every source becomes one canonical import pack, then commits into the
+ledger. Connect is one-way extract — we do not keep polling the old host.
+File/paste rebuild is always the fallback when connect fails.
+
+| Source | Connect | File | Teams | Settings | Rosters | This-season weeks | Prior seasons |
+|---|---|---|---|---|---|---|---|
+| Sleeper | league id, no auth | rebuild paste | yes | scoring + slots + playoff week | yes | yes (`matchups/1..last`) | optional one `previous_league_id` via `includeHistory` (default off) |
+| ESPN | public **or** SWID+espnS2 one-shot, not saved | rebuild paste | yes | scoring items + slots | yes (ESPN→Sleeper ids) | yes (`mMatchupScore`) | one year picker only |
+| Rebuild | — | paste, PDF, known recap | yes | scoring **preset** (ppr/half/std) | name-matched | snap W-L/PF if in the paste | no |
+| Yahoo | OAuth not shipped | paste via rebuild | via paste | via paste | via paste | no | no |
+| NFL.com | hop: espn.com/importnfl → ESPN import (no HTML scrape) | paste via rebuild | via ESPN/paste | via ESPN/paste | via ESPN/paste | via ESPN | no |
+
+Manager emails are never pulled from these APIs — allowlist is typed
+post-import by the commissioner.
+
 ## Book
 
 Managers can stake FAAB on matchups when the commissioner turns betting **On**

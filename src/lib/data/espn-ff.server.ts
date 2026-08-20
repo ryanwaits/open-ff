@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { bookFromPreset, scoringLabel, type ScoringBook } from "@/lib/league/scoring";
+import { bookFromPreset, type ScoringBook, scoringLabel } from "@/lib/league/scoring";
 import type { SlimPlayer } from "./types";
 
 const ESPN_FF = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl";
@@ -71,7 +71,15 @@ type EspnTeam = {
   abbrev?: string;
   primaryOwner?: string;
   roster?: { entries?: EspnEntry[] };
-  record?: { overall?: { wins?: number; losses?: number; ties?: number; pointsFor?: number; pointsAgainst?: number } };
+  record?: {
+    overall?: {
+      wins?: number;
+      losses?: number;
+      ties?: number;
+      pointsFor?: number;
+      pointsAgainst?: number;
+    };
+  };
 };
 type EspnSide = {
   teamId: number;
@@ -84,7 +92,11 @@ type EspnGame = {
   home?: EspnSide;
   away?: EspnSide;
 };
-type EspnScoringItem = { statId: number; points?: number; pointsOverrides?: Record<string, number> };
+type EspnScoringItem = {
+  statId: number;
+  points?: number;
+  pointsOverrides?: Record<string, number>;
+};
 type EspnLeague = {
   id: number;
   seasonId: number;
@@ -124,7 +136,11 @@ export type EspnImportPack = {
   weeks: Array<{
     week: number;
     games: Array<{ matchupId: number; home: number; away: number | null }>;
-    results: Array<{ rosterId: number; points: number; starters: Array<{ playerId: string; points: number }> }>;
+    results: Array<{
+      rosterId: number;
+      points: number;
+      starters: Array<{ playerId: string; points: number }>;
+    }>;
   }>;
 };
 
@@ -132,10 +148,9 @@ let espnIndex: Map<number, string> | null = null;
 
 function loadEspnIndex(): Map<number, string> {
   if (espnIndex) return espnIndex;
-  const raw = JSON.parse(readFileSync(join(process.cwd(), "data/players-slim.json"), "utf8")) as Record<
-    string,
-    SlimPlayer
-  >;
+  const raw = JSON.parse(
+    readFileSync(join(process.cwd(), "data/players-slim.json"), "utf8"),
+  ) as Record<string, SlimPlayer>;
   const map = new Map<number, string>();
   for (const p of Object.values(raw)) {
     if (p.espn_id != null && p.espn_id !== "") map.set(Number(p.espn_id), p.player_id);
@@ -161,7 +176,10 @@ function parseLeagueId(raw: string): string {
   throw new Error("Paste an ESPN league ID or league URL.");
 }
 
-async function espnGet(url: string, cookies?: { swid?: string; espnS2?: string }): Promise<EspnLeague> {
+async function espnGet(
+  url: string,
+  cookies?: { swid?: string; espnS2?: string },
+): Promise<EspnLeague> {
   const headers: Record<string, string> = {
     accept: "application/json",
     "user-agent": "Mozilla/5.0",
@@ -197,7 +215,9 @@ function slotsFrom(counts: Record<string, number> | undefined): string[] {
     const lab = SLOT_POS[id] ?? "BN";
     for (let i = 0; i < n; i++) out.push(lab);
   }
-  return out.length ? out : ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF", "BN", "BN", "BN", "BN", "BN", "BN"];
+  return out.length
+    ? out
+    : ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF", "BN", "BN", "BN", "BN", "BN", "BN"];
 }
 
 function bookFromEspn(items: EspnScoringItem[] | undefined): ScoringBook {
@@ -301,7 +321,8 @@ export async function loadEspnImportPack(input: {
 }): Promise<EspnImportPack> {
   const leagueId = parseLeagueId(input.leagueId);
   const season = input.season || String(new Date().getUTCFullYear());
-  const cookies = input.swid && input.espnS2 ? { swid: input.swid, espnS2: input.espnS2 } : undefined;
+  const cookies =
+    input.swid && input.espnS2 ? { swid: input.swid, espnS2: input.espnS2 } : undefined;
   const url =
     `${ESPN_FF}/seasons/${season}/segments/0/leagues/${leagueId}` +
     `?view=mTeam&view=mRoster&view=mSettings&view=mMatchupScore`;
@@ -357,10 +378,44 @@ export async function loadEspnImportPack(input: {
       }),
     }));
   const scoredWeeks = weeks.filter((w) => w.results.some((r) => r.points > 0));
-  const currentWeek = Math.max(
-    1,
-    scoredWeeks.at(-1)?.week ?? raw.scoringPeriodId ?? 1,
-  );
+  const currentWeek = Math.max(1, scoredWeeks.at(-1)?.week ?? raw.scoringPeriodId ?? 1);
+  const playerCount = teams.reduce((n, t) => n + t.players.length, 0);
+  // Post-draft but empty rosters (common right after draft sync lag): try picks once.
+  if (playerCount === 0 && (scoredWeeks.length > 0 || (raw.scoringPeriodId ?? 0) > 1)) {
+    try {
+      const draftUrl = `${ESPN_FF}/seasons/${season}/segments/0/leagues/${leagueId}?view=mDraftDetail`;
+      const draftRaw = await espnGet(draftUrl, cookies);
+      const picks = (
+        draftRaw as {
+          draftDetail?: { picks?: Array<{ playerId?: number; teamId?: number }> };
+        }
+      ).draftDetail?.picks;
+      if (Array.isArray(picks) && picks.length) {
+        const byTeam = new Map<
+          number,
+          Array<{ sleeperId: string; slot: string; starterSlot: string | null }>
+        >();
+        let mapped = 0;
+        for (const pick of picks) {
+          if (pick.playerId == null || pick.teamId == null) continue;
+          const sid = sleeperOf(pick.playerId);
+          if (!sid) continue;
+          mapped++;
+          const arr = byTeam.get(pick.teamId) ?? [];
+          arr.push({ sleeperId: sid, slot: "bench", starterSlot: null });
+          byTeam.set(pick.teamId, arr);
+        }
+        // Bail if the espn→sleeper map mostly missed — leave empty rather than invent.
+        if (mapped > 0 && mapped >= picks.length * 0.4) {
+          for (const t of teams) {
+            t.players = byTeam.get(t.rosterId) ?? [];
+          }
+        }
+      }
+    } catch {
+      /* draft detail optional */
+    }
+  }
   return {
     leagueId,
     name: raw.settings?.name || `ESPN ${leagueId}`,

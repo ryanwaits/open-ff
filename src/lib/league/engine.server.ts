@@ -1859,158 +1859,82 @@ export async function dropPlayer(
 ): Promise<void> {
   return (await import("./ops.server")).requestDrop(userId, leagueId, playerId);
 }
-export async function previewSleeperImport(sleeperId: string): Promise<{
+export async function previewSleeperImport(
+  sleeperId: string,
+  includeHistory = false,
+): Promise<{
   sleeperId: string;
   name: string;
   season: string;
   status: string;
   teamCount: number;
   scoringLabel: string;
+  warnings: string[];
   teams: { rosterId: number; teamName: string; manager: string; players: number }[];
 }> {
   const sleeper = await import("@/lib/data/sleeper.server");
-  const pack = await sleeper.loadImportPack(sleeperId.trim());
-  const byUser = new Map(pack.users.map((u) => [u.user_id, u]));
-  const book = fromSleeperSettings(pack.league.scoring_settings ?? {});
+  const { packFromSleeper, mergeSleeperHistory } = await import("./import-pack");
+  const raw = await sleeper.loadImportPack(sleeperId.trim());
+  const warnings: string[] = [];
+  let canonical = packFromSleeper(raw, warnings);
+  if (includeHistory) {
+    const prevId = raw.league.previous_league_id?.trim();
+    if (prevId) {
+      try {
+        const prior = await sleeper.loadImportPack(prevId);
+        canonical = mergeSleeperHistory(canonical, prior);
+      } catch {
+        warnings.push(`Prior Sleeper league ${prevId} not found — importing current only.`);
+        canonical = { ...canonical, warnings: [...(canonical.warnings ?? []), ...warnings] };
+      }
+    }
+  }
   return {
-    sleeperId: pack.league.league_id,
-    name: pack.league.name,
-    season: pack.league.season,
-    status: pack.league.status,
-    teamCount: pack.rosters.length,
-    scoringLabel: scoringLabel(book),
-    teams: pack.rosters.map((r) => {
-      const u = r.owner_id ? byUser.get(r.owner_id) : void 0;
-      return {
-        rosterId: r.roster_id,
-        teamName: u?.metadata?.team_name?.trim() || u?.display_name || `Roster ${r.roster_id}`,
-        manager: u?.display_name ?? "Open",
-        players: (r.players ?? []).length,
-      };
-    }),
+    sleeperId: canonical.sourceLeagueId,
+    name: canonical.name,
+    season: canonical.season,
+    status: canonical.status,
+    teamCount: canonical.teams.length,
+    scoringLabel: scoringLabel(canonical.book),
+    warnings: canonical.warnings ?? warnings,
+    teams: canonical.teams.map((t) => ({
+      rosterId: t.rosterId,
+      teamName: t.teamName,
+      manager: t.manager,
+      players: t.players.length,
+    })),
   };
 }
 export async function importSleeperLeague(input: {
   userId: string;
   sleeperId: string;
   claimRosterId: number | null;
+  includeHistory?: boolean;
 }): Promise<{ leagueId: string; inviteCode: string }> {
   await ensureDemo();
   const sleeper = await import("@/lib/data/sleeper.server");
-  const pack = await sleeper.loadImportPack(input.sleeperId.trim());
-  if (!pack.rosters.length) throw new Error("That Sleeper league has no rosters.");
-  const sql = await getSql();
-  const existing = await sql`
-    select id, invite_code from ff_leagues
-    where source_league_id = ${pack.league.league_id} and commish_id = ${input.userId}
-  `.catch(() => []);
-  if (existing[0])
-    return {
-      leagueId: existing[0].id,
-      inviteCode: existing[0].invite_code,
-    };
-  const book = fromSleeperSettings(pack.league.scoring_settings ?? {});
-  const preset = presetOf(book);
-  const slots = pack.league.roster_positions?.length ? pack.league.roster_positions : DEFAULT_SLOTS;
-  const id = nid("lg_");
-  let code = inviteCode();
-  for (let i = 0; i < 6; i++) {
-    if (!(await sql`select id from ff_leagues where invite_code = ${code}`)[0]) break;
-    code = inviteCode();
-  }
-  const byUser = new Map(pack.users.map((u) => [u.user_id, u]));
-  const hasPlayers = pack.rosters.some((r) => (r.players ?? []).length > 0);
-  const currentWeek = Math.max(
-    1,
-    pack.league.settings.leg ?? pack.league.settings.last_scored_leg ?? 1,
-  );
-  const playoff = pack.league.settings.playoff_teams ?? (pack.rosters.length >= 12 ? 6 : 4);
-  await sql`
-    insert into ff_leagues (
-      id, name, season, invite_code, commish_id, status, team_count,
-      scoring, roster_slots, playoff_teams, current_week, locked,
-      scoring_json, source, source_league_id
-    ) values (
-      ${id}, ${pack.league.name.slice(0, 48)}, ${pack.league.season}, ${code},
-      ${input.userId}, ${hasPlayers ? "in_season" : "pre_draft"}, ${pack.rosters.length}, ${preset},
-      ${JSON.stringify(slots)}, ${playoff}, ${currentWeek}, ${0},
-      ${JSON.stringify(book)}, ${"sleeper"}, ${pack.league.league_id}
-    )
-  `;
-  await sql`
-    insert into ff_draft (league_id, status, pick_no)
-    values (${id}, ${hasPlayers ? "complete" : "pending"}, ${1})
-  `;
-  for (const r of pack.rosters) {
-    const u = r.owner_id ? byUser.get(r.owner_id) : void 0;
-    const teamName = u?.metadata?.team_name?.trim() || u?.display_name || `Roster ${r.roster_id}`;
-    const claim = input.claimRosterId === r.roster_id ? input.userId : null;
-    await sql`
-      insert into ff_rosters (league_id, roster_id, team_name, owner_id, sleeper_owner_id, manager_name)
-      values (${id}, ${r.roster_id}, ${teamName.slice(0, 40)}, ${claim}, ${r.owner_id}, ${u?.display_name ?? null})
-    `;
-    const starters = r.starters ?? [];
-    const startSlots = slots.filter((s) => START_SLOTS.has(s));
-    for (const pid of r.players ?? []) {
-      if (!pid || pid === "0") continue;
-      const idx = starters.indexOf(pid);
-      const starter = idx >= 0;
-      const lab = starter ? slotLabel(startSlots[idx] ?? "FLEX") : null;
-      await sql`
-        insert into ff_spots (league_id, roster_id, player_id, slot, starter_slot)
-        values (${id}, ${r.roster_id}, ${pid}, ${starter ? "starter" : "bench"}, ${lab})
-      `;
+  const { packFromSleeper, mergeSleeperHistory, commitImportPack } = await import("./import-pack");
+  const raw = await sleeper.loadImportPack(input.sleeperId.trim());
+  if (!raw.rosters.length) throw new Error("That Sleeper league has no rosters.");
+  const warnings: string[] = [];
+  let pack = packFromSleeper(raw, warnings);
+  if (input.includeHistory) {
+    const prevId = raw.league.previous_league_id?.trim();
+    if (prevId) {
+      try {
+        const prior = await sleeper.loadImportPack(prevId);
+        pack = mergeSleeperHistory(pack, prior);
+      } catch {
+        warnings.push(`Prior Sleeper league ${prevId} not found — importing current only.`);
+        pack = { ...pack, warnings: [...(pack.warnings ?? []), ...warnings] };
+      }
     }
   }
-  for (const week of pack.weeks) {
-    if (!week.rows.length) continue;
-    const groups = /* @__PURE__ */ new Map();
-    let orphan = 1e3;
-    for (const m of week.rows) {
-      const key = m.matchup_id ?? orphan++;
-      const arr = groups.get(key) ?? [];
-      arr.push(m);
-      groups.set(key, arr);
-    }
-    for (const [matchupId, arr] of groups) {
-      const home = arr[0];
-      const away = arr[1];
-      await sql`
-        insert into ff_matchups (league_id, week, matchup_id, home_roster, away_roster)
-        values (${id}, ${week.week}, ${matchupId}, ${home.roster_id}, ${away?.roster_id ?? null})
-      `;
-    }
-    for (const m of week.rows)
-      await sql`
-        insert into ff_week_results (league_id, week, roster_id, points, starters_json)
-        values (
-          ${id}, ${week.week}, ${m.roster_id}, ${m.points},
-          ${JSON.stringify(
-            m.starters.map((pid, i) => ({
-              playerId: pid,
-              points: m.starters_points[i] ?? 0,
-            })),
-          )}
-        )
-      `;
-  }
-  if (!pack.weeks.some((w) => w.rows.length))
-    for (const m of makeSchedule(pack.rosters.length, 14))
-      await sql`
-        insert into ff_matchups (league_id, week, matchup_id, home_roster, away_roster)
-        values (${id}, ${m.week}, ${m.id}, ${m.home}, ${m.away})
-      `;
-  const pStart = pack.league.settings.playoff_week_start ?? 15;
-  await sql`
-    update ff_leagues
-    set playoff_start_week = ${pStart}, regular_weeks = ${Math.max(8, pStart - 1)}
-    where id = ${id}
-  `;
-  await armLeagueOps(id);
-  return {
-    leagueId: id,
-    inviteCode: code,
-  };
+  return commitImportPack({
+    userId: input.userId,
+    pack,
+    claimRosterId: input.claimRosterId,
+  });
 }
 export async function previewEspnImport(input: {
   leagueId: string;
@@ -2034,14 +1958,16 @@ export async function previewEspnImport(input: {
   }[];
 }> {
   const pack = await (await import("@/lib/data/espn-ff.server")).loadEspnImportPack(input);
+  const { packFromEspn } = await import("./import-pack");
+  const canonical = packFromEspn(pack);
   return {
-    sleeperId: `espn:${pack.season}:${pack.leagueId}`,
-    name: pack.name,
-    season: pack.season,
-    status: pack.status,
-    teamCount: pack.teamCount,
-    scoringLabel: pack.scoringLabel,
-    teams: pack.teams.map((t) => ({
+    sleeperId: canonical.sourceLeagueId,
+    name: canonical.name,
+    season: canonical.season,
+    status: canonical.status,
+    teamCount: canonical.teams.length,
+    scoringLabel: scoringLabel(canonical.book),
+    teams: canonical.teams.map((t) => ({
       rosterId: t.rosterId,
       teamName: t.teamName,
       manager: t.manager,
@@ -2058,82 +1984,19 @@ export async function importEspnLeague(input: {
   espnS2?: string;
 }): Promise<{ leagueId: string; inviteCode: string }> {
   await ensureDemo();
-  const pack = await (await import("@/lib/data/espn-ff.server")).loadEspnImportPack({
+  const raw = await (await import("@/lib/data/espn-ff.server")).loadEspnImportPack({
     leagueId: input.leagueId,
     season: input.season,
     swid: input.swid,
     espnS2: input.espnS2,
   });
-  if (!pack.teams.length) throw new Error("That ESPN league has no teams.");
-  const sql = await getSql();
-  const sourceId = `espn:${pack.season}:${pack.leagueId}`;
-  const existing = await sql`
-    select id, invite_code from ff_leagues
-    where source_league_id = ${sourceId} and commish_id = ${input.userId}
-  `.catch(() => []);
-  if (existing[0])
-    return {
-      leagueId: existing[0].id,
-      inviteCode: existing[0].invite_code,
-    };
-  const id = nid("lg_");
-  let code = inviteCode();
-  for (let i = 0; i < 6; i++) {
-    if (!(await sql`select id from ff_leagues where invite_code = ${code}`)[0]) break;
-    code = inviteCode();
-  }
-  const preset = presetOf(pack.book);
-  const hasPlayers = pack.teams.some((t) => t.players.length > 0);
-  await sql`
-    insert into ff_leagues (
-      id, name, season, invite_code, commish_id, status, team_count,
-      scoring, roster_slots, playoff_teams, current_week, locked,
-      scoring_json, source, source_league_id
-    ) values (
-      ${id}, ${pack.name.slice(0, 48)}, ${pack.season}, ${code},
-      ${input.userId}, ${hasPlayers ? "in_season" : "pre_draft"}, ${pack.teamCount},
-      ${preset}, ${JSON.stringify(pack.slots)}, ${pack.playoffTeams}, ${pack.currentWeek},
-      ${0}, ${JSON.stringify(pack.book)}, ${"espn"}, ${sourceId}
-    )
-  `;
-  await sql`
-    insert into ff_draft (league_id, status, pick_no)
-    values (${id}, ${hasPlayers ? "complete" : "pending"}, ${1})
-  `;
-  for (const t of pack.teams) {
-    const claim = input.claimRosterId === t.rosterId ? input.userId : null;
-    await sql`
-      insert into ff_rosters (league_id, roster_id, team_name, owner_id, sleeper_owner_id, manager_name)
-      values (${id}, ${t.rosterId}, ${t.teamName}, ${claim}, ${t.ownerKey}, ${t.manager})
-    `;
-    for (const p of t.players)
-      await sql`
-        insert into ff_spots (league_id, roster_id, player_id, slot, starter_slot)
-        values (${id}, ${t.rosterId}, ${p.sleeperId}, ${p.slot}, ${p.starterSlot})
-        on conflict do nothing
-      `;
-  }
-  for (const week of pack.weeks) {
-    for (const g of week.games) {
-      if (!g.home) continue;
-      await sql`
-        insert into ff_matchups (league_id, week, matchup_id, home_roster, away_roster)
-        values (${id}, ${week.week}, ${g.matchupId}, ${g.home}, ${g.away})
-        on conflict do nothing
-      `;
-    }
-    for (const r of week.results)
-      await sql`
-        insert into ff_week_results (league_id, week, roster_id, points, starters_json)
-        values (${id}, ${week.week}, ${r.rosterId}, ${r.points}, ${JSON.stringify(r.starters)})
-        on conflict do nothing
-      `;
-  }
-  await armLeagueOps(id);
-  return {
-    leagueId: id,
-    inviteCode: code,
-  };
+  if (!raw.teams.length) throw new Error("That ESPN league has no teams.");
+  const { packFromEspn, commitImportPack } = await import("./import-pack");
+  return commitImportPack({
+    userId: input.userId,
+    pack: packFromEspn(raw),
+    claimRosterId: input.claimRosterId,
+  });
 }
 export async function previewRebuild(input: {
   paste?: string;
@@ -2295,102 +2158,32 @@ async function importRebuildOnce(input: {
   claimRosterId: number | null;
 }): Promise<{ leagueId: string; inviteCode: string }> {
   await ensureDemo();
-  await ensureSnapColumns();
   const { parseImportSource } = await import("./recap");
-  const { matchPlayerName } = await import("@/lib/data/sleeper.server");
+  const { packFromRebuild, commitImportPack } = await import("./import-pack");
   const parsed = parseImportSource({
     paste: input.paste,
     known: input.known,
     pdfBase64: input.pdfBase64,
     teams: input.teams,
   });
-  const teams = parsed.teams;
-  if (teams.length < 2) throw new Error(parsed.warnings[0] ?? "Need at least two teams.");
-  if (teams.length > 14) throw new Error("14 teams max for now.");
-  const sql = await getSql();
-  if (input.known) {
-    const existing = await sql<{ id: string; invite_code: string }>`
-      select id, invite_code from ff_leagues
-      where commish_id = ${input.userId} and source_league_id = ${input.known}
-    `.catch(() => []);
-    if (existing[0]) return { leagueId: existing[0].id, inviteCode: existing[0].invite_code };
-  }
-  const ops = await import("./ops.server");
-  await ops.ensureOpsSchema();
-  const id = nid("lg_");
-  let code = inviteCode();
-  for (let i = 0; i < 6; i++) {
-    if (!(await sql`select id from ff_leagues where invite_code = ${code}`)[0]) break;
-    code = inviteCode();
-  }
-  const book = bookFromPreset(input.scoring);
-  const name = (input.name.trim() || parsed.suggestedName || "Rebuilt league").slice(0, 48);
+  if (parsed.teams.length < 2) throw new Error(parsed.warnings[0] ?? "Need at least two teams.");
+  if (parsed.teams.length > 14) throw new Error("14 teams max for now.");
+  const name = input.name.trim() || parsed.suggestedName || "Rebuilt league";
   const season =
     input.season === "2025" ? "2025" : parsed.suggestedSeason || input.season || "2026";
-  const playoff = teams.length >= 14 ? 7 : teams.length >= 12 ? 6 : 4;
-  const byes = defaultPlayoffByes(playoff);
-  const hasRecord = teams.some((t) => t.wins != null);
-  await sql`
-    insert into ff_leagues (
-      id, name, season, invite_code, commish_id, status, team_count,
-      scoring, roster_slots, playoff_teams, current_week, locked,
-      scoring_json, source, source_league_id, playoff_byes
-    ) values (
-      ${id}, ${name}, ${season}, ${code}, ${input.userId},
-      ${"in_season"}, ${teams.length}, ${input.scoring},
-      ${JSON.stringify(DEFAULT_SLOTS)}, ${playoff}, ${season === "2025" ? 14 : 1},
-      ${0}, ${JSON.stringify(book)}, ${"rebuild"}, ${input.known ?? null}, ${byes}
-    )
-  `;
-  await sql`insert into ff_draft (league_id, status, pick_no) values (${id}, ${"complete"}, ${1})`;
-  const pts = pprMap();
-  for (let i = 0; i < teams.length; i++) {
-    const t = teams[i];
-    const rosterId = i + 1;
-    const claim = input.claimRosterId === rosterId ? input.userId : null;
-    await sql`
-      insert into ff_rosters (
-        league_id, roster_id, team_name, owner_id, manager_name,
-        snap_wins, snap_losses, snap_ties, snap_pf, snap_pa
-      ) values (
-        ${id}, ${rosterId}, ${t.teamName}, ${claim}, ${t.manager},
-        ${t.wins}, ${t.losses}, ${t.ties}, ${t.pf}, ${t.pa}
-      )
-    `;
-    const ids = [];
-    for (const playerName of t.names) {
-      const p = matchPlayerName(playerName);
-      if (p && !ids.includes(p.player_id)) ids.push(p.player_id);
-    }
-    const lined = applyLineup(
-      ids.map((player_id) => ({
-        league_id: id,
-        roster_id: rosterId,
-        player_id,
-        slot: "bench",
-        starter_slot: null,
-      })),
-      DEFAULT_SLOTS,
-      pts,
-    );
-    for (const s of lined)
-      await sql`
-        insert into ff_spots (league_id, roster_id, player_id, slot, starter_slot)
-        values (${id}, ${rosterId}, ${s.player_id}, ${s.slot}, ${s.starter_slot})
-        on conflict do nothing
-      `;
-  }
-  if (!hasRecord || season === "2026")
-    for (const m of makeSchedule(teams.length, 14))
-      await sql`
-        insert into ff_matchups (league_id, week, matchup_id, home_roster, away_roster)
-        values (${id}, ${m.week}, ${m.id}, ${m.home}, ${m.away})
-      `;
-  await armLeagueOps(id);
-  return {
-    leagueId: id,
-    inviteCode: code,
-  };
+  const pack = packFromRebuild({
+    teams: parsed.teams,
+    name,
+    season,
+    scoring: input.scoring,
+    knownId: input.known ?? null,
+    warnings: parsed.warnings,
+  });
+  return commitImportPack({
+    userId: input.userId,
+    pack,
+    claimRosterId: input.claimRosterId,
+  });
 }
 export async function loadSettings(
   leagueId: string,
