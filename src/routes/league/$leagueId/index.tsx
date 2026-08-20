@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Avatar } from "@/components/avatar";
 import { LineupBoard } from "@/components/lineup-board";
+import { MatchupCard } from "@/components/matchup-card";
 import { PhaseHero } from "@/components/phase-hero";
 import { PlayerFeed } from "@/components/player-feed";
 import { PlayerSheet, type SheetTarget } from "@/components/player-sheet";
+import { TeamMasthead } from "@/components/team-masthead";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   getActivity,
@@ -27,7 +28,6 @@ import { sitPlayer, startPlayer } from "@/lib/league/fns";
 import { invalidateAfterLineup } from "@/lib/league/lineup-cache";
 import { lineupHealth, resolvePhase } from "@/lib/league/phase";
 import { applyPrototype } from "@/lib/league/prototype";
-import { cn, fmtRecord, formatPts } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$leagueId/")({
   component: MyTeamPage,
@@ -35,7 +35,6 @@ export const Route = createFileRoute("/league/$leagueId/")({
 
 function MyTeamPage() {
   const { leagueId } = Route.useParams();
-  const navigate = useNavigate();
   const qc = useQueryClient();
 
   const league = useQuery({
@@ -134,6 +133,26 @@ function MyTeamPage() {
       if (vars.name) toast(`${vars.name} moved to the bench`);
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not sit"),
+  });
+
+  const swap = useMutation({
+    mutationFn: async (v: {
+      aId: string;
+      bId: string;
+      aSlot: string;
+      bSlot: string;
+      aName: string;
+      bName: string;
+    }) => {
+      // Two legs, in order: the first benches b and moves a into b's slot,
+      // the second lifts b into the slot a just left. One invalidate at the end.
+      await startPlayer({ data: { leagueId, playerId: v.aId, replaceId: v.bId } });
+      await startPlayer({ data: { leagueId, playerId: v.bId, slot: v.aSlot } });
+      await invalidateAfterLineup(qc, leagueId);
+      return v;
+    },
+    onSuccess: (v) => toast.success(`${v.aName} to ${v.bSlot}, ${v.bName} to ${v.aSlot}`),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not swap"),
   });
 
   const autoFill = useMutation({
@@ -276,8 +295,6 @@ function MyTeamPage() {
   }
 
   const standings = league.data.standings;
-  const myIndex = standings.findIndex((s) => s.rosterId === rosterId);
-  const playoff = league.data.league.settings.playoff_teams ?? 0;
 
   return (
     <div className="flex flex-col gap-5">
@@ -299,7 +316,18 @@ function MyTeamPage() {
       />
 
       <div className="grid gap-5 lg:grid-cols-[1.35fr_1fr] lg:items-start">
-        <div id="lineup" className="min-w-0 scroll-mt-20">
+        <div id="lineup" className="flex min-w-0 flex-col gap-5 scroll-mt-20">
+          {/* The constant masthead: on a calm week the hero is null and this
+              strip is the page's top. Its rank cell replaces the old
+              "Where you sit" card — the full table is one tap away. */}
+          <TeamMasthead
+            leagueId={leagueId}
+            standings={standings}
+            rosterId={rosterId}
+            phase={phase.phase}
+            weekPts={realMe?.points ?? null}
+            faab={league.data.faabRemaining ?? null}
+          />
           {!team.data ? (
             <Skeleton className="h-96 rounded-xl" />
           ) : (
@@ -310,7 +338,6 @@ function MyTeamPage() {
               byes={byes.data}
               week={week}
               projections={projections.data}
-              showBench={false}
               onIntentPlayer={(p) => void prefetchPlayerProfile(qc, leagueId, p.player_id)}
               onOpenPlayer={(p) =>
                 setSheet({
@@ -322,16 +349,35 @@ function MyTeamPage() {
                   },
                 })
               }
-              busy={start.isPending || sit.isPending}
+              busy={start.isPending || sit.isPending || swap.isPending}
               onStart={(playerId, replaceId, slot, name, into) =>
                 start.mutate({ playerId, replaceId, slot, name, into })
               }
               onSit={(playerId, name) => sit.mutate({ playerId, name })}
+              onSwap={(v) => swap.mutate(v)}
             />
           )}
         </div>
 
         <div className="flex min-w-0 flex-col gap-5">
+          {/* The hero keeps the page's only full-width band — it earns it by
+              being stateful. The desk leads the rail instead, so an alert or
+              live week never stacks two banners before the lineup. */}
+          {recap.data ? <DeskCard leagueId={leagueId} week={week} recap={recap.data} /> : null}
+
+          {/* Rail reads story → the week → the risk. Like the hero, the
+              matchup card only exists when there is a matchup. */}
+          {myPair ? (
+            <MatchupCard
+              leagueId={leagueId}
+              week={week}
+              pair={myPair}
+              rosterId={rosterId}
+              standings={standings}
+              phase={phase.phase}
+            />
+          ) : null}
+
           <PlayerFeed
             phase={phase.phase}
             players={team.data?.players ?? []}
@@ -339,140 +385,36 @@ function MyTeamPage() {
             news={pulse.data?.news ?? []}
             loading={team.data == null && team.isPending}
           />
-
-          <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
-            <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
-              <h2 className="font-display text-lg font-bold tracking-[-0.03em]">Where you sit</h2>
-              {playoff > 0 ? (
-                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
-                  Top {playoff} make it
-                </span>
-              ) : null}
-            </header>
-            <div>
-              {neighbours(standings, myIndex, playoff).map((row) => (
-                <button
-                  key={row.rosterId}
-                  data-gap={row.gapBefore ? "" : undefined}
-                  type="button"
-                  onClick={() =>
-                    void navigate({
-                      to: "/league/$leagueId/team/$rosterId",
-                      params: { leagueId, rosterId: String(row.rosterId) },
-                    })
-                  }
-                  className={cn(
-                    "flex w-full items-center gap-3 border-b border-line px-5 py-2.5 text-left last:border-0",
-                    row.gapBefore && "border-t-2 border-t-line-strong",
-                    row.rosterId === rosterId ? "bg-raised" : "hover:bg-raised",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "grid size-6 shrink-0 place-items-center rounded-pill font-mono text-[10px]",
-                      playoff > 0 && row.rank <= playoff
-                        ? "bg-accent font-semibold text-accent-fg"
-                        : "text-faint",
-                    )}
-                  >
-                    {row.rank}
-                  </span>
-                  <Avatar src={row.avatar} name={row.teamName} className="size-7" tint />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                    {row.teamName}
-                  </span>
-                  <span className="font-mono text-xs text-muted">
-                    {fmtRecord(row.wins, row.losses, row.ties)}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <div className="px-5 py-3">
-              <Link
-                to="/league/$leagueId/standings"
-                params={{ leagueId }}
-                className="font-mono text-[11px] uppercase tracking-wide text-accent-strong"
-              >
-                Full standings
-              </Link>
-            </div>
-          </section>
-
-          {recap.data ? (
-            <Link
-              to="/league/$leagueId/recap"
-              params={{ leagueId }}
-              search={{ week, story: undefined }}
-              className="block rounded-xl bg-surface px-5 py-5 shadow-[var(--shadow-border)] transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-border-hover)]"
-            >
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-                {recap.data.kicker}
-              </p>
-              <p className="mt-1.5 font-display text-xl font-bold leading-snug tracking-[-0.03em]">
-                <span className="hl">{recap.data.headline}</span>
-              </p>
-              <p className="mt-2.5 text-sm text-muted">{recap.data.dek}</p>
-            </Link>
-          ) : null}
         </div>
       </div>
 
       <PlayerSheet target={sheet} leagueId={leagueId} onClose={() => setSheet(null)} />
-
-      {realMe && realThem ? (
-        <p className="text-xs text-faint">
-          Week {week} &middot; {realMe.teamName} {formatPts(realMe.points, 1)} vs{" "}
-          {realThem.teamName} {formatPts(realThem.points, 1)}.
-        </p>
-      ) : null}
     </div>
   );
 }
 
-type StandingLike = {
-  rosterId: number;
-  teamName: string;
-  avatar: string | null;
-  wins: number;
-  losses: number;
-  ties: number;
-};
-
-/**
- * Your row plus the playoff cut. The full table is one tap away; what you
- * actually want daily is where you sit relative to the line.
- *
- * The window is contiguous, because a list that skips a rank reads as a bug
- * rather than as an edit. When you sit too far from the cut to show both in
- * five rows, the jump is marked instead of silently closed.
- */
-function neighbours(standings: StandingLike[], myIndex: number, playoff: number) {
-  const ranked = standings.map((s, i) => ({ ...s, rank: i + 1, gapBefore: false }));
-  if (ranked.length === 0) return ranked;
-  if (myIndex < 0) return ranked.slice(0, 5);
-
-  const MAX = 5;
-  const cut = playoff > 0 ? playoff - 1 : myIndex;
-  const lo = Math.max(0, Math.min(myIndex - 1, cut));
-  const hi = Math.min(ranked.length - 1, Math.max(myIndex + 1, cut + 1));
-
-  if (hi - lo + 1 <= MAX) {
-    // Widen to fill the card rather than leaving a stub.
-    let start = lo;
-    let end = hi;
-    while (end - start + 1 < MAX && (start > 0 || end < ranked.length - 1)) {
-      if (end < ranked.length - 1) end += 1;
-      else if (start > 0) start -= 1;
-    }
-    return ranked.slice(start, end + 1);
-  }
-
-  // Too far apart: show the cut, then my neighbourhood, and mark the jump.
-  const top = playoff > 0 ? ranked.slice(cut, cut + 2) : [];
-  const mineStart = Math.max(top.length ? cut + 2 : 0, myIndex - 1);
-  const mine = ranked.slice(mineStart, mineStart + (MAX - top.length));
-  if (top.length && mine.length && mine[0]!.rank > top[top.length - 1]!.rank + 1) {
-    mine[0] = { ...mine[0]!, gapBefore: true };
-  }
-  return [...top, ...mine];
+/** The recap desk card — the editorial tile that leads the right rail. */
+function DeskCard({
+  leagueId,
+  week,
+  recap,
+}: {
+  leagueId: string;
+  week: number;
+  recap: { kicker: string; headline: string; dek: string };
+}) {
+  return (
+    <Link
+      to="/league/$leagueId/recap"
+      params={{ leagueId }}
+      search={{ week, story: undefined }}
+      className="block rounded-xl bg-surface px-5 py-5 shadow-[var(--shadow-border)] transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-border-hover)]"
+    >
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">{recap.kicker}</p>
+      <p className="mt-1.5 font-display text-xl font-bold leading-snug tracking-[-0.03em]">
+        <span className="hl">{recap.headline}</span>
+      </p>
+      <p className="mt-2.5 max-w-prose text-sm text-muted">{recap.dek}</p>
+    </Link>
+  );
 }

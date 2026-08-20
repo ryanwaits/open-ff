@@ -1,77 +1,183 @@
 import { Link } from "@tanstack/react-router";
 import { Avatar } from "@/components/avatar";
-import type { MatchupPair, MatchupSide } from "@/lib/data/types";
-import { cn, formatPts } from "@/lib/utils";
+import type { MatchupPair, MatchupSide, StandingRow, StarterLine } from "@/lib/data/types";
+import type { Phase } from "@/lib/league/phase";
+import { cn, fmtRecord, formatPts } from "@/lib/utils";
 
-function Side({
-  side,
-  align,
-  leading,
+/**
+ * The week's stakes as a card: who you play, both totals, the balance
+ * between them, and the two players most likely to decide it. The shell
+ * never changes — the numbers walk Projected → Live → Final with the
+ * phase. Like the hero, it only exists when there is a matchup; the
+ * offseason page simply doesn't render it.
+ */
+export function MatchupCard({
+  leagueId,
+  week,
+  pair,
+  rosterId,
+  standings,
+  phase,
 }: {
-  side: MatchupSide;
-  align: "left" | "right";
-  leading: boolean;
+  leagueId: string;
+  week: number;
+  pair: MatchupPair;
+  rosterId: number;
+  standings: StandingRow[];
+  phase: Phase;
 }) {
+  const mine = pair.home.rosterId === rosterId ? pair.home : pair.away;
+  const theirs = pair.home.rosterId === rosterId ? pair.away : pair.home;
+  if (!mine || !theirs) return null;
+
+  const settled = phase === "settled";
+  const live = phase === "live";
+  const label = live ? "Live" : settled ? "Final" : "Projected";
+  const total = mine.points + theirs.points;
+  const share = total > 0 ? (mine.points / total) * 100 : 50;
+  const diff = mine.points - theirs.points;
+
+  const delta =
+    total === 0
+      ? null
+      : Math.abs(diff) < 0.05
+        ? "even"
+        : settled
+          ? `${diff > 0 ? "won" : "lost"} by ${formatPts(Math.abs(diff), 1)}`
+          : `+${formatPts(Math.abs(diff), 1)} ${diff > 0 ? "you" : "them"}`;
+
+  const myBest = bestStarter(mine);
+  const theirBest = bestStarter(theirs);
+
   return (
-    <span
-      className={cn(
-        "flex min-w-0 flex-1 items-center gap-2.5",
-        align === "right" && "flex-row-reverse text-right",
-      )}
-    >
-      <Avatar src={side.avatar} name={side.teamName} className="size-9" tint />
-      <span className="min-w-0">
+    <section className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+      <header className="flex items-baseline justify-between gap-3 px-5 pt-5 pb-2">
+        <h2 className="font-display text-lg font-bold tracking-[-0.03em]">The matchup</h2>
         <span
           className={cn(
-            "block truncate text-sm",
-            leading ? "font-semibold text-fg" : "text-muted",
+            "font-mono text-[10px] uppercase tracking-[0.12em]",
+            live ? "text-live" : "text-faint",
+          )}
+        >
+          Week {week} · {live ? "Live" : settled ? "Final" : "Preview"}
+        </span>
+      </header>
+
+      <SideRow side={mine} standings={standings} me />
+      <SideRow side={theirs} standings={standings} />
+
+      <div className="grid gap-1.5 px-5 pt-1 pb-3">
+        <div className="flex h-1.5 overflow-hidden rounded-pill bg-raised">
+          <div
+            className="rounded-l-pill bg-accent motion-safe:transition-[width] motion-safe:duration-500"
+            style={{ width: `${share}%` }}
+          />
+        </div>
+        <div className="flex items-baseline justify-between font-mono text-[9.5px] uppercase tracking-[0.1em] text-faint">
+          <span>{label}</span>
+          {delta ? <span className="tabular-nums">{delta}</span> : null}
+        </div>
+      </div>
+
+      {myBest?.player && theirBest?.player ? (
+        <div className="space-y-1.5 border-t border-line px-5 py-3">
+          <WatchRow label="Your best" line={myBest} proj={!live && !settled} />
+          <WatchRow label="Their threat" line={theirBest} proj={!live && !settled} />
+        </div>
+      ) : null}
+
+      <div className="border-t border-line px-5 py-3 text-right">
+        <Link
+          to="/league/$leagueId/matchup/$week/$matchupId"
+          params={{ leagueId, week: String(week), matchupId: String(pair.matchupId) }}
+          className="font-mono text-[10px] uppercase tracking-[0.12em] text-accent-strong"
+        >
+          {live || settled ? "Full box score →" : "Full preview →"}
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+function SideRow({
+  side,
+  standings,
+  me = false,
+}: {
+  side: MatchupSide;
+  standings: StandingRow[];
+  me?: boolean;
+}) {
+  const idx = standings.findIndex((s) => s.rosterId === side.rosterId);
+  const row = idx >= 0 ? standings[idx] : null;
+  return (
+    <div className="flex items-center gap-3 border-t border-line px-5 py-2.5 first-of-type:border-t-0">
+      <Avatar src={side.avatar} name={side.teamName} className="size-7" tint />
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "block truncate text-sm tracking-[-0.01em]",
+            me ? "font-semibold" : "font-medium text-muted",
           )}
         >
           {side.teamName}
         </span>
-        <span className="block truncate font-mono text-[11px] text-faint">{side.manager}</span>
+        {row ? (
+          <span className="block font-mono text-[10px] tabular-nums text-faint">
+            {fmtRecord(row.wins, row.losses, row.ties)} · {idx + 1}
+            {ordinalSuffix(idx + 1)}
+          </span>
+        ) : null}
       </span>
-    </span>
+      <span
+        className={cn(
+          "shrink-0 font-mono text-lg tabular-nums",
+          me ? "font-bold" : "font-medium text-muted",
+        )}
+      >
+        {formatPts(side.points, 1)}
+      </span>
+    </div>
   );
 }
 
-export function MatchupCard({
-  pair,
-  leagueId,
-  week,
-}: {
-  pair: MatchupPair;
-  leagueId: string;
-  week: number;
-}) {
-  const away = pair.away;
-  const homeLeads = !away || pair.home.points >= away.points;
-  const decided = pair.home.points > 0 || (away?.points ?? 0) > 0;
+function WatchRow({ label, line, proj }: { label: string; line: StarterLine; proj: boolean }) {
+  const p = line.player;
+  if (!p) return null;
   return (
-    <Link
-      to="/league/$leagueId/matchup/$week/$matchupId"
-      params={{ leagueId, week: String(week), matchupId: String(pair.matchupId) }}
-      className="block rounded-xl bg-surface p-4 shadow-[var(--shadow-border)] transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-border-hover)]"
-    >
-      <div className="flex items-center gap-3">
-        <Side side={pair.home} align="left" leading={homeLeads && decided} />
-        <div className="shrink-0 text-center">
-          <div className="font-mono text-lg tabular-nums">
-            <span className={homeLeads && decided ? "font-semibold text-fg" : "text-muted"}>
-              {formatPts(pair.home.points, 1)}
-            </span>
-            <span className="mx-1 text-faint">–</span>
-            <span className={!homeLeads && decided ? "font-semibold text-fg" : "text-muted"}>
-              {formatPts(away?.points ?? 0, 1)}
-            </span>
-          </div>
-        </div>
-        {away ? (
-          <Side side={away} align="right" leading={!homeLeads && decided} />
-        ) : (
-          <div className="flex-1 text-right text-sm text-faint">Bye</div>
-        )}
-      </div>
-    </Link>
+    <div className="flex min-w-0 items-baseline gap-2">
+      <span className="w-[74px] shrink-0 font-mono text-[8.5px] uppercase tracking-[0.12em] text-faint">
+        {label}
+      </span>
+      <span className="truncate text-[13px] font-semibold tracking-[-0.01em]">{p.full_name}</span>
+      {p.position ? (
+        <span className="inline-flex h-4 shrink-0 items-center rounded-xs bg-raised px-1.5 font-mono text-[9px] text-muted">
+          {p.position}
+        </span>
+      ) : null}
+      <span className="ml-auto shrink-0 font-mono text-xs tabular-nums text-muted">
+        {proj ? "proj " : ""}
+        {formatPts(line.points, 1)}
+      </span>
+    </div>
   );
+}
+
+/** The starter most likely to decide the week — highest points/forecast. */
+function bestStarter(side: MatchupSide): StarterLine | null {
+  let best: StarterLine | null = null;
+  for (const line of side.starters) {
+    if (!line.player) continue;
+    if (best == null || (line.points ?? 0) > (best.points ?? 0)) best = line;
+  }
+  return best;
+}
+
+function ordinalSuffix(n: number): string {
+  const rem10 = n % 10;
+  const rem100 = n % 100;
+  if (rem10 === 1 && rem100 !== 11) return "st";
+  if (rem10 === 2 && rem100 !== 12) return "nd";
+  if (rem10 === 3 && rem100 !== 13) return "rd";
+  return "th";
 }
