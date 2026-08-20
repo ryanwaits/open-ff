@@ -35,6 +35,21 @@ export const deleteLeague = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const exportLeague = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ leagueId: z.string() }))
+  .handler(async ({ context, data }) => {
+    const eng = await import("./engine.server");
+    const snap = await eng.exportLeague(context.userId, data.leagueId);
+    // Server-fn wire rejects Record<string, unknown>; cells are JSON scalars.
+    return snap as {
+      v: 1;
+      leagueId: string;
+      exportedAt: string;
+      tables: Record<string, Array<Record<string, string | number | boolean | null>>>;
+    };
+  });
+
 export const joinLeague = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(

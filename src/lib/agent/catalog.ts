@@ -46,6 +46,13 @@ export const AGENT_TOOLS: AgentTool[] = [
     "atomic",
   ),
   tool(
+    "exportLeague",
+    "Export league",
+    "Download a JSON backup of a hosted league the signed-in user commissioners.",
+    "commish",
+    "read",
+  ),
+  tool(
     "joinLeague",
     "Join league",
     "Join a league by invite code and claim a seat, plus allowlist if the commish seeded one.",

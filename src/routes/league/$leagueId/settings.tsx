@@ -14,6 +14,7 @@ import {
   advanceWeek,
   claimRoster,
   deleteLeague,
+  exportLeague,
   getSettings,
   listAllowlist,
   processWaivers,
@@ -647,6 +648,8 @@ function SettingsPage() {
 
       <DemoMode />
 
+      {q.data.isCommish ? <DownloadBackup leagueId={leagueId} /> : null}
+
       {q.data.isCommish && !q.data.locked ? (
         <DeleteLeague
           leagueId={leagueId}
@@ -658,6 +661,44 @@ function SettingsPage() {
         />
       ) : null}
     </div>
+  );
+}
+
+function DownloadBackup({ leagueId }: { leagueId: string }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <section className="border-t border-line pt-10">
+      <h2 className="font-display text-2xl">Download backup</h2>
+      <p className="mt-1 text-sm text-muted">
+        JSON snapshot of this league&rsquo;s desks, rosters, and book. Keep a copy off-box.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-4"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          void exportLeague({ data: { leagueId } })
+            .then((snap) => {
+              const blob = new Blob([JSON.stringify(snap, null, 2)], {
+                type: "application/json",
+              });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `open-ff-${leagueId}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+              toast("Backup downloaded.");
+            })
+            .catch((err) => toast(err instanceof Error ? err.message : "Could not export."))
+            .finally(() => setBusy(false));
+        }}
+      >
+        {busy ? "Preparing…" : "Download backup"}
+      </Button>
+    </section>
   );
 }
 

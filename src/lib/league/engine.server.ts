@@ -1067,6 +1067,77 @@ export async function deleteLeague(userId: string, leagueId: string): Promise<vo
   await sql`delete from ff_leagues where id = ${leagueId}`;
 }
 
+function serializeBackupRow(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    out[k] = v instanceof Date ? v.toISOString() : v;
+  }
+  return out;
+}
+
+/** Commish-only JSON snapshot of one league. Locked desks are allowed (demo copy). */
+export async function exportLeague(
+  userId: string,
+  leagueId: string,
+): Promise<{
+  v: 1;
+  leagueId: string;
+  exportedAt: string;
+  tables: Record<string, Record<string, unknown>[]>;
+}> {
+  await ensureDemo();
+  const sql = await getSql();
+  const league = (await sql`select * from ff_leagues where id = ${leagueId}`)[0];
+  if (!league) throw new Error("No such league.");
+  if (league.commish_id !== userId) {
+    throw new Error("Only the commissioner can download a backup.");
+  }
+
+  const tables: Record<string, Record<string, unknown>[]> = {
+    ff_leagues: [serializeBackupRow(league)],
+  };
+
+  async function dumpByLeagueId(name: string) {
+    try {
+      const rows = await sql.query(`select * from ${name} where league_id = $1`, [leagueId]);
+      tables[name] = rows.map(serializeBackupRow);
+    } catch {
+      /* table may not exist yet */
+    }
+  }
+
+  await dumpByLeagueId("ff_rosters");
+  for (const table of LEAGUE_CHILD_TABLES) {
+    await dumpByLeagueId(table);
+  }
+  await dumpByLeagueId("ff_draft");
+  await dumpByLeagueId("ff_waiver_holds");
+
+  try {
+    const trades = await sql.query(`select * from ff_trades where league_id = $1`, [leagueId]);
+    tables.ff_trades = trades.map(serializeBackupRow);
+    const sides: Record<string, unknown>[] = [];
+    const assets: Record<string, unknown>[] = [];
+    for (const t of trades) {
+      const tradeSides = await sql`select * from ff_trade_sides where trade_id = ${t.id}`;
+      for (const s of tradeSides) sides.push(serializeBackupRow(s));
+      const tradeAssets = await sql`select * from ff_trade_assets where trade_id = ${t.id}`;
+      for (const a of tradeAssets) assets.push(serializeBackupRow(a));
+    }
+    tables.ff_trade_sides = sides;
+    tables.ff_trade_assets = assets;
+  } catch {
+    /* trades table may not exist on a fresh desk */
+  }
+
+  return {
+    v: 1,
+    leagueId,
+    exportedAt: new Date().toISOString(),
+    tables,
+  };
+}
+
 export async function joinLeague(
   userId: string,
   code: string,
