@@ -2,6 +2,23 @@
 --
 -- The daily Sleeper map already carries these fields; we used to persist three
 -- of them. Notes join on rotowire_id (exact), never a name match.
+-- Table is also ensured lazily in player-refresh; CREATE here so a fresh
+-- PGLite (Docker volume) can apply this migration before any refresh runs.
+
+create table if not exists ff_player_status (
+  player_id text primary key,
+  injury_status text,
+  status text,
+  team text,
+  news_updated timestamptz,
+  injury_body_part text,
+  injury_notes text,
+  practice_participation text,
+  practice_description text,
+  depth_chart_order int,
+  rotowire_id text,
+  updated_at timestamptz not null default now()
+);
 
 alter table ff_player_status add column if not exists news_updated timestamptz;
 alter table ff_player_status add column if not exists injury_body_part text;

@@ -1200,12 +1200,18 @@ export async function tickLeague(leagueId: string): Promise<{ advanced: number; 
   return { advanced, waivers };
 }
 
-export async function tickAllLeagues(): Promise<{
+type TickAllResult = {
   leagues: number;
   advanced: number;
   waivers: number;
   statusChanges: number;
-}> {
+};
+
+const tickFlight = globalThis as typeof globalThis & {
+  __ledgerTickInFlight__?: Promise<TickAllResult> | null;
+};
+
+async function tickAllLeaguesBody(): Promise<TickAllResult> {
   await ensureOpsSchema();
   const sql = await getSql();
   const rows = await sql<{ id: string }>`
@@ -1239,6 +1245,18 @@ export async function tickAllLeagues(): Promise<{
     waivers += res.waivers;
   }
   return { leagues: rows.length, advanced, waivers, statusChanges };
+}
+
+/** Single-flight: interval + HTTP cron share one in-flight tick. */
+export async function tickAllLeagues(): Promise<TickAllResult> {
+  if (tickFlight.__ledgerTickInFlight__) return tickFlight.__ledgerTickInFlight__;
+  const run = tickAllLeaguesBody().finally(() => {
+    if (tickFlight.__ledgerTickInFlight__ === run) {
+      tickFlight.__ledgerTickInFlight__ = null;
+    }
+  });
+  tickFlight.__ledgerTickInFlight__ = run;
+  return run;
 }
 
 /**
@@ -1308,13 +1326,18 @@ const clockRef = globalThis as typeof globalThis & {
   __ledgerClock__?: ReturnType<typeof setInterval>;
 };
 
+/**
+ * In-process league clock. Only when OPENFF_SELF_TICK=1 (Docker / long-lived
+ * host). Vercel keeps vercel.json cron — do not set that env there.
+ */
 export function startLeagueClock(): void {
+  if (process.env.OPENFF_SELF_TICK !== "1") return;
   if (clockRef.__ledgerClock__) return;
   clockRef.__ledgerClock__ = setInterval(
     () => {
       void tickAllLeagues().catch(() => undefined);
     },
-    5 * 60 * 1000,
+    120_000,
   );
   setTimeout(() => {
     void tickAllLeagues().catch(() => undefined);

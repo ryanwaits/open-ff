@@ -1,0 +1,17 @@
+node_modules
+data/pglite
+.git
+.vercel
+screenshots
+.tanstack
+.env
+.env.*
+!.env.example
+*.log
+/tmp
+dist
+.output
+.nitro
+.DS_Store
+plans
+attachments

@@ -3,7 +3,45 @@
 A self-hosted fantasy football league desk. Sign in, create a league, invite
 friends to **this** origin. One deploy can host many leagues.
 
-## Run it
+## Put it on the internet
+
+You need Docker. You do **not** need Bun on the host.
+
+```sh
+git clone https://github.com/YOUR_ORG/open-ff.git
+cd open-ff
+cp .env.example .env   # optional — compose fills a session secret if blank
+docker compose up -d
+```
+
+Open `http://YOUR_HOST:8080` → `/login` → `/new` → invite friends.
+
+| Env | Notes |
+|-----|--------|
+| `BETTER_AUTH_URL` | Public https origin (no trailing slash). Default `http://localhost:8080`. |
+| `BETTER_AUTH_SECRET` | Session signing. Blank → entrypoint generates one. |
+| `CRON_SECRET` | Optional on Docker (in-process tick). Still gates HTTP `/api/league/tick`. Unset = that route is public — set it on a public host. |
+
+Compose sets `OPENFF_SELF_TICK=1` so the league clock runs inside the
+container every 2 minutes — no crontab. League data lives on the
+`openff-data` volume (`PGLITE_DATA_DIR=/data/pglite`). Do **not** set
+`DATABASE_URL` unless you want external Postgres.
+
+After a season (or before you wipe a box), open **Settings → Download
+backup** for a JSON export of the league.
+
+Email/password is the self-host login. Google/X only appear when
+`GROK_AUTH_CLIENT_ID` is set (or on the Grok live preview).
+
+### Vercel instead
+
+Four env vars on the project: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
+`CRON_SECRET`, and `DATABASE_URL` (Neon or any Postgres — Vercel has no
+durable disk). Cron is free via `vercel.json` (`/api/league/tick` hourly).
+Do **not** set `OPENFF_SELF_TICK` there. Then `bun run db:migrate` runs as
+part of `bun run build`.
+
+## Local without Docker
 
 You need [Bun](https://bun.sh) 1.3 (see `packageManager` in `package.json`).
 
@@ -24,26 +62,14 @@ Open [http://127.0.0.1:8080](http://127.0.0.1:8080).
 A local seed account is created on an empty email table. Copy
 `.env.example` to `.env` and fill only what you need.
 
-## Public host
-
-Set these before you put it on the internet:
-
-- `BETTER_AUTH_SECRET` — session signing secret
-- `BETTER_AUTH_URL` — public https origin (no trailing slash)
-- `CRON_SECRET` — required to tick leagues
-- `DATABASE_URL` — Postgres; then `bun run db:migrate`
-
-Google and X login only appear when `GROK_AUTH_CLIENT_ID` is set (or on
-the Grok live preview). Email/password is the self-host path.
-
-### Tick / cron
+## Advanced: tick without Docker
 
 The league clock is `GET` (or `POST`) `/api/league/tick`. When
 `CRON_SECRET` is set, the request must send that value as
 `Authorization: Bearer …` or `?secret=`.
 
-Vercel already schedules `/api/league/tick` via `vercel.json`. Elsewhere,
-a cron or systemd timer every 1–5 minutes:
+Long-lived `bun run dev` can set `OPENFF_SELF_TICK=1` for an in-process
+interval (same as Docker). Otherwise wire a cron or systemd timer:
 
 ```cron
 */2 * * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://YOUR_HOST/api/league/tick
@@ -67,7 +93,7 @@ WantedBy=timers.target
 ```
 
 If `CRON_SECRET` is unset, the tick route is public — do not do that on a
-public host.
+public host unless you rely only on the in-process clock behind a firewall.
 
 ## Players and imports
 
