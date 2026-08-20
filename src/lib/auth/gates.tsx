@@ -127,6 +127,9 @@ export function UserButton({ leagueId }: { leagueId?: string | null }) {
                 League settings
               </Link>
             ) : null}
+            <Link to="/account" role="menuitem" onClick={() => setOpen(false)} className={item}>
+              Account
+            </Link>
             {authEnabled && (
               <button type="button" role="menuitem" onClick={() => void signOut()} className={item}>
                 Sign out

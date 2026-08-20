@@ -46,133 +46,127 @@ function NewLeague() {
 
   return (
     <Shell>
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">
-        Open a desk
-      </p>
-      <h1 className="mt-2 font-display text-4xl tracking-tight">New league</h1>
+      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">Commissioner</p>
+      <h1 className="mt-2 font-display text-4xl tracking-tight">Start a league</h1>
       <p className="mt-2 max-w-xl text-sm text-muted">
-        Friends sign in here — not on Sleeper. You get an invite code. Empty
-        seats can be house clubs so you can draft tonight.
+        Import the draft you already ran, or open an empty desk. Friends join here with your invite
+        — not on Sleeper.
       </p>
 
       <Link
         to="/import"
-        className="mt-6 flex max-w-lg items-center justify-between gap-3 rounded-xl bg-surface px-4 py-4 text-left shadow-[var(--shadow-border)] hover:shadow-[var(--shadow-border-hover)]"
+        className="mt-6 flex max-w-lg items-center justify-between gap-3 rounded-xl bg-surface px-4 py-4 text-left shadow-[var(--shadow-border)] transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-border-hover)]"
       >
         <span>
           <span className="block text-sm font-semibold">Import WIFFL or a recap</span>
           <span className="mt-0.5 block text-xs text-muted">
-            Load the known draft or drop an ESPN PDF. You pick your seat before it becomes a league.
+            Known draft, ESPN PDF, or Sleeper id. You pick your seat before it becomes a league.
           </span>
         </span>
         <span className="shrink-0 font-mono text-[11px] uppercase text-faint">Import</span>
       </Link>
 
-      <p className="mt-8 font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-        Or start empty
-      </p>
-
-      <form
-        className="mt-8 max-w-lg space-y-5"
-        onSubmit={(e) => {
-          e.preventDefault();
-          create.mutate();
-        }}
-      >
-        <label className="block">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-            League name
-          </span>
-          <Input
-            className="mt-1.5"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="The Backyard"
-            required
-          />
-        </label>
-        <label className="block">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-            Your team
-          </span>
-          <Input
-            className="mt-1.5"
-            value={teamName}
-            onChange={(e) => setTeamName(e.target.value)}
-            placeholder="Night Desk"
-            required
-          />
-        </label>
-        <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-            Teams
-          </p>
-          <div className="mt-2 flex gap-1">
-            {[8, 10, 12, 14].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setTeamCount(n)}
-                className={cn(
-                  "h-10 min-w-14 rounded-sm px-3 font-mono text-sm",
-                  teamCount === n ? "bg-accent text-accent-fg" : "bg-raised text-muted",
-                )}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-            Scoring
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1">
-            {(
-              [
-                ["ppr", "PPR"],
-                ["half", "Half"],
-                ["std", "Standard"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setScoring(id)}
-                className={cn(
-                  "h-10 rounded-sm px-3 font-mono text-sm",
-                  scoring === id ? "bg-accent text-accent-fg" : "bg-raised text-muted",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <label className="flex items-start gap-3 rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
-          <input
-            type="checkbox"
-            checked={fillHouse}
-            onChange={(e) => setFillHouse(e.target.checked)}
-            className="mt-1 size-4 accent-current"
-          />
-          <span>
-            <span className="block text-sm">Fill empty seats with house clubs</span>
-            <span className="mt-1 block text-xs text-muted">
-              House teams autodraft. Friends can still claim a seat with your
-              invite code.
+      <details className="mt-8 max-w-lg">
+        <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-[0.16em] text-faint hover:text-muted">
+          Start empty instead
+        </summary>
+        <form
+          className="mt-5 space-y-5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            create.mutate();
+          }}
+        >
+          <label className="block">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+              League name
             </span>
-          </span>
-        </label>
-        <div className="flex items-center gap-3">
-          <Button type="submit" disabled={isPending || create.isPending}>
-            {create.isPending ? "Opening…" : "Open the league"}
-          </Button>
-          <Link to="/import" className="text-sm text-muted hover:text-fg">
-            Import from Sleeper instead
-          </Link>
-        </div>
-      </form>
+            <Input
+              className="mt-1.5"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="The Backyard"
+              required
+            />
+          </label>
+          <label className="block">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+              Your team
+            </span>
+            <Input
+              className="mt-1.5"
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+              placeholder="Night Desk"
+              required
+            />
+          </label>
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Teams</p>
+            <div className="mt-2 flex gap-1">
+              {[8, 10, 12, 14].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setTeamCount(n)}
+                  className={cn(
+                    "h-10 min-w-14 rounded-sm px-3 font-mono text-sm",
+                    teamCount === n ? "bg-accent text-accent-fg" : "bg-raised text-muted",
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">Scoring</p>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {(
+                [
+                  ["ppr", "PPR"],
+                  ["half", "Half"],
+                  ["std", "Standard"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setScoring(id)}
+                  className={cn(
+                    "h-10 rounded-sm px-3 font-mono text-sm",
+                    scoring === id ? "bg-accent text-accent-fg" : "bg-raised text-muted",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="flex items-start gap-3 rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+            <input
+              type="checkbox"
+              checked={fillHouse}
+              onChange={(e) => setFillHouse(e.target.checked)}
+              className="mt-1 size-4 accent-current"
+            />
+            <span>
+              <span className="block text-sm">Fill empty seats with house clubs</span>
+              <span className="mt-1 block text-xs text-muted">
+                House teams autodraft. Friends can still claim a seat with your invite code.
+              </span>
+            </span>
+          </label>
+          <div className="flex items-center gap-3">
+            <Button type="submit" disabled={isPending || create.isPending}>
+              {create.isPending ? "Opening…" : "Open the league"}
+            </Button>
+            <Link to="/" className="text-sm text-muted hover:text-fg">
+              Cancel
+            </Link>
+          </div>
+        </form>
+      </details>
     </Shell>
   );
 }

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as DataRouteImport } from './routes/data'
 import { Route as ImportRouteImport } from './routes/import'
 import { Route as JoinRouteImport } from './routes/join'
@@ -40,6 +41,11 @@ import { Route as LeagueLeagueIdMatchupWeekMatchupIdRouteImport } from './routes
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DataRoute = DataRouteImport.update({
@@ -178,6 +184,7 @@ const LeagueLeagueIdMatchupWeekMatchupIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/data': typeof DataRoute
   '/import': typeof ImportRoute
   '/join': typeof JoinRoute
@@ -207,6 +214,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/data': typeof DataRoute
   '/import': typeof ImportRoute
   '/join': typeof JoinRoute
@@ -236,6 +244,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/data': typeof DataRoute
   '/import': typeof ImportRoute
   '/join': typeof JoinRoute
@@ -267,6 +276,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/account'
     | '/data'
     | '/import'
     | '/join'
@@ -296,6 +306,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/account'
     | '/data'
     | '/import'
     | '/join'
@@ -324,6 +335,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/account'
     | '/data'
     | '/import'
     | '/join'
@@ -354,6 +366,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
   DataRoute: typeof DataRoute
   ImportRoute: typeof ImportRoute
   JoinRoute: typeof JoinRoute
@@ -375,6 +388,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/data': {
@@ -603,6 +623,7 @@ const LeagueLeagueIdRouteWithChildren = LeagueLeagueIdRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
   DataRoute: DataRoute,
   ImportRoute: ImportRoute,
   JoinRoute: JoinRoute,

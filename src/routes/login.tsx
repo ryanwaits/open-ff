@@ -74,17 +74,13 @@ function Login() {
           {brand.name}
         </Link>
         <p className="mt-2 text-sm text-muted">
-          This is your open-ff account — not Sleeper, not ESPN. Email works here with nothing else
-          to set up.
+          Your open-ff account — not Sleeper, not ESPN.
           {socialCopy}
         </p>
-        <p className="mt-2 text-xs text-faint">
-          Local seed is {LOCAL_SEED.email} / {LOCAL_SEED.password}. Without a hosted database the
-          league lives on disk in data/pglite and survives restart.
-        </p>
-        <div className="mt-8 space-y-2">
-          {authEnabled ? (
-            social.map((p) => (
+
+        {authEnabled && social.length > 0 ? (
+          <div className="mt-8 space-y-2">
+            {social.map((p) => (
               <Button
                 key={p.providerId}
                 type="button"
@@ -100,11 +96,11 @@ function Login() {
               >
                 Continue with {p.label}
               </Button>
-            ))
-          ) : (
-            <p className="text-sm text-muted">Sign-in is disabled.</p>
-          )}
-        </div>
+            ))}
+          </div>
+        ) : null}
+
+        {!authEnabled ? <p className="mt-8 text-sm text-muted">Sign-in is disabled.</p> : null}
 
         {authEnabled ? (
           <form className="mt-8 space-y-3" onSubmit={(e) => void onEmail(e)}>

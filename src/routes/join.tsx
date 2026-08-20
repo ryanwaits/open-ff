@@ -2,7 +2,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { InstallCoach } from "@/components/install-coach";
 import { Shell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,10 +75,10 @@ function JoinLeague() {
 
   return (
     <Shell>
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">Take a seat</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">Member</p>
       <h1 className="mt-2 font-display text-4xl tracking-tight">Join a league</h1>
       <p className="mt-2 max-w-xl text-sm text-muted">
-        Enter the invite code. If seats have names, pick yours.
+        Paste the invite code. If seats have names, pick yours.
       </p>
       <form
         className="mt-8 max-w-lg space-y-5"
@@ -144,7 +143,6 @@ function JoinLeague() {
           </Link>
         </div>
       </form>
-      <InstallCoach />
     </Shell>
   );
 }
