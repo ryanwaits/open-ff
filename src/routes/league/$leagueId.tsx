@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Outlet,
+  redirect,
+  useNavigate,
+  useRouterState,
+} from "@tanstack/react-router";
 import { BarChart3, House, Search, Shield, Swords } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -28,40 +34,55 @@ export const Route = createFileRoute("/league/$leagueId")({
     state: parsePrototypeState(s.state),
   }),
   loader: async ({ context, params, location }) => {
-    const qc = context.queryClient;
-    const bundle = await warmQuery(qc, {
-      queryKey: ["league", params.leagueId],
-      queryFn: () => getLeagueBundle({ data: { leagueId: params.leagueId } }),
-    });
-    const search = location.search as LeagueSearch;
-    const week = search.week ?? bundle.currentWeek ?? 1;
-    const jobs: Promise<unknown>[] = [
-      warmQuery(qc, {
-        queryKey: ["matchups", params.leagueId, week],
-        queryFn: () => getMatchups({ data: { leagueId: params.leagueId, week } }),
-      }),
-    ];
-    const myRosterId = bundle.myRosterId;
-    if (myRosterId != null) {
-      jobs.push(
+    try {
+      const qc = context.queryClient;
+      const bundle = await warmQuery(qc, {
+        queryKey: ["league", params.leagueId],
+        queryFn: () => getLeagueBundle({ data: { leagueId: params.leagueId } }),
+      });
+      const search = location.search as LeagueSearch;
+      const week = search.week ?? bundle.currentWeek ?? 1;
+      const jobs: Promise<unknown>[] = [
         warmQuery(qc, {
-          queryKey: ["team", params.leagueId, myRosterId, week],
-          queryFn: () =>
-            getTeam({
-              data: { leagueId: params.leagueId, rosterId: myRosterId, week },
-            }),
+          queryKey: ["matchups", params.leagueId, week],
+          queryFn: () => getMatchups({ data: { leagueId: params.leagueId, week } }),
         }),
-      );
+      ];
+      const myRosterId = bundle.myRosterId;
+      if (myRosterId != null) {
+        jobs.push(
+          warmQuery(qc, {
+            queryKey: ["team", params.leagueId, myRosterId, week],
+            queryFn: () =>
+              getTeam({
+                data: { leagueId: params.leagueId, rosterId: myRosterId, week },
+              }),
+          }),
+        );
+      }
+      void qc.prefetchQuery({
+        queryKey: ["wire", params.leagueId, "ALL", "available"],
+        queryFn: () =>
+          getWire({
+            data: { leagueId: params.leagueId, position: "ALL", query: "", scope: "available" },
+          }),
+      });
+      await Promise.all(jobs);
+      return { week };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg === "Unauthorized") {
+        const searchStr =
+          "searchStr" in location && typeof location.searchStr === "string"
+            ? location.searchStr
+            : "";
+        throw redirect({
+          to: "/login",
+          search: { redirect: `${location.pathname}${searchStr}` },
+        });
+      }
+      throw err;
     }
-    void qc.prefetchQuery({
-      queryKey: ["wire", params.leagueId, "ALL", "available"],
-      queryFn: () =>
-        getWire({
-          data: { leagueId: params.leagueId, position: "ALL", query: "", scope: "available" },
-        }),
-    });
-    await Promise.all(jobs);
-    return { week };
   },
   component: LeagueLayout,
 });
