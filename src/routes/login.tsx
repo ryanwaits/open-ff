@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authClient, authEnabled, signIn } from "@/lib/auth/client";
 import { LOCAL_SEED } from "@/lib/auth/local-seed";
-import { configuredGrokProviders } from "@/lib/auth/providers";
+import { configuredLoginSocials } from "@/lib/auth/providers";
 import { getQueryClient } from "@/lib/query-client";
 import { brand } from "@/skin/brand";
 
@@ -17,10 +17,7 @@ const loadSocialProviders = createServerFn({ method: "GET" }).handler(async () =
   const req = getRequest();
   const raw = req?.headers.get("x-forwarded-host") ?? req?.headers.get("host") ?? "";
   const host = raw.split(":")[0] ?? "";
-  return configuredGrokProviders(host).map((p) => ({
-    providerId: p.providerId,
-    label: p.label,
-  }));
+  return configuredLoginSocials(host);
 });
 
 export const Route = createFileRoute("/login")({
@@ -36,6 +33,13 @@ function Login() {
   const social = Route.useLoaderData();
   const navigate = useNavigate();
   const dest = redirect?.startsWith("/") ? redirect : "/";
+  const socialNames = [...new Set(social.map((p) => p.label))];
+  const socialCopy =
+    socialNames.length === 0
+      ? ""
+      : socialNames.length === 1
+        ? ` ${socialNames[0]} is available on this host.`
+        : ` ${socialNames.slice(0, -1).join(", ")} and ${socialNames[socialNames.length - 1]} are available on this host.`;
   const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState<string>(LOCAL_SEED.email);
   const [password, setPassword] = useState<string>(LOCAL_SEED.password);
@@ -72,7 +76,7 @@ function Login() {
         <p className="mt-2 text-sm text-muted">
           This is your open-ff account — not Sleeper, not ESPN. Email works here with nothing else
           to set up.
-          {social.length > 0 ? " Google and X are available on this host." : ""}
+          {socialCopy}
         </p>
         <p className="mt-2 text-xs text-faint">
           Local seed is {LOCAL_SEED.email} / {LOCAL_SEED.password}. Without a hosted database the
@@ -86,7 +90,13 @@ function Login() {
                 type="button"
                 variant="outline"
                 className="w-full"
-                onClick={() => signIn(p.providerId, { callbackURL: dest })}
+                onClick={() => {
+                  if (p.kind === "native") {
+                    void authClient.signIn.social({ provider: "google", callbackURL: dest });
+                    return;
+                  }
+                  void signIn(p.providerId, { callbackURL: dest });
+                }}
               >
                 Continue with {p.label}
               </Button>

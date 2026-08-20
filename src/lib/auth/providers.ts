@@ -46,3 +46,35 @@ export function grokBrokerConfigured(host = ""): boolean {
 export function configuredGrokProviders(host = ""): readonly GrokProvider[] {
   return grokBrokerConfigured(host) ? GROK_PROVIDERS : [];
 }
+
+/** True when this app has its own Google OAuth client (not the Grok broker). */
+export function nativeGoogleConfigured(): boolean {
+  if (typeof process === "undefined") return false;
+  const id = process.env.GOOGLE_CLIENT_ID?.trim();
+  const secret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  return Boolean(id && secret);
+}
+
+export type LoginSocial = {
+  providerId: string;
+  label: string;
+  kind: "broker" | "native";
+};
+
+/**
+ * Sign-in buttons the login loader may render. Broker Google/X when the broker
+ * is on; native Google when `GOOGLE_CLIENT_*` are set (even off-sandbox).
+ * If both Google paths exist, the broker button is enough — do not show two.
+ */
+export function configuredLoginSocials(host = ""): LoginSocial[] {
+  const social: LoginSocial[] = configuredGrokProviders(host).map((p) => ({
+    providerId: p.providerId,
+    label: p.label,
+    kind: "broker",
+  }));
+  const hasGoogle = social.some((p) => p.label === "Google");
+  if (nativeGoogleConfigured() && !hasGoogle) {
+    social.push({ providerId: "google", label: "Google", kind: "native" });
+  }
+  return social;
+}
