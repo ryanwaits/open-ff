@@ -411,12 +411,12 @@ async function pingWaiver(
   try {
     const { notifyRoster } = await import("@/lib/push/send.server");
     const name = playerName(playerId) || "a player";
-    await notifyRoster(leagueId, rosterId, {
+    void notifyRoster(leagueId, rosterId, {
       kind: "waiver",
       title: won ? "Waiver claim won" : "Waiver claim lost",
       body: won ? `You got ${name}.` : `Your claim for ${name} didn't go through.`,
       url: `/league/${leagueId}/roster`,
-    });
+    }).catch(() => undefined);
   } catch {
     /* never throw into waiver writes */
   }
@@ -760,12 +760,12 @@ export async function proposeTrade(
     const { notifyRoster } = await import("@/lib/push/send.server");
     for (const roster of sides) {
       if (roster === mine.roster_id) continue;
-      await notifyRoster(leagueId, roster, {
+      void notifyRoster(leagueId, roster, {
         kind: "trade",
         title: "A trade is waiting",
         body: "Someone sent you a trade. Open it on this desk.",
         url: `/league/${leagueId}/trades`,
-      });
+      }).catch(() => undefined);
     }
   } catch {
     /* never throw into a proposed trade */

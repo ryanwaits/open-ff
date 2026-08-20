@@ -60,8 +60,4 @@ export async function enablePushForLeague(leagueId: string, publicKey: string): 
 
 export async function disablePushForLeague(leagueId: string): Promise<void> {
   await unsubscribePush({ data: { leagueId } });
-  if (!("serviceWorker" in navigator)) return;
-  const reg = await navigator.serviceWorker.getRegistration("/sw.js");
-  const sub = await reg?.pushManager.getSubscription();
-  await sub?.unsubscribe().catch(() => undefined);
 }

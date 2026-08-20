@@ -1201,12 +1201,12 @@ async function stampDeadline(leagueId, pickNo, rosterId) {
   `;
   try {
     const { notifyRoster } = await import("@/lib/push/send.server");
-    await notifyRoster(leagueId, rosterId, {
+    void notifyRoster(leagueId, rosterId, {
       kind: "clock",
       title: "You're on the clock",
       body: "It's your pick. Open the draft room.",
       url: `/league/${leagueId}/draft`,
-    });
+    }).catch(() => undefined);
   } catch {
     /* never throw into the draft clock */
   }
