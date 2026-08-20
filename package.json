@@ -12,6 +12,7 @@
     "build": "vite build && bun run db:migrate",
     "db:migrate": "bun scripts/migrate.mjs",
     "db:repair": "bun scripts/pglite-repair.mjs",
+    "db:reset": "bun scripts/pglite-reset.mjs",
     "build:dev": "vite build --mode development",
     "preview": "vite preview --host 0.0.0.0 --port 8080",
     "typecheck": "tsc --noEmit",

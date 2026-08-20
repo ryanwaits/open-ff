@@ -20,3 +20,6 @@ data/pglite/
 # Agent QA screenshots. Not part of the app. A copy of the last dump
 # lives in /tmp/open-ff-screenshots if you need them.
 screenshots/
+
+# PGLite repair dumps (bun run db:repair)
+data/pglite-corrupt-*/

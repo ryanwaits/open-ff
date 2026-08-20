@@ -24,3 +24,25 @@ export async function seedLocalAccount(sql: Sql): Promise<void> {
     )
   `;
 }
+
+/**
+ * Empty local PGLite → import WIFFL and sit Ryan on hands.
+ * Skips when any league already exists. Neon/prod never calls this.
+ */
+export async function seedLocalWiffl(): Promise<void> {
+  const { getSql } = await import("@/lib/db");
+  const sql = await getSql();
+  const existing = await sql`select id from ff_leagues limit 1`;
+  if (existing[0]) return;
+  const { WIFFL_2026 } = await import("@/lib/league/recaps/wiffl-2026");
+  const claimRosterId = WIFFL_2026.teams.findIndex((t) => t.teamName === "hands") + 1;
+  const { importRebuild } = await import("@/lib/league/engine.server");
+  await importRebuild({
+    userId: LOCAL_SEED.userId,
+    known: WIFFL_2026.id,
+    name: WIFFL_2026.name,
+    season: WIFFL_2026.season,
+    scoring: WIFFL_2026.scoring,
+    claimRosterId: claimRosterId > 0 ? claimRosterId : 6,
+  });
+}

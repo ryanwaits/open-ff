@@ -44,6 +44,7 @@ export interface Sql {
  */
 const globalRef = globalThis as typeof globalThis & {
   __pgSqlPromise__?: Promise<Sql>;
+  __sqlReady__?: Sql;
   __pgliteInstance__?: Promise<import("@electric-sql/pglite").PGlite>;
   __pgliteMigrateChain__?: Promise<void>;
   __pgliteShutdownInstalled__?: boolean;
@@ -175,8 +176,12 @@ async function createPgliteSql(): Promise<Sql> {
     const result = await pg.query<T>(text, params);
     return result.rows;
   });
-  const { seedLocalAccount } = await import("@/lib/auth/seed.server");
+  const { seedLocalAccount, seedLocalWiffl } = await import("@/lib/auth/seed.server");
   await seedLocalAccount(sql);
+  // Publish before WIFFL import so engine.server getSql() does not deadlock
+  // on the still-in-flight createSql() promise.
+  globalRef.__sqlReady__ = sql;
+  await seedLocalWiffl();
   return sql;
 }
 
@@ -200,8 +205,10 @@ async function createSql(): Promise<Sql> {
  * both backends — define tables there, never inline in server functions.
  */
 export function getSql(): Promise<Sql> {
+  if (globalRef.__sqlReady__) return Promise.resolve(globalRef.__sqlReady__);
   sqlPromise ??= createSql().catch((err) => {
     sqlPromise = null; // don't memoize failures — let the next call retry
+    globalRef.__sqlReady__ = undefined;
     throw err;
   });
   return sqlPromise;
@@ -251,6 +258,7 @@ export async function closePglite(): Promise<void> {
   globalRef.__pgliteInstance__ = undefined;
   globalRef.__pgliteMigrateChain__ = undefined;
   globalRef.__pgSqlPromise__ = undefined;
+  globalRef.__sqlReady__ = undefined;
   sqlPromise = null;
   globalBoot.__pgBootstrapPromise__ = undefined;
   try {
