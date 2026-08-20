@@ -75,7 +75,7 @@ function RootDocument() {
       if (media?.includes("dark")) meta.setAttribute("content", colors.dark);
       else if (media?.includes("light")) meta.setAttribute("content", colors.light);
     }
-  }, [skin, resolved]);
+  }, [skin]);
 
   return (
     <html lang="en" className="antialiased" suppressHydrationWarning>
