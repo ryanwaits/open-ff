@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { InviteCard, usePageOrigin } from "@/components/invite-card";
+import { disablePushForLeague, enablePushForLeague } from "@/components/push-register";
 import { ScheduleDesk } from "@/components/schedule-desk";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ import {
   slotsFromCounts,
 } from "@/lib/league/roster";
 import { bookFromPreset, SCORING_FIELDS, type ScoringBook } from "@/lib/league/scoring";
+import { pushStatus } from "@/lib/push/fns";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$leagueId/settings")({
@@ -196,6 +198,8 @@ function SettingsPage() {
           Open
         </span>
       </Link>
+
+      <PushOptIn leagueId={leagueId} hasSeat={bundle.data?.myRosterId != null} />
 
       <section>
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
@@ -802,6 +806,70 @@ function DeleteLeague({
         >
           {kill.isPending ? "Deleting…" : "Delete league"}
         </Button>
+      </div>
+    </section>
+  );
+}
+
+function PushOptIn({ leagueId, hasSeat }: { leagueId: string; hasSeat: boolean }) {
+  const qc = useQueryClient();
+  const status = useQuery({
+    queryKey: ["push-status", leagueId],
+    queryFn: () => pushStatus({ data: { leagueId } }),
+    enabled: hasSeat,
+  });
+  const toggle = useMutation({
+    mutationFn: async (on: boolean) => {
+      if (!on) {
+        await disablePushForLeague(leagueId);
+        return;
+      }
+      const key = status.data?.publicKey;
+      if (!key) return;
+      const ok = await enablePushForLeague(leagueId, key);
+      if (!ok) throw new Error("denied");
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["push-status", leagueId] });
+    },
+    onError: () => {
+      toast("Notifications need permission on this phone.");
+    },
+  });
+  if (!hasSeat) return null;
+  if (!status.data?.configured) return null;
+
+  const on = Boolean(status.data.subscribed);
+  return (
+    <section>
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">On this phone</p>
+      <h2 className="mt-1 font-display text-2xl">Notify me when I'm away</h2>
+      <p className="mt-1 text-sm text-muted">
+        You're on the clock, a trade is waiting, or a waiver claim processed. Off unless you turn it
+        on — the commissioner can't force this.
+      </p>
+      <div className="mt-3">
+        {on ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={toggle.isPending}
+            onClick={() => toggle.mutate(false)}
+          >
+            {toggle.isPending ? "Updating…" : "Turn off notifications"}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={toggle.isPending}
+            onClick={() => toggle.mutate(true)}
+          >
+            {toggle.isPending ? "Updating…" : "Notify me on this phone"}
+          </Button>
+        )}
       </div>
     </section>
   );

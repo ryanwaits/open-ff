@@ -402,6 +402,26 @@ export async function cancelClaim(
   });
 }
 
+async function pingWaiver(
+  leagueId: string,
+  rosterId: number,
+  won: boolean,
+  playerId: string,
+): Promise<void> {
+  try {
+    const { notifyRoster } = await import("@/lib/push/send.server");
+    const name = playerName(playerId) || "a player";
+    await notifyRoster(leagueId, rosterId, {
+      kind: "waiver",
+      title: won ? "Waiver claim won" : "Waiver claim lost",
+      body: won ? `You got ${name}.` : `Your claim for ${name} didn't go through.`,
+      url: `/league/${leagueId}/roster`,
+    });
+  } catch {
+    /* never throw into waiver writes */
+  }
+}
+
 export async function processWaivers(
   leagueId: string,
   week?: number,
@@ -476,6 +496,7 @@ export async function processWaivers(
         amount: c.bid,
         payload: { reason: taken[0] ? "outbid" : "short", had: free },
       });
+      await pingWaiver(leagueId, c.roster_id, false, c.add_player_id);
       continue;
     }
     if (c.drop_player_id) {
@@ -494,6 +515,7 @@ export async function processWaivers(
           amount: c.bid,
           payload: { reason: "drop-gone", dropPlayerId: c.drop_player_id },
         });
+        await pingWaiver(leagueId, c.roster_id, false, c.add_player_id);
         continue;
       }
     }
@@ -512,6 +534,7 @@ export async function processWaivers(
     await sql`update ff_claims set status = ${"won"} where id = ${c.id}`;
     winners.push(c.roster_id);
     awarded += 1;
+    await pingWaiver(leagueId, c.roster_id, true, c.add_player_id);
   }
   if (rolling && winners.length) {
     const next = rotateRollingOrder(order, winners);
@@ -732,6 +755,20 @@ export async function proposeTrade(
         ${a.playerId ?? null}, ${a.pickNo ?? null}, ${a.amount ?? null}
       )
     `;
+  }
+  try {
+    const { notifyRoster } = await import("@/lib/push/send.server");
+    for (const roster of sides) {
+      if (roster === mine.roster_id) continue;
+      await notifyRoster(leagueId, roster, {
+        kind: "trade",
+        title: "A trade is waiting",
+        body: "Someone sent you a trade. Open it on this desk.",
+        url: `/league/${leagueId}/trades`,
+      });
+    }
+  } catch {
+    /* never throw into a proposed trade */
   }
   return { tradeId: id };
 }

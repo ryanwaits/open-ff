@@ -2,6 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { createRootRouteWithContext, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { Toaster } from "sonner";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
+import { PushRegister } from "@/components/push-register";
 import { AuthProvider } from "@/lib/auth/provider";
 import type { RouterContext } from "@/lib/query-client";
 import { NO_FLASH_SCRIPT, useTheme } from "@/lib/theme";
@@ -67,6 +68,7 @@ function RootDocument() {
       </head>
       <body>
         <PreviewHostBridge />
+        <PushRegister />
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <Outlet />
