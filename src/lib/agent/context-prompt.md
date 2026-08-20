@@ -2,8 +2,9 @@
 
 open-ff is a hosted fantasy football league: draft, lineups, waivers/FAAB,
 trades, a matchup book, and an event diary. Mechanics live as named primitives
-in [CATALOG.md](./CATALOG.md). Features are prompts over those tools.
-Start a session with `getAgentContext`.
+in [CATALOG.md](./CATALOG.md). Features are the skills in
+[./skills](./skills) — playbooks (migrate, lineup, book, week) over those
+tools, not a second engine. Start a session with `getAgentContext`.
 
 ## Scopes
 

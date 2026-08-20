@@ -105,6 +105,18 @@ codex mcp add openff --command bun --args scripts/mcp.mjs
 
 `OPENFF_USER` is the Better Auth `user.id` (copy from the `user` table / local seed until settings shows it).
 
+## Agent skills
+
+Playbooks for migrate / lineup / book / week live under
+`src/lib/agent/skills/` (and are mirrored in `.grok/skills/` for this repo).
+Copy or symlink into a host skills dir:
+
+```sh
+# Codex:  cp -R src/lib/agent/skills/* ~/.codex/skills/
+# Claude: cp -R src/lib/agent/skills/* ~/.claude/skills/
+# Grok:   already in .grok/skills/ of this repo; else ~/.grok/skills/
+```
+
 ## Check
 
 ```sh

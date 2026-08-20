@@ -1,0 +1,70 @@
+import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { test } from "node:test";
+import { AGENT_CORE } from "../src/lib/agent/core.ts";
+
+const root = join(import.meta.dirname, "..");
+const skillsDir = join(root, "src/lib/agent/skills");
+
+/** Not on MCP AGENT_CORE — may appear in skills only as PWA guidance. */
+const PWA_ONLY = new Set([
+  "addAllowlistEmail",
+  "previewEspn",
+  "importEspn",
+  "previewRebuild",
+  "importRebuild",
+]);
+
+function skillFiles() {
+  return readdirSync(skillsDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => join(skillsDir, d.name, "SKILL.md"));
+}
+
+/** camelCase ids in backticks (tool-shaped); skips `open-ff-week`, paths, etc. */
+function toolShapedBackticks(md) {
+  const ids = [];
+  for (const m of md.matchAll(/`([A-Za-z][A-Za-z0-9]*)`/g)) {
+    const id = m[1];
+    if (/^[a-z]+([A-Z][a-zA-Z0-9]*)+$/.test(id)) ids.push(id);
+  }
+  return ids;
+}
+
+test("four open-ff skills exist", () => {
+  const names = readdirSync(skillsDir).sort();
+  assert.deepEqual(names, [
+    "open-ff-book",
+    "open-ff-lineup",
+    "open-ff-migrate",
+    "open-ff-week",
+  ]);
+});
+
+test("skill backtick tool ids ⊆ AGENT_CORE ∪ PWA_ONLY", () => {
+  for (const file of skillFiles()) {
+    const md = readFileSync(file, "utf8");
+    for (const id of toolShapedBackticks(md)) {
+      assert.ok(
+        AGENT_CORE.has(id) || PWA_ONLY.has(id),
+        `${file}: unknown tool id \`${id}\` (not AGENT_CORE or PWA_ONLY)`,
+      );
+    }
+  }
+});
+
+test("each skill has getAgentContext; none mention tickAllLeagues", () => {
+  for (const file of skillFiles()) {
+    const md = readFileSync(file, "utf8");
+    assert.match(md, /getAgentContext/, file);
+    assert.doesNotMatch(md, /tickAllLeagues/, file);
+  }
+});
+
+test("migrate requires confirm: true; week does not mention sitPlayer", () => {
+  const migrate = readFileSync(join(skillsDir, "open-ff-migrate/SKILL.md"), "utf8");
+  const week = readFileSync(join(skillsDir, "open-ff-week/SKILL.md"), "utf8");
+  assert.match(migrate, /confirm:\s*true/);
+  assert.doesNotMatch(week, /sitPlayer/);
+});
