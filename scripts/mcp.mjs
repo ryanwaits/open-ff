@@ -22,10 +22,9 @@ const userId = process.env.OPENFF_USER;
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!userId || !databaseUrl) {
-  const missing = [
-    !userId ? "OPENFF_USER" : null,
-    !databaseUrl ? "DATABASE_URL" : null,
-  ].filter(Boolean);
+  const missing = [!userId ? "OPENFF_USER" : null, !databaseUrl ? "DATABASE_URL" : null].filter(
+    Boolean,
+  );
   console.error(
     `openff mcp: missing ${missing.join(" and ")}. Set both env vars (Postgres + Better Auth user.id).`,
   );
@@ -41,10 +40,7 @@ const inputSchema = {
   additionalProperties: true,
 };
 
-const server = new Server(
-  { name: "openff", version: "0.1.0" },
-  { capabilities: { tools: {} } },
-);
+const server = new Server({ name: "openff", version: "0.1.0" }, { capabilities: { tools: {} } });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: coreTools.map((t) => ({

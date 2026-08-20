@@ -40,8 +40,5 @@ test("mutating without userId refused", async () => {
 });
 
 test("importLeague without confirm refused", async () => {
-  await assert.rejects(
-    () => dispatch("importLeague", "user_x", { sleeperId: "123" }),
-    /confirm/,
-  );
+  await assert.rejects(() => dispatch("importLeague", "user_x", { sleeperId: "123" }), /confirm/);
 });

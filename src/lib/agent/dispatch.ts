@@ -47,8 +47,8 @@ export async function dispatch(
   }
 
   const meta = AGENT_TOOLS.find((t) => t.id === id);
-  if (meta?.mutating && !userId) {
-    throw new Error(`${id} requires a signed-in user (OPENFF_USER)`);
+  if (meta?.mutating) {
+    if (!userId) throw new Error(`${id} requires a signed-in user (OPENFF_USER)`);
   }
 
   const uid = userId ?? null;
@@ -59,9 +59,9 @@ export async function dispatch(
       return asJson(await loadAgentContext(str(args.leagueId, "leagueId"), uid));
     }
     case "listMyLeagues": {
-      if (!uid) throw new Error("listMyLeagues requires a signed-in user (OPENFF_USER)");
+      if (!userId) throw new Error("listMyLeagues requires a signed-in user (OPENFF_USER)");
       const { listMyLeagues } = await import("@/lib/league/engine.server");
-      return asJson(await listMyLeagues(uid));
+      return asJson(await listMyLeagues(userId));
     }
     case "getTeam": {
       const eng = await import("@/lib/league/engine.server");
@@ -131,32 +131,34 @@ export async function dispatch(
     }
     case "getLeagueFacts": {
       const { loadLeagueFacts } = await import("@/lib/league/league-facts.server");
-      return asJson(
-        await loadLeagueFacts(str(args.leagueId, "leagueId"), num(args.week, "week")),
-      );
+      return asJson(await loadLeagueFacts(str(args.leagueId, "leagueId"), num(args.week, "week")));
     }
     case "sitPlayer": {
+      if (!userId) throw new Error(`${id} requires a signed-in user (OPENFF_USER)`);
       const { sitPlayer } = await import("@/lib/league/engine.server");
-      await sitPlayer(uid!, str(args.leagueId, "leagueId"), str(args.playerId, "playerId"));
+      await sitPlayer(userId, str(args.leagueId, "leagueId"), str(args.playerId, "playerId"));
       return { ok: true };
     }
     case "startPlayer": {
+      if (!userId) throw new Error(`${id} requires a signed-in user (OPENFF_USER)`);
       const { startPlayer } = await import("@/lib/league/engine.server");
       await startPlayer(
-        uid!,
+        userId,
         str(args.leagueId, "leagueId"),
         str(args.playerId, "playerId"),
-        args.replaceId == null ? undefined : optStr(args.replaceId) ?? null,
-        args.slot == null ? undefined : optStr(args.slot) ?? null,
+        args.replaceId == null ? undefined : (optStr(args.replaceId) ?? null),
+        args.slot == null ? undefined : (optStr(args.slot) ?? null),
       );
       return { ok: true };
     }
     case "dropPlayer": {
+      if (!userId) throw new Error(`${id} requires a signed-in user (OPENFF_USER)`);
       const { dropPlayer } = await import("@/lib/league/engine.server");
-      await dropPlayer(uid!, str(args.leagueId, "leagueId"), str(args.playerId, "playerId"));
+      await dropPlayer(userId, str(args.leagueId, "leagueId"), str(args.playerId, "playerId"));
       return { ok: true };
     }
     case "placeWager": {
+      if (!userId) throw new Error(`${id} requires a signed-in user (OPENFF_USER)`);
       const { placeWager } = await import("@/lib/league/wagers.server");
       const kind = args.kind;
       if (kind !== "spread" && kind !== "moneyline") {
@@ -164,7 +166,7 @@ export async function dispatch(
       }
       return asJson(
         await placeWager({
-          userId: uid!,
+          userId,
           leagueId: str(args.leagueId, "leagueId"),
           matchupId: num(args.matchupId, "matchupId"),
           kind,
@@ -175,25 +177,29 @@ export async function dispatch(
       );
     }
     case "pullWager": {
+      if (!userId) throw new Error(`${id} requires a signed-in user (OPENFF_USER)`);
       const { pullWager } = await import("@/lib/league/wagers.server");
-      await pullWager(uid!, str(args.leagueId, "leagueId"), str(args.wagerId, "wagerId"));
+      await pullWager(userId, str(args.leagueId, "leagueId"), str(args.wagerId, "wagerId"));
       return { ok: true };
     }
     case "makePick": {
+      if (!userId) throw new Error(`${id} requires a signed-in user (OPENFF_USER)`);
       const { makePick } = await import("@/lib/league/engine.server");
-      await makePick(uid!, str(args.leagueId, "leagueId"), str(args.playerId, "playerId"));
+      await makePick(userId, str(args.leagueId, "leagueId"), str(args.playerId, "playerId"));
       return { ok: true };
     }
     case "queueAdd": {
+      if (!userId) throw new Error(`${id} requires a signed-in user (OPENFF_USER)`);
       const { queueAdd } = await import("@/lib/league/engine.server");
-      await queueAdd(uid!, str(args.leagueId, "leagueId"), str(args.playerId, "playerId"));
+      await queueAdd(userId, str(args.leagueId, "leagueId"), str(args.playerId, "playerId"));
       return { ok: true };
     }
     case "voteTrade": {
+      if (!userId) throw new Error(`${id} requires a signed-in user (OPENFF_USER)`);
       const { voteTrade } = await import("@/lib/league/ops.server");
       if (typeof args.accept !== "boolean") throw new Error("accept must be boolean");
       await voteTrade(
-        uid!,
+        userId,
         str(args.leagueId, "leagueId"),
         str(args.tradeId, "tradeId"),
         args.accept,
@@ -205,6 +211,7 @@ export async function dispatch(
       return asJson(await previewSleeperImport(str(args.sleeperId, "sleeperId")));
     }
     case "importLeague": {
+      if (!userId) throw new Error(`${id} requires a signed-in user (OPENFF_USER)`);
       if (args.confirm !== true) {
         throw new Error("importLeague requires confirm: true");
       }
@@ -215,7 +222,7 @@ export async function dispatch(
           : num(args.claimRosterId, "claimRosterId");
       return asJson(
         await importSleeperLeague({
-          userId: uid!,
+          userId,
           sleeperId: str(args.sleeperId, "sleeperId"),
           claimRosterId: claim,
         }),
